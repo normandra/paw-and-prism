@@ -1,0 +1,8 @@
+# Godot 4 cache & temporary files
+.godot/
+*.tmp
+*.log
+.DS_Store
+
+# Exported binaries & builds (Windows exe >100MB; Web build deployed via gh-pages)
+builds/
