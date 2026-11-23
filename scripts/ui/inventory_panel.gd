@@ -9,6 +9,12 @@ var _stats: HeroStats = null
 var _rng: RandomNumberGenerator = RandomNumberGenerator.new()
 
 var _frame: PanelContainer = null
+var _title_lbl: Label = null
+var _close_btn: Button = null
+var _cols: BoxContainer = null
+var _left_box: PanelContainer = null
+var _center_box: PanelContainer = null
+var _right_box: PanelContainer = null
 var _hero_portrait: TextureRect = null
 var _left_stats_rtl: RichTextLabel = null
 var _center_slots_vbox: VBoxContainer = null
@@ -20,6 +26,7 @@ var _dust_header_lbl: Label = null
 
 var _tab_items_btn: Button = null
 var _tab_gems_btn: Button = null
+var _tab_stats_btn: Button = null
 var _right_content_vbox: VBoxContainer = null
 
 var _active_right_tab: String = "items"
@@ -47,7 +54,37 @@ func _clamp_frame_size() -> void:
 	var vp: Vector2 = get_viewport_rect().size
 	if vp.x <= 10.0 or vp.y <= 10.0:
 		vp = Vector2(1280.0, 720.0)
-	_frame.custom_minimum_size = Vector2(minf(vp.x - 48.0, 1220.0), minf(vp.y - 40.0, 680.0))
+	var is_portrait: bool = vp.x < 960.0
+	if is_portrait:
+		_frame.custom_minimum_size = Vector2(vp.x - 24.0, vp.y - 36.0)
+		if _cols != null:
+			_cols.vertical = true
+		if _left_box != null:
+			_left_box.visible = false
+		if _tab_stats_btn != null:
+			_tab_stats_btn.visible = true
+		if _title_lbl != null:
+			_title_lbl.text = "HERO SATCHEL"
+		if _close_btn != null:
+			_close_btn.text = "Resume"
+			_close_btn.custom_minimum_size = Vector2(106, 40)
+	else:
+		_frame.custom_minimum_size = Vector2(minf(vp.x - 48.0, 1220.0), minf(vp.y - 40.0, 680.0))
+		if _cols != null:
+			_cols.vertical = false
+		if _left_box != null:
+			_left_box.visible = true
+		if _tab_stats_btn != null:
+			_tab_stats_btn.visible = false
+		if _title_lbl != null:
+			_title_lbl.text = "HERO SATCHEL & PRISM SOCKET BOARD"
+		if _close_btn != null:
+			_close_btn.text = "Resume [Tab / Esc]"
+			_close_btn.custom_minimum_size = Vector2(175, 40)
+		if _active_right_tab == "stats":
+			_active_right_tab = "items"
+			if visible and _stats != null:
+				refresh()
 
 func _build_shell() -> void:
 	var dim: ColorRect = ColorRect.new()
@@ -74,11 +111,12 @@ func _build_shell() -> void:
 
 	hdr.add_child(UiHelper.make_icon_rect(UiIcons.get_ui_icon("paw_prism_crest"), 34))
 
-	var title: Label = Label.new()
-	title.text = "HERO SATCHEL & PRISM SOCKET BOARD"
-	UiHelper.apply_display_font(title, 22, UiHelper.BORDER_GOLD, 3)
-	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	hdr.add_child(title)
+	_title_lbl = Label.new()
+	_title_lbl.text = "HERO SATCHEL & PRISM SOCKET BOARD"
+	UiHelper.apply_display_font(_title_lbl, 22, UiHelper.BORDER_GOLD, 3)
+	_title_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_title_lbl.clip_text = true
+	hdr.add_child(_title_lbl)
 
 	var dust_pill: PanelContainer = PanelContainer.new()
 	dust_pill.add_theme_stylebox_override("panel", UiHelper.make_panel_box(UiHelper.BG_WELL, Color(0.42, 0.88, 1.0), 10, 2, 7, false))
@@ -94,31 +132,33 @@ func _build_shell() -> void:
 	_dust_header_lbl.add_theme_color_override("font_color", Color(0.55, 0.94, 1.0))
 	dp_h.add_child(_dust_header_lbl)
 
-	var close_btn: Button = Button.new()
-	close_btn.text = "Resume [Tab / Esc]"
-	close_btn.custom_minimum_size = Vector2(175, 40)
-	close_btn.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
-	UiHelper.style_button(close_btn, UiHelper.CTA_EMERALD, UiHelper.CTA_EMERALD_RIM, 10)
-	close_btn.pressed.connect(func() -> void: close_panel())
-	hdr.add_child(close_btn)
+	_close_btn = Button.new()
+	_close_btn.text = "Resume [Tab / Esc]"
+	_close_btn.custom_minimum_size = Vector2(175, 40)
+	_close_btn.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	UiHelper.style_button(_close_btn, UiHelper.CTA_EMERALD, UiHelper.CTA_EMERALD_RIM, 10)
+	_close_btn.pressed.connect(func() -> void: close_panel())
+	hdr.add_child(_close_btn)
 
-	# 3-Column Body
-	var cols: HBoxContainer = HBoxContainer.new()
-	cols.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	cols.add_theme_constant_override("separation", 12)
-	root_v.add_child(cols)
+	# Responsive 3-Column / Stacked Body
+	_cols = BoxContainer.new()
+	_cols.vertical = false
+	_cols.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_cols.add_theme_constant_override("separation", 12)
+	root_v.add_child(_cols)
 
 	# === LEFT COLUMN: Portrait, Computed Stats & PoE Linked Skills ===
-	var left_box: PanelContainer = PanelContainer.new()
-	left_box.custom_minimum_size = Vector2(305, 0)
-	left_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	left_box.size_flags_stretch_ratio = 0.92
-	left_box.add_theme_stylebox_override("panel", UiHelper.make_panel_box(UiHelper.BG_WALNUT, UiHelper.BORDER_SUBTLE, 12, 1, 10, false))
-	cols.add_child(left_box)
+	_left_box = PanelContainer.new()
+	_left_box.custom_minimum_size = Vector2(305, 0)
+	_left_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_left_box.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_left_box.size_flags_stretch_ratio = 0.92
+	_left_box.add_theme_stylebox_override("panel", UiHelper.make_panel_box(UiHelper.BG_WALNUT, UiHelper.BORDER_SUBTLE, 12, 1, 10, false))
+	_cols.add_child(_left_box)
 
 	var left_v: VBoxContainer = VBoxContainer.new()
 	left_v.add_theme_constant_override("separation", 8)
-	left_box.add_child(left_v)
+	_left_box.add_child(left_v)
 
 	var left_hdr: HBoxContainer = HBoxContainer.new()
 	left_hdr.add_theme_constant_override("separation", 10)
@@ -143,15 +183,16 @@ func _build_shell() -> void:
 	left_well.add_child(_left_stats_rtl)
 
 	# === CENTER COLUMN: 6 Equipment Slots + Drawn Sockets + Prism Forge ===
-	var center_box: PanelContainer = PanelContainer.new()
-	center_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	center_box.size_flags_stretch_ratio = 1.32
-	center_box.add_theme_stylebox_override("panel", UiHelper.make_panel_box(UiHelper.BG_WALNUT, UiHelper.BORDER_SUBTLE, 12, 1, 10, false))
-	cols.add_child(center_box)
+	_center_box = PanelContainer.new()
+	_center_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_center_box.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_center_box.size_flags_stretch_ratio = 1.25
+	_center_box.add_theme_stylebox_override("panel", UiHelper.make_panel_box(UiHelper.BG_WALNUT, UiHelper.BORDER_SUBTLE, 12, 1, 10, false))
+	_cols.add_child(_center_box)
 
 	var center_v: VBoxContainer = VBoxContainer.new()
 	center_v.add_theme_constant_override("separation", 8)
-	center_box.add_child(center_v)
+	_center_box.add_child(center_v)
 
 	var center_hint: Label = Label.new()
 	center_hint.text = "Select a gem in Skill Gems -> click a glowing socket to insert! Click an occupied socket to remove."
@@ -202,15 +243,16 @@ func _build_shell() -> void:
 	craft_btns.add_child(_add_socket_btn)
 
 	# === RIGHT COLUMN: Backpack Items & Skill Gems Tabs ===
-	var right_box: PanelContainer = PanelContainer.new()
-	right_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	right_box.size_flags_stretch_ratio = 1.26
-	right_box.add_theme_stylebox_override("panel", UiHelper.make_panel_box(UiHelper.BG_WALNUT, UiHelper.BORDER_SUBTLE, 12, 1, 10, false))
-	cols.add_child(right_box)
+	_right_box = PanelContainer.new()
+	_right_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_right_box.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_right_box.size_flags_stretch_ratio = 1.15
+	_right_box.add_theme_stylebox_override("panel", UiHelper.make_panel_box(UiHelper.BG_WALNUT, UiHelper.BORDER_SUBTLE, 12, 1, 10, false))
+	_cols.add_child(_right_box)
 
 	var right_v: VBoxContainer = VBoxContainer.new()
 	right_v.add_theme_constant_override("separation", 8)
-	right_box.add_child(right_v)
+	_right_box.add_child(right_v)
 
 	var tab_row: HBoxContainer = HBoxContainer.new()
 	tab_row.add_theme_constant_override("separation", 8)
@@ -237,6 +279,20 @@ func _build_shell() -> void:
 		refresh()
 	)
 	tab_row.add_child(_tab_gems_btn)
+
+	_tab_stats_btn = Button.new()
+	_tab_stats_btn.text = "Hero Stats"
+	_tab_stats_btn.visible = false
+	_tab_stats_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_tab_stats_btn.custom_minimum_size = Vector2(0, 38)
+	_tab_stats_btn.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	_tab_stats_btn.pressed.connect(func() -> void:
+		_active_right_tab = "stats"
+		_selected_bag_idx = -1
+		_selected_pouch_idx = -1
+		refresh()
+	)
+	tab_row.add_child(_tab_stats_btn)
 
 	_right_content_vbox = VBoxContainer.new()
 	_right_content_vbox.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -291,12 +347,23 @@ func refresh() -> void:
 		9,
 		7
 	)
+	if _tab_stats_btn != null:
+		UiHelper.style_button(
+			_tab_stats_btn,
+			UiHelper.BG_OAK_CARD if _active_right_tab == "stats" else UiHelper.BG_WELL,
+			UiHelper.BORDER_GOLD if _active_right_tab == "stats" else UiHelper.BORDER_BRASS,
+			9,
+			7
+		)
 
 	_refresh_left_stats()
 	_refresh_center_slots()
 	_refresh_right_column()
 
 func _refresh_left_stats() -> void:
+	_left_stats_rtl.text = _build_stats_bbcode()
+
+func _build_stats_bbcode() -> String:
 	var s: HeroStats = _stats
 	var hdef: Dictionary = HeroDatabase.get_hero(s.hero_id)
 	var txt: String = "[b][color=#ffd966]%s · Lv.%d[/color][/b]\n\n" % [String(hdef["hero_name"]), s.hero_level]
@@ -334,7 +401,7 @@ func _refresh_left_stats() -> void:
 		var hex: String = GameEnums.gem_color_hex(pg.get_gem_color())
 		txt += "• [color=%s]%s Lv.%d[/color]\n" % [hex, pg.get_gem_name(), int(p_info["effective_level"])]
 
-	_left_stats_rtl.text = txt
+	return txt
 
 func _refresh_center_slots() -> void:
 	for ch in _center_slots_vbox.get_children():
@@ -452,8 +519,24 @@ func _refresh_right_column() -> void:
 
 	if _active_right_tab == "items":
 		_build_items_tab()
-	else:
+	elif _active_right_tab == "gems":
 		_build_gems_tab()
+	else:
+		_build_stats_tab()
+
+func _build_stats_tab() -> void:
+	var stats_well: PanelContainer = PanelContainer.new()
+	stats_well.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	stats_well.add_theme_stylebox_override("panel", UiHelper.make_panel_box(UiHelper.BG_WELL, UiHelper.BORDER_SUBTLE, 10, 1, 10, false))
+	_right_content_vbox.add_child(stats_well)
+
+	var rtl: RichTextLabel = RichTextLabel.new()
+	rtl.bbcode_enabled = true
+	rtl.scroll_active = true
+	rtl.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	rtl.add_theme_font_size_override("normal_font_size", 14)
+	rtl.text = _build_stats_bbcode()
+	stats_well.add_child(rtl)
 
 func _build_items_tab() -> void:
 	var bulk_btn: Button = Button.new()

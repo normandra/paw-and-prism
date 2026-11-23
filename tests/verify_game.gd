@@ -158,6 +158,15 @@ func _run_all() -> void:
 	main_inst.start_new_run("shiba")
 	await process_frame
 	_assert(main_inst.state == MainGame.GameState.PLAYING, "Game entered PLAYING state")
+	_assert(main_inst.hud.touch_controls != null, "TouchControls overlay attached to HudController")
+	var touch_start_x: float = main_inst.player.global_position.x
+	main_inst.player.set_touch_move(Vector2(1.0, 0.0))
+	main_inst.player.step(0.1)
+	_assert(main_inst.player.global_position.x > touch_start_x + 0.4, "Touch joystick vector moves player hero")
+	main_inst.player.trigger_touch_dash()
+	main_inst.player.step(0.05)
+	_assert(main_inst.player.get_dash_ready_fraction() < 1.0, "Touch dash trigger starts Hop-Dash cooldown")
+	main_inst.player.set_touch_move(Vector2.ZERO)
 
 	# Step live combat for 20 frames + test Inventory & Level-Up UI paths
 	for _f in range(20):

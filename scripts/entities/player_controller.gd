@@ -20,6 +20,8 @@ var _tail_pivot: Node3D = null
 var _aura_ring_holder: Node3D = null
 
 var _facing_dir: Vector3 = Vector3(0.0, 0.0, 1.0)
+var external_move_vec: Vector2 = Vector2.ZERO
+var _external_dash_queued: bool = false
 var _walk_phase: float = 0.0
 var _invuln_timer: float = 0.0
 var _dash_timer: float = 0.0
@@ -40,6 +42,8 @@ func setup(p_stats: HeroStats) -> void:
 	_dash_timer = 0.0
 	_dash_cooldown = 0.0
 	_cheat_death_cd = 0.0
+	external_move_vec = Vector2.ZERO
+	_external_dash_queued = false
 
 	if _rig != null:
 		_rig.queue_free()
@@ -90,6 +94,12 @@ func refresh_equipment_visuals() -> void:
 			_aura_ring_holder.add_child(ring)
 			idx += 1
 
+func set_touch_move(vec: Vector2) -> void:
+	external_move_vec = vec.limit_length(1.0)
+
+func trigger_touch_dash() -> void:
+	_external_dash_queued = true
+
 func get_dash_cooldown_max() -> float:
 	if stats == null:
 		return 2.2
@@ -136,9 +146,13 @@ func step(delta: float) -> void:
 		move_vec = move_vec.normalized()
 		input_dir = Vector3(move_vec.x, 0.0, move_vec.y)
 		_facing_dir = input_dir
+	elif external_move_vec.length_squared() > 0.001:
+		input_dir = Vector3(external_move_vec.x, 0.0, external_move_vec.y)
+		_facing_dir = input_dir.normalized()
 
 	# Trigger Hop-Dash
-	var want_dash: bool = Input.is_action_just_pressed("dash") or Input.is_key_pressed(KEY_SPACE)
+	var want_dash: bool = Input.is_action_just_pressed("dash") or Input.is_key_pressed(KEY_SPACE) or _external_dash_queued
+	_external_dash_queued = false
 	if want_dash and _dash_cooldown <= 0.0 and _dash_timer <= 0.0:
 		_dash_timer = 0.22
 		_dash_cooldown = get_dash_cooldown_max()

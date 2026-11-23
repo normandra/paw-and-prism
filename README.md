@@ -13,12 +13,16 @@ A **Vampire Survivors** clone built in **Godot 4.7.2** (`GL Compatibility`) feat
 
 ## Controls
 
-- `WASD` / `Arrow Keys`: Move
+- `WASD` / `Arrow Keys`: Move (Desktop)
 - `Space` / `Shift`: Hop-Dash (brief invulnerability)
 - `Tab` / `I`: Open / Close Gear & PoE Gem Socket Board (pauses combat)
 - `Esc`: Pause / Resume
 - `M`: Toggle procedural audio mute
 - `F3`: Toggle FPS counter
+- **Mobile / Touchscreens** (auto-enabled on phones/tablets, or test on desktop with `?mobile=1`):
+  - **Drag anywhere** on the arena: Floating virtual joystick with smooth follow-tether
+  - **Tap `DASH`** (bottom-right circular pad): Hop-Dash with live cooldown ring
+  - **Tap `Gear & Gems` / Enchantment Cards**: Manage Diablo gear & PoE gem links cleanly in portrait or landscape
 
 ## Game Design Document
 

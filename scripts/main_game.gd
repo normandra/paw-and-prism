@@ -37,19 +37,36 @@ var _pending_level_ups: int = 0
 var _shake_trauma: float = 0.0
 var _rng: RandomNumberGenerator = RandomNumberGenerator.new()
 var _review_mode: bool = false
+var _is_mobile_touch: bool = false
+var _allow_mouse_touch: bool = false
+var _last_content_scale: float = 1.0
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	_rng.randomize()
 
+	if DisplayServer.is_touchscreen_available():
+		_is_mobile_touch = true
+
 	if OS.has_feature("web"):
 		get_viewport().msaa_3d = Viewport.MSAA_DISABLED
-		if DisplayServer.screen_get_scale() > 1.5:
-			get_viewport().scaling_3d_scale = 0.78
 		var has_rev = JavaScriptBridge.eval("window.location.search.includes('review=1')")
 		_review_mode = bool(has_rev)
-	elif OS.get_cmdline_args().has("--review"):
-		_review_mode = true
+		var has_web_touch = JavaScriptBridge.eval("('ontouchstart' in window) || (navigator.maxTouchPoints > 0) || (window.matchMedia && window.matchMedia('(pointer: coarse)').matches)")
+		if bool(has_web_touch):
+			_is_mobile_touch = true
+		var has_sim_mobile = JavaScriptBridge.eval("window.location.search.includes('mobile=1') || window.location.search.includes('touch=1')")
+		if bool(has_sim_mobile):
+			_is_mobile_touch = true
+			_allow_mouse_touch = true
+		if DisplayServer.screen_get_scale() > 1.5:
+			get_viewport().scaling_3d_scale = 0.72 if _is_mobile_touch else 0.78
+	else:
+		if OS.get_cmdline_args().has("--review"):
+			_review_mode = true
+		if OS.get_cmdline_args().has("--mobile"):
+			_is_mobile_touch = true
+			_allow_mouse_touch = true
 
 	world_root = Node3D.new()
 	world_root.name = "WorldRoot"
@@ -131,7 +148,27 @@ func _ready() -> void:
 	world_root.add_child(wave_director)
 
 	_build_ui()
+	get_viewport().size_changed.connect(_update_responsive_scale)
+	_update_responsive_scale()
 	_enter_title_state()
+
+func _update_responsive_scale() -> void:
+	var win_sz: Vector2i = DisplayServer.window_get_size()
+	if win_sz.x <= 10 or win_sz.y <= 10:
+		return
+	var target_csf: float = 1.0
+	if win_sz.y > int(float(win_sz.x) * 1.05):
+		var aspect_inv: float = float(win_sz.y) / float(win_sz.x)
+		target_csf = clampf(1.0 + (aspect_inv - 1.0) * 0.75, 1.0, 1.72)
+	if absf(target_csf - _last_content_scale) > 0.02:
+		_last_content_scale = target_csf
+		get_tree().root.content_scale_factor = target_csf
+
+func _clear_touch_controls() -> void:
+	if hud != null:
+		hud.reset_touch_input()
+	if player != null:
+		player.set_touch_move(Vector2.ZERO)
 
 func _build_ui() -> void:
 	ui_layer = CanvasLayer.new()
@@ -143,13 +180,19 @@ func _build_ui() -> void:
 	title_screen.hero_selected.connect(_on_title_hero_selected)
 	title_screen.start_requested.connect(start_new_run)
 	ui_layer.add_child(title_screen)
+	title_screen.set_mobile_mode(_is_mobile_touch)
 
 	hud = HudController.new()
 	hud.visible = false
 	hud.open_inventory_requested.connect(_open_inventory)
 	hud.toggle_pause_requested.connect(_toggle_pause)
 	hud.toggle_mute_requested.connect(_toggle_mute)
+	hud.dash_requested.connect(func() -> void:
+		if player != null:
+			player.trigger_touch_dash()
+	)
 	ui_layer.add_child(hud)
+	hud.set_mobile_mode(_is_mobile_touch, _allow_mouse_touch)
 
 	inventory_panel = InventoryPanel.new()
 	inventory_panel.closed.connect(_close_inventory)
@@ -160,6 +203,7 @@ func _build_ui() -> void:
 	level_up_modal = LevelUpModal.new()
 	level_up_modal.option_chosen.connect(_on_level_up_chosen)
 	ui_layer.add_child(level_up_modal)
+	level_up_modal.set_mobile_mode(_is_mobile_touch)
 
 	end_screen = EndScreen.new()
 	end_screen.resume_requested.connect(_resume_from_pause)
@@ -170,6 +214,7 @@ func _build_ui() -> void:
 func _enter_title_state() -> void:
 	state = GameState.TITLE
 	get_tree().paused = false
+	_clear_touch_controls()
 	if wave_director != null:
 		wave_director.reset()
 	if skill_executor != null:
@@ -232,6 +277,8 @@ func start_new_run(hero_id: String) -> void:
 	hud.visible = true
 	hud.reset_hud(_selected_hero_id)
 	hud.set_fps_visible(_review_mode)
+	hud.set_mobile_mode(_is_mobile_touch, _allow_mouse_touch)
+	hud.reset_touch_input()
 	hud.rebuild_skill_bar(stats)
 	hud.show_banner("Survive 20 Minutes & Defeat All 3 Bosses!", Color(1.0, 0.90, 0.42))
 	sfx.play("level_up")
@@ -287,6 +334,7 @@ func _toggle_mute() -> void:
 func _open_inventory() -> void:
 	if state != GameState.PLAYING:
 		return
+	_clear_touch_controls()
 	state = GameState.INVENTORY
 	get_tree().paused = true
 	hud.mark_loot_read()
@@ -303,6 +351,7 @@ func _close_inventory() -> void:
 
 func _toggle_pause() -> void:
 	if state == GameState.PLAYING:
+		_clear_touch_controls()
 		state = GameState.PAUSED
 		get_tree().paused = true
 		end_screen.show_pause(stats, wave_director)
@@ -332,13 +381,18 @@ func _process(delta: float) -> void:
 			_showcase_rig.rotation.y = sin(_showcase_time * 0.9) * 0.48
 			_showcase_rig.position.y = absf(sin(_showcase_time * 3.0)) * 0.12
 		if camera != null:
-			camera.look_at_from_position(Vector3(0.0, 2.38, 5.85), Vector3(0.0, 0.56, 0.0), Vector3.UP)
+			var vp_sz: Vector2 = get_viewport().get_visible_rect().size
+			if vp_sz.y > vp_sz.x * 1.05:
+				camera.look_at_from_position(Vector3(0.0, 2.65, 7.20), Vector3(0.0, 0.25, 0.0), Vector3.UP)
+			else:
+				camera.look_at_from_position(Vector3(0.0, 2.38, 5.85), Vector3(0.0, 0.56, 0.0), Vector3.UP)
 		return
 
 	if state != GameState.PLAYING or get_tree().paused:
 		return
 
 	# Step simulation
+	player.set_touch_move(hud.get_touch_move_vector())
 	player.step(delta)
 	wave_director.step(delta, player.global_position, spatial_grid, loot_manager)
 	skill_executor.step(delta, player.global_position, player)
@@ -363,7 +417,9 @@ func _update_camera(delta: float) -> void:
 		_shake_trauma = maxf(0.0, _shake_trauma - delta * 2.2)
 		var mag: float = _shake_trauma * _shake_trauma * 0.55
 		shake_off = Vector3(randf_range(-mag, mag), randf_range(-mag, mag), 0.0)
-	var target_cam_pos: Vector3 = player.global_position + Vector3(0.0, 17.5, 13.5) + shake_off
+	var vp_sz: Vector2 = get_viewport().get_visible_rect().size
+	var cam_off: Vector3 = Vector3(0.0, 22.5, 17.0) if vp_sz.y > vp_sz.x * 1.05 else Vector3(0.0, 17.5, 13.5)
+	var target_cam_pos: Vector3 = player.global_position + cam_off + shake_off
 	camera.global_position = camera.global_position.lerp(target_cam_pos, minf(1.0, delta * 9.0))
 	camera.look_at(player.global_position + Vector3(0.0, 0.65, 0.0), Vector3.UP)
 
@@ -402,6 +458,7 @@ func _on_xp_collected(amount: float) -> void:
 func _try_show_next_level_up() -> void:
 	if _pending_level_ups <= 0 or state != GameState.PLAYING:
 		return
+	_clear_touch_controls()
 	_pending_level_ups -= 1
 	state = GameState.LEVEL_UP
 	get_tree().paused = true
@@ -476,6 +533,7 @@ func _seed_review_loot() -> void:
 func _on_player_died() -> void:
 	if state == GameState.ENDED:
 		return
+	_clear_touch_controls()
 	state = GameState.ENDED
 	get_tree().paused = true
 	sfx.play("boss_horn")
@@ -484,6 +542,7 @@ func _on_player_died() -> void:
 func _on_victory() -> void:
 	if state == GameState.ENDED:
 		return
+	_clear_touch_controls()
 	state = GameState.ENDED
 	get_tree().paused = true
 	sfx.play("victory_fanfare")

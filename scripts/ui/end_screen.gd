@@ -5,6 +5,7 @@ signal play_again_requested()
 signal title_menu_requested()
 signal resume_requested()
 
+var _panel: PanelContainer = null
 var _hdr_banner: PanelContainer = null
 var _crest_icon: TextureRect = null
 var _title_lbl: Label = null
@@ -19,6 +20,17 @@ func _ready() -> void:
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	visible = false
 	_build_ui()
+	_apply_responsive_layout()
+
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_RESIZED and _panel != null:
+		_apply_responsive_layout()
+
+func _apply_responsive_layout() -> void:
+	var vp: Vector2 = get_viewport_rect().size
+	if vp.x <= 10.0 or _panel == null:
+		return
+	_panel.custom_minimum_size = Vector2(minf(vp.x - 32.0, 640.0), 415.0)
 
 func _build_ui() -> void:
 	var dim: ColorRect = ColorRect.new()
@@ -30,14 +42,14 @@ func _build_ui() -> void:
 	center.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	add_child(center)
 
-	var panel: PanelContainer = PanelContainer.new()
-	panel.custom_minimum_size = Vector2(640, 415)
-	panel.add_theme_stylebox_override("panel", UiHelper.make_panel_box(UiHelper.BG_WOOD_DEEP, UiHelper.BORDER_GOLD, 16, 3, 18))
-	center.add_child(panel)
+	_panel = PanelContainer.new()
+	_panel.custom_minimum_size = Vector2(640, 415)
+	_panel.add_theme_stylebox_override("panel", UiHelper.make_panel_box(UiHelper.BG_WOOD_DEEP, UiHelper.BORDER_GOLD, 16, 3, 18))
+	center.add_child(_panel)
 
 	var v: VBoxContainer = VBoxContainer.new()
 	v.add_theme_constant_override("separation", 12)
-	panel.add_child(v)
+	_panel.add_child(v)
 
 	_hdr_banner = PanelContainer.new()
 	_hdr_banner.add_theme_stylebox_override("panel", UiHelper.make_panel_box(Color(0.24, 0.17, 0.10), UiHelper.BORDER_GOLD, 12, 2, 10, false))

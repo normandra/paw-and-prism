@@ -5,9 +5,15 @@ signal hero_selected(hero_id: String)
 signal start_requested(hero_id: String)
 
 var selected_hero_id: String = "shiba"
+var _is_mobile_mode: bool = false
 var _hero_cards: Dictionary = {}
 var _detail_label: RichTextLabel = null
 var _detail_portrait: TextureRect = null
+var _crest_panel: PanelContainer = null
+var _bot_panel: PanelContainer = null
+var _cards_grid: GridContainer = null
+var _bottom_box: BoxContainer = null
+var _start_btn: Button = null
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
@@ -15,6 +21,46 @@ func _ready() -> void:
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	_build_ui()
 	_select_hero("shiba")
+	_apply_responsive_layout()
+
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_RESIZED and _bot_panel != null:
+		_apply_responsive_layout()
+
+func set_mobile_mode(is_mobile: bool) -> void:
+	_is_mobile_mode = is_mobile
+	_select_hero(selected_hero_id)
+	_apply_responsive_layout()
+
+func _apply_responsive_layout() -> void:
+	var vp: Vector2 = get_viewport_rect().size
+	if vp.x <= 10.0:
+		return
+	var is_portrait: bool = vp.x < 960.0
+	if _crest_panel != null:
+		_crest_panel.custom_minimum_size = Vector2(minf(vp.x - 32.0, 650.0) if is_portrait else 650.0, 94.0)
+	if _cards_grid != null:
+		_cards_grid.columns = 2 if is_portrait else 4
+	if _bottom_box != null:
+		_bottom_box.vertical = is_portrait
+	if _bot_panel != null:
+		if is_portrait:
+			_bot_panel.offset_left = 16
+			_bot_panel.offset_top = -468
+			_bot_panel.offset_right = -16
+			_bot_panel.offset_bottom = -16
+		else:
+			_bot_panel.offset_left = 30
+			_bot_panel.offset_top = -256
+			_bot_panel.offset_right = -30
+			_bot_panel.offset_bottom = -14
+	if _start_btn != null:
+		if is_portrait:
+			_start_btn.custom_minimum_size = Vector2(0, 66)
+			_start_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		else:
+			_start_btn.custom_minimum_size = Vector2(268, 64)
+			_start_btn.size_flags_horizontal = Control.SIZE_SHRINK_END
 
 func _build_ui() -> void:
 	# === Top Storybook Title Crest ===
@@ -25,15 +71,15 @@ func _build_ui() -> void:
 	top_center.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(top_center)
 
-	var crest_panel: PanelContainer = PanelContainer.new()
-	crest_panel.custom_minimum_size = Vector2(650, 94)
-	crest_panel.add_theme_stylebox_override("panel", UiHelper.make_panel_box(UiHelper.BG_WOOD_DEEP, UiHelper.BORDER_GOLD, 18, 3, 12))
-	top_center.add_child(crest_panel)
+	_crest_panel = PanelContainer.new()
+	_crest_panel.custom_minimum_size = Vector2(650, 94)
+	_crest_panel.add_theme_stylebox_override("panel", UiHelper.make_panel_box(UiHelper.BG_WOOD_DEEP, UiHelper.BORDER_GOLD, 18, 3, 12))
+	top_center.add_child(_crest_panel)
 
 	var crest_v: VBoxContainer = VBoxContainer.new()
 	crest_v.alignment = BoxContainer.ALIGNMENT_CENTER
 	crest_v.add_theme_constant_override("separation", 5)
-	crest_panel.add_child(crest_v)
+	_crest_panel.add_child(crest_v)
 
 	var title_h: HBoxContainer = HBoxContainer.new()
 	title_h.alignment = BoxContainer.ALIGNMENT_CENTER
@@ -62,38 +108,41 @@ func _build_ui() -> void:
 	))
 
 	# === Bottom Hero Picker & Start Bar ===
-	var bot_panel: PanelContainer = PanelContainer.new()
-	bot_panel.add_theme_stylebox_override("panel", UiHelper.make_panel_box(UiHelper.BG_WOOD_DEEP, UiHelper.BORDER_GOLD, 16, 3, 12))
-	bot_panel.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
-	bot_panel.offset_left = 30
-	bot_panel.offset_right = -30
-	bot_panel.offset_top = -256
-	bot_panel.offset_bottom = -14
-	add_child(bot_panel)
+	_bot_panel = PanelContainer.new()
+	_bot_panel.add_theme_stylebox_override("panel", UiHelper.make_panel_box(UiHelper.BG_WOOD_DEEP, UiHelper.BORDER_GOLD, 16, 3, 12))
+	_bot_panel.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
+	_bot_panel.offset_left = 30
+	_bot_panel.offset_right = -30
+	_bot_panel.offset_top = -256
+	_bot_panel.offset_bottom = -14
+	add_child(_bot_panel)
 
 	var bot_vbox: VBoxContainer = VBoxContainer.new()
 	bot_vbox.add_theme_constant_override("separation", 10)
-	bot_panel.add_child(bot_vbox)
+	_bot_panel.add_child(bot_vbox)
 
-	var cards_row: HBoxContainer = HBoxContainer.new()
-	cards_row.add_theme_constant_override("separation", 12)
-	cards_row.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	bot_vbox.add_child(cards_row)
+	_cards_grid = GridContainer.new()
+	_cards_grid.columns = 4
+	_cards_grid.add_theme_constant_override("h_separation", 12)
+	_cards_grid.add_theme_constant_override("v_separation", 10)
+	_cards_grid.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	bot_vbox.add_child(_cards_grid)
 
 	for hdef in HeroDatabase.get_all_heroes():
 		var hid: String = String(hdef["id"])
 		var card: PanelContainer = _build_hero_card(hdef)
-		cards_row.add_child(card)
+		_cards_grid.add_child(card)
 		_hero_cards[hid] = card
 
-	var bottom_row: HBoxContainer = HBoxContainer.new()
-	bottom_row.add_theme_constant_override("separation", 14)
-	bot_vbox.add_child(bottom_row)
+	_bottom_box = BoxContainer.new()
+	_bottom_box.vertical = false
+	_bottom_box.add_theme_constant_override("separation", 12)
+	bot_vbox.add_child(_bottom_box)
 
 	var info_well: PanelContainer = PanelContainer.new()
 	info_well.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	info_well.add_theme_stylebox_override("panel", UiHelper.make_panel_box(UiHelper.BG_WELL, UiHelper.BORDER_BRASS, 10, 2, 9, false))
-	bottom_row.add_child(info_well)
+	_bottom_box.add_child(info_well)
 
 	var info_h: HBoxContainer = HBoxContainer.new()
 	info_h.add_theme_constant_override("separation", 12)
@@ -110,18 +159,18 @@ func _build_ui() -> void:
 	_detail_label.add_theme_font_size_override("normal_font_size", 13)
 	info_h.add_child(_detail_label)
 
-	var start_btn: Button = Button.new()
-	start_btn.text = ""
-	start_btn.custom_minimum_size = Vector2(268, 64)
-	start_btn.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
-	UiHelper.style_button(start_btn, UiHelper.CTA_EMERALD, UiHelper.CTA_EMERALD_RIM, 12, 10)
-	start_btn.pressed.connect(func() -> void: start_requested.emit(selected_hero_id))
-	bottom_row.add_child(start_btn)
+	_start_btn = Button.new()
+	_start_btn.text = ""
+	_start_btn.custom_minimum_size = Vector2(268, 64)
+	_start_btn.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	UiHelper.style_button(_start_btn, UiHelper.CTA_EMERALD, UiHelper.CTA_EMERALD_RIM, 12, 10)
+	_start_btn.pressed.connect(func() -> void: start_requested.emit(selected_hero_id))
+	_bottom_box.add_child(_start_btn)
 
 	var btn_center: CenterContainer = CenterContainer.new()
 	btn_center.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	btn_center.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	start_btn.add_child(btn_center)
+	_start_btn.add_child(btn_center)
 	var btn_h: HBoxContainer = HBoxContainer.new()
 	btn_h.add_theme_constant_override("separation", 10)
 	btn_h.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -255,11 +304,17 @@ func _select_hero(hero_id: String) -> void:
 	var act_name: String = String(GemDatabase.get_def(String(hdef["starter_active_gem"]))["gem_name"])
 	var sup_name: String = String(GemDatabase.get_def(String(hdef["starter_support_gem"]))["gem_name"])
 	var pas_name: String = String(GemDatabase.get_def(String(hdef["starter_passive_gem"]))["gem_name"])
-	_detail_label.text = "[b][color=#ffd966]%s[/color][/b] — %s\n[color=#a8e6cf]Starter Link:[/color] %s + %s   ·   [color=#b8d8ff]Passive Aura:[/color] %s\n[color=#cfc3af][WASD / Arrows] Move   ·   [Space] Hop-Dash   ·   [Tab / I] Gear & PoE Gem Linking   ·   Bosses at 06:30, 13:00, 19:30[/color]" % [
+	var controls_hint: String = (
+		"Drag anywhere to Move   ·   Tap DASH to Hop-Dash   ·   Tap Gear & Gems for PoE Linking"
+		if _is_mobile_mode
+		else "[WASD / Arrows] Move   ·   [Space] Hop-Dash   ·   [Tab / I] Gear & PoE Gem Linking   ·   Bosses at 06:30, 13:00, 19:30"
+	)
+	_detail_label.text = "[b][color=#ffd966]%s[/color][/b] — %s\n[color=#a8e6cf]Starter Link:[/color] %s + %s   ·   [color=#b8d8ff]Passive Aura:[/color] %s\n[color=#cfc3af]%s[/color]" % [
 		String(hdef["hero_name"]),
 		String(hdef["desc"]),
 		act_name,
 		sup_name,
 		pas_name,
+		controls_hint,
 	]
 	hero_selected.emit(hero_id)

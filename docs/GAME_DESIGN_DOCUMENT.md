@@ -64,6 +64,8 @@ flowchart LR
 |---|---|---|
 | `WASD` / `Arrow Keys` | 8-directional movement | Clamped to `±66.5m` inside `136×136m` arena (`ARENA_HALF_SIZE = 68.0`) |
 | `Space` / `Shift` | Hop-Dash (`dash` action) | `0.22s` dash burst at `2.55×` move speed, `0.26s` i-frames, `2.2s` base CD (`min 0.65s`) |
+| **Touch Drag** *(Mobile)* | Analog floating virtual joystick (`touch_controls.gd`) | Spawned anywhere outside HUD buttons; `10%` deadzone, `55%` full speed, smooth follow-tether; auto-enables on touchscreen (`?mobile=1` simulates with mouse) |
+| **Touch `DASH` Pad** *(Mobile)* | Circular Hop-Dash pad (`bottom-right`) | `54px` radius espresso/gold button with live radial cooldown arc (`DASH_RADIUS * 1.28` hit test) |
 | `Tab` / `I` | Toggle Hero Satchel & Prism Socket Board | Pauses simulation; swaps gear and sockets without dropping run state |
 | `Esc` | Pause / Resume (`EndScreen` pause overlay) | Also closes Satchel if open |
 | `M` | Toggle procedural audio mute | Reflected in HUD button `[M]` |
@@ -72,8 +74,8 @@ flowchart LR
 
 ### Camera Rig (`main_game.gd`)
 - **Perspective FOV:** `48.0°`, `far = 160.0`
-- **Title Showcase Camera:** `look_at_from_position(Vector3(0.0, 2.38, 5.85), Vector3(0.0, 0.56, 0.0))`
-- **Gameplay Chase Camera:** Offset `Vector3(0.0, 17.5, 13.5)`, exponential lerp `min(1.0, delta * 9.0)`, looking at `player + Vector3(0, 0.65, 0)` + quadratic trauma screen shake (`_shake_trauma² * 0.55`).
+- **Title Showcase Camera:** Landscape `Vector3(0.0, 2.38, 5.85)` aiming at `(0, 0.56, 0)`; Portrait (`vp.y > vp.x * 1.05`) pulls back to `Vector3(0.0, 2.65, 7.20)` aiming at `(0, 0.25, 0)` to clear the 2×2 hero picker.
+- **Gameplay Chase Camera:** Landscape offset `Vector3(0.0, 17.5, 13.5)`; Portrait widens to `Vector3(0.0, 22.5, 17.0)`; exponential lerp `min(1.0, delta * 9.0)` + quadratic trauma screen shake (`_shake_trauma² * 0.55`).
 
 ### Exact Combat & Progression Formulas (`player_controller.gd`, `hero_stats.gd`, `gem_instance.gd`)
 
@@ -356,9 +358,14 @@ Each hero level pauses combat and deals **3 randomized Enchantment Cards** (full
 - **Arena & Landmarks:** `136×136m` meadow (`±68m`), procedural weathered radial cobblestone center plaza texture, `2`-tier pine trees (`cast_shadow = OFF`), `36` midground shrubs (`MultiMesh`), multi-color wildflowers (excluded from plaza `r < 8m`), and mossy boundary pillars topped with warm amber lanterns. Hero has a dark contact shadow (`alpha 0.50`) + golden locator ring (`HeroLocatorRing`).
 - **Procedural Audio:** `SfxManager` synthesizes 15 mono WAV streams (`22050 Hz`, 12-voice pool, `35ms` rate-limit debounce): `xp_plink`, `hit_pop`, `crit_sparkle`, `player_hurt`, `dash_whoosh`, `loot_common`, `loot_rare`, `loot_unique`, `gem_drop`, `level_up`, `boss_horn`, `ui_click`, `equip_snap`, `socket_chime`, `victory_fanfare`.
 
+### Responsive Mobile Support (`touch_controls.gd`, `main_game.gd`, `export_presets.cfg`)
+- **Adaptive Portrait Scaling:** `MainGame._update_responsive_scale()` increases `root.content_scale_factor` up to `1.72` on tall portrait screens so typography and touch targets remain crisp without overflowing narrow phone viewports.
+- **Screen Adaptation (`vp.x < 960` / `< 900`):** `TitleScreen` switches to a 2×2 grid + stacked start button; `HudController` compacts top bar pills, raises the skill bar above bottom touch zones, and enables multi-touch `TouchControls`; `InventoryPanel` stacks Equipped/Sockets over a 3-tab right pane (`Looted Gear`, `Skill Gems`, `Hero Stats`); `LevelUpModal` stacks 3 vertical cards; `EndScreen` clamps horizontally.
+- **Mobile Browser Shell (`export_presets.cfg`):** Web export enables `for_mobile=true` texture compression and injects `apple-mobile-web-app-capable`, `mobile-web-app-capable`, `overscroll-behavior: none`, `touch-action: none`, and anti-callout CSS.
+
 ### Rework Ideas & Remaining Art Polish
 - [ ] **Art Design Reviewer Non-Blocking Micro-Polish:**
-  - [ ] Toast pills (`hud_controller.gd`): set `SIZE_SHRINK_END` on toast `PanelContainer`s so short notices (`+25 Prism Dust!`) hug text width cleanly.
+  - [x] Toast pills (`hud_controller.gd`): set `SIZE_SHRINK_END` on toast `PanelContainer`s so short notices (`+25 Prism Dust!`) hug text width cleanly.
   - [ ] Ground Locator Ring smoothness (`chibi_mesh_factory.gd`): bump torus radial ring count (`14 -> 24`) for a silky circle up close on Title Screen.
 - [ ] **True 3D Assets & Animations:** Swap procedural primitive heroes/bosses for exported stylized `.glb` meshes + skeletal idle/walk/attack clips (`AnimationTree`) while preserving the `WeaponMount` / `HatMount` bone attachments.
 - [ ] **Dynamic Music Track:** Layer a gentle acoustic woodland loop (morning) → warm folk rhythm (sunset) → synth-strings boss theme (twilight/bosses) via Godot WebAudio.
@@ -371,13 +378,13 @@ Each hero level pauses combat and deals **3 randomized Enchantment Cards** (full
 
 | Layer | Files (`res://scripts/...`) | Responsibility |
 |---|---|---|
-| **Orchestration** | `main_game.gd`, `scenes/main.tscn` | GameState machine (`TITLE`, `PLAYING`, `INVENTORY`, `LEVEL_UP`, `PAUSED`, `ENDED`), camera, signals, `?review=1` hooks, Web Retina scale |
+| **Orchestration** | `main_game.gd`, `scenes/main.tscn` | GameState machine (`TITLE`, `PLAYING`, `INVENTORY`, `LEVEL_UP`, `PAUSED`, `ENDED`), responsive scaling, touch detection, `?review=1` / `?mobile=1` hooks, Web Retina scale |
 | **Static Databases** | `data/game_enums.gd`, `hero_database.gd`, `enemy_database.gd`, `gem_database.gd`, `item_database.gd` | Enums, 4 heroes, 7 critters + 3 bosses + 7 wave stages, 32 gems, 6 gear slots & 8 Uniques |
 | **Runtime Models** | `models/hero_stats.gd`, `item_instance.gd`, `gem_instance.gd` | Gear equip/salvage, contiguous socket link compiler, XP math, full stat aggregation |
-| **3D Entities** | `entities/player_controller.gd`, `enemy_entity.gd`, `projectile_entity.gd`, `area_effect_entity.gd`, `world_pickup.gd` | Hero movement/dash/reactive novas, enemy/boss AI & enrages, pierce/chain/fork/homing projectiles, AoE telegraphs, loot drops & beams |
+| **3D Entities** | `entities/player_controller.gd`, `enemy_entity.gd`, `projectile_entity.gd`, `area_effect_entity.gd`, `world_pickup.gd` | Hero keyboard + touch movement/dash/reactive novas, enemy/boss AI & enrages, pierce/chain/fork/homing projectiles, AoE telegraphs, loot drops & beams |
 | **Systems** | `systems/skill_executor.gd`, `wave_director.gd`, `loot_manager.gd`, `spatial_grid.gd`, `sfx_manager.gd` | Auto-cast triggers/echoes/orbits, timed waves/surges/chests/bosses, loot fountains, spatial hash & zero-alloc separation, WAV synth |
 | **Visuals** | `visuals/chibi_mesh_factory.gd`, `arena_builder.gd` | Cached merged enemy `ArrayMesh`es, dynamic hero hats/weapons, lighting/sky/fog, radial cobblestone plaza, instanced nature props |
-| **UI Screens** | `ui/ui_helper.gd`, `ui_icons.gd`, `poe_socket_widget.gd`, `title_screen.gd`, `hud_controller.gd`, `inventory_panel.gd`, `level_up_modal.gd`, `end_screen.gd` | Storybook theme/fonts, runtime SVG art, full & mini PoE socket diagrams, Title dock, 10 Hz HUD + 60 Hz popups, Satchel, Draft cards, Pause/Victory summary |
+| **UI Screens** | `ui/ui_helper.gd`, `ui_icons.gd`, `poe_socket_widget.gd`, `touch_controls.gd`, `title_screen.gd`, `hud_controller.gd`, `inventory_panel.gd`, `level_up_modal.gd`, `end_screen.gd` | Storybook theme/fonts, runtime SVG art, full & mini PoE socket diagrams, multi-touch joystick & Dash pad, Title dock, 10 Hz HUD + 60 Hz popups, Satchel, Draft cards, Pause/Victory summary |
 | **QA & Builds** | `tests/verify_game.gd`, `scripts/build_all.sh`, `export_presets.cfg` | Headless end-to-end verification suite & 4-platform export pipeline (`Web`, `macOS`, `Windows`, `Linux`) |
 
 ### Non-Negotiable WebGL / M1 Performance Guardrails
@@ -399,7 +406,7 @@ When reworking systems or adding new content, preserve these hard-won frame-rate
   ```bash
   ./scripts/build_all.sh
   ```
-- **Visual Debug Flag:** Append `?review=1` in WebGL (or `--review` on Desktop) to unlock `F3` (FPS toggle), `F7` (Level-Up modal), `F8` (Seed sample Unique/Rare gear & gems), and `F9` (Victory screen).
+- **Visual Debug Flags:** Append `?review=1` in WebGL (or `--review` on Desktop) to unlock `F3` (FPS toggle), `F7` (Level-Up modal), `F8` (Seed sample Unique/Rare gear & gems), and `F9` (Victory screen). Append `?mobile=1` (or `--mobile`) on desktop to enable `TouchControls` mouse drag emulation for testing mobile play in a browser.
 
 ---
 
@@ -434,4 +441,5 @@ When reworking systems or adding new content, preserve these hard-won frame-rate
 > *Use this scratchpad for playtest observations, balance tweaks, or upcoming rework specs.*
 
 - **Playtest Note (`2026-11-24`):**
-  - WebGL M1 performance & Storybook UI v2 shipped live (`57 FPS` at `1280×800`, Art Design Reviewer approved). Next focus candidates: `[your notes here]`.
+  - WebGL M1 performance & Storybook UI v2 shipped live (`57 FPS` at `1280×800`, Art Design Reviewer approved).
+  - Mobile support shipped (`TouchControls` multi-touch floating joystick + circular `DASH` pad, responsive portrait/landscape UI across all 5 screens, mobile web CSS/compression — verified live at `390×844` @ `51 FPS` and `844×390` @ `66 FPS` with zero desktop regression). Next focus candidates: `[your notes here]`.

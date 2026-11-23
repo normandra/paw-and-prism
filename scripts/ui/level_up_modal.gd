@@ -3,8 +3,11 @@ extends Control
 
 signal option_chosen(payload: Dictionary)
 
-var _cards_hbox: HBoxContainer = null
+var _is_mobile_mode: bool = false
+var _panel: PanelContainer = null
+var _cards_box: BoxContainer = null
 var _title_lbl: Label = null
+var _sub_lbl: Label = null
 var _current_options: Array[Dictionary] = []
 
 func _ready() -> void:
@@ -13,6 +16,34 @@ func _ready() -> void:
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	visible = false
 	_build_ui()
+	_apply_responsive_layout()
+
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_RESIZED and _panel != null:
+		_apply_responsive_layout()
+
+func set_mobile_mode(is_mobile: bool) -> void:
+	_is_mobile_mode = is_mobile
+	_apply_responsive_layout()
+
+func _apply_responsive_layout() -> void:
+	var vp: Vector2 = get_viewport_rect().size
+	if vp.x <= 10.0:
+		return
+	var is_portrait: bool = vp.x < 900.0
+	if _panel != null:
+		if is_portrait:
+			_panel.custom_minimum_size = Vector2(minf(vp.x - 32.0, 680.0), minf(vp.y - 96.0, 860.0))
+		else:
+			_panel.custom_minimum_size = Vector2(830.0, 420.0)
+	if _cards_box != null:
+		_cards_box.vertical = is_portrait
+	if _sub_lbl != null:
+		_sub_lbl.text = (
+			"Tap an Enchantment Card to Choose"
+			if _is_mobile_mode
+			else "Select an Enchantment Card (Click anywhere on card or press [1] / [2] / [3])"
+		)
 
 func _build_ui() -> void:
 	var dim: ColorRect = ColorRect.new()
@@ -24,14 +55,14 @@ func _build_ui() -> void:
 	center.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	add_child(center)
 
-	var panel: PanelContainer = PanelContainer.new()
-	panel.custom_minimum_size = Vector2(830, 420)
-	panel.add_theme_stylebox_override("panel", UiHelper.make_panel_box(UiHelper.BG_WOOD_DEEP, UiHelper.BORDER_GOLD, 16, 3, 20))
-	center.add_child(panel)
+	_panel = PanelContainer.new()
+	_panel.custom_minimum_size = Vector2(830, 420)
+	_panel.add_theme_stylebox_override("panel", UiHelper.make_panel_box(UiHelper.BG_WOOD_DEEP, UiHelper.BORDER_GOLD, 16, 3, 20))
+	center.add_child(_panel)
 
 	var v: VBoxContainer = VBoxContainer.new()
 	v.add_theme_constant_override("separation", 12)
-	panel.add_child(v)
+	_panel.add_child(v)
 
 	var hdr_h: HBoxContainer = HBoxContainer.new()
 	hdr_h.alignment = BoxContainer.ALIGNMENT_CENTER
@@ -45,21 +76,23 @@ func _build_ui() -> void:
 	hdr_h.add_child(_title_lbl)
 	hdr_h.add_child(UiHelper.make_icon_rect(UiIcons.get_ui_icon("star_upgrade"), 36))
 
-	var sub: Label = Label.new()
-	sub.text = "Select an Enchantment Card (Click anywhere on card or press [1] / [2] / [3])"
-	sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	sub.add_theme_font_size_override("font_size", 13)
-	sub.add_theme_color_override("font_color", UiHelper.TEXT_PARCHMENT)
-	v.add_child(sub)
+	_sub_lbl = Label.new()
+	_sub_lbl.text = "Select an Enchantment Card (Click anywhere on card or press [1] / [2] / [3])"
+	_sub_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_sub_lbl.add_theme_font_size_override("font_size", 13)
+	_sub_lbl.add_theme_color_override("font_color", UiHelper.TEXT_PARCHMENT)
+	v.add_child(_sub_lbl)
 
-	_cards_hbox = HBoxContainer.new()
-	_cards_hbox.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	_cards_hbox.add_theme_constant_override("separation", 14)
-	v.add_child(_cards_hbox)
+	_cards_box = BoxContainer.new()
+	_cards_box.vertical = false
+	_cards_box.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_cards_box.add_theme_constant_override("separation", 14)
+	v.add_child(_cards_box)
 
 func open_for_level(new_level: int, stats: HeroStats) -> void:
 	_title_lbl.text = "LEVEL %d REACHED!" % new_level
-	for ch in _cards_hbox.get_children():
+	_apply_responsive_layout()
+	for ch in _cards_box.get_children():
 		ch.queue_free()
 	_current_options = _roll_options(stats)
 
@@ -85,7 +118,7 @@ func open_for_level(new_level: int, stats: HeroStats) -> void:
 		)
 		card.mouse_entered.connect(func() -> void: card.add_theme_stylebox_override("panel", hover_sb))
 		card.mouse_exited.connect(func() -> void: card.add_theme_stylebox_override("panel", normal_sb))
-		_cards_hbox.add_child(card)
+		_cards_box.add_child(card)
 
 		var cv: VBoxContainer = VBoxContainer.new()
 		cv.alignment = BoxContainer.ALIGNMENT_CENTER

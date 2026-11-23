@@ -4,6 +4,21 @@ extends Control
 signal open_inventory_requested()
 signal toggle_pause_requested()
 signal toggle_mute_requested()
+signal dash_requested()
+
+var touch_controls: TouchControls = null
+var _is_mobile_mode: bool = false
+
+var _top_bar: HBoxContainer = null
+var _left_pill: PanelContainer = null
+var _clock_pill: PanelContainer = null
+var _mute_btn: Button = null
+var _mute_lbl: Label = null
+var _pause_btn: Button = null
+var _pause_lbl: Label = null
+var _bl_panel: PanelContainer = null
+var _dash_lbl: Label = null
+var _bc_vbox: VBoxContainer = null
 
 var _hero_portrait: TextureRect = null
 var _timer_lbl: Label = null
@@ -56,6 +71,11 @@ func _ready() -> void:
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	mouse_filter = Control.MOUSE_FILTER_PASS
 	_build_hud()
+	_apply_responsive_layout()
+
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_RESIZED and _bc_vbox != null:
+		_apply_responsive_layout()
 
 func _build_hud() -> void:
 	# === Top Shimmering XP Bar with micro-label ===
@@ -78,22 +98,22 @@ func _build_hud() -> void:
 	_xp_bar.add_child(_xp_lbl)
 
 	# === Top Status Strip ===
-	var top_bar: HBoxContainer = HBoxContainer.new()
-	top_bar.set_anchors_preset(Control.PRESET_TOP_WIDE)
-	top_bar.offset_top = 22
-	top_bar.offset_left = 18
-	top_bar.offset_right = -18
-	top_bar.offset_bottom = 74
-	top_bar.add_theme_constant_override("separation", 12)
-	top_bar.mouse_filter = Control.MOUSE_FILTER_PASS
-	add_child(top_bar)
+	_top_bar = HBoxContainer.new()
+	_top_bar.set_anchors_preset(Control.PRESET_TOP_WIDE)
+	_top_bar.offset_top = 22
+	_top_bar.offset_left = 18
+	_top_bar.offset_right = -18
+	_top_bar.offset_bottom = 74
+	_top_bar.add_theme_constant_override("separation", 12)
+	_top_bar.mouse_filter = Control.MOUSE_FILTER_PASS
+	add_child(_top_bar)
 
-	var left_pill: PanelContainer = PanelContainer.new()
-	left_pill.add_theme_stylebox_override("panel", UiHelper.make_panel_box(UiHelper.BG_WOOD_DEEP, UiHelper.BORDER_BRASS, 12, 2, 7))
-	top_bar.add_child(left_pill)
+	_left_pill = PanelContainer.new()
+	_left_pill.add_theme_stylebox_override("panel", UiHelper.make_panel_box(UiHelper.BG_WOOD_DEEP, UiHelper.BORDER_BRASS, 12, 2, 7))
+	_top_bar.add_child(_left_pill)
 	var lp_h: HBoxContainer = HBoxContainer.new()
 	lp_h.add_theme_constant_override("separation", 10)
-	left_pill.add_child(lp_h)
+	_left_pill.add_child(lp_h)
 
 	_hero_portrait = UiHelper.make_icon_rect(UiIcons.get_hero_portrait("shiba"), 34)
 	lp_h.add_child(_hero_portrait)
@@ -121,15 +141,15 @@ func _build_hud() -> void:
 	var spacer1: Control = Control.new()
 	spacer1.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	spacer1.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	top_bar.add_child(spacer1)
+	_top_bar.add_child(spacer1)
 
 	# Center Clock Plaque
-	var clock_pill: PanelContainer = PanelContainer.new()
-	clock_pill.add_theme_stylebox_override("panel", UiHelper.make_panel_box(UiHelper.BG_WOOD_DEEP, UiHelper.BORDER_GOLD, 12, 2, 8))
-	top_bar.add_child(clock_pill)
+	_clock_pill = PanelContainer.new()
+	_clock_pill.add_theme_stylebox_override("panel", UiHelper.make_panel_box(UiHelper.BG_WOOD_DEEP, UiHelper.BORDER_GOLD, 12, 2, 8))
+	_top_bar.add_child(_clock_pill)
 	var cp_h: HBoxContainer = HBoxContainer.new()
 	cp_h.add_theme_constant_override("separation", 12)
-	clock_pill.add_child(cp_h)
+	_clock_pill.add_child(cp_h)
 
 	_phase_icon = UiHelper.make_icon_rect(UiIcons.get_ui_icon("sun_meadow"), 22)
 	cp_h.add_child(_phase_icon)
@@ -156,13 +176,13 @@ func _build_hud() -> void:
 	var spacer2: Control = Control.new()
 	spacer2.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	spacer2.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	top_bar.add_child(spacer2)
+	_top_bar.add_child(spacer2)
 
 	# Optional FPS pill (hidden by default unless F3 or ?review=1)
 	_fps_pill = PanelContainer.new()
 	_fps_pill.visible = false
 	_fps_pill.add_theme_stylebox_override("panel", UiHelper.make_panel_box(UiHelper.BG_WELL, UiHelper.BORDER_BRASS, 8, 1, 6, false))
-	top_bar.add_child(_fps_pill)
+	_top_bar.add_child(_fps_pill)
 	_fps_lbl = Label.new()
 	_fps_lbl.text = "60 FPS"
 	_fps_lbl.add_theme_font_override("font", UiHelper.get_bold_font())
@@ -171,50 +191,50 @@ func _build_hud() -> void:
 	_fps_pill.add_child(_fps_lbl)
 
 	# Top-Right Mute & Pause icon buttons (clean centered icon+label)
-	var mute_btn: Button = Button.new()
-	mute_btn.text = ""
-	mute_btn.custom_minimum_size = Vector2(74, 42)
-	mute_btn.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
-	UiHelper.style_button(mute_btn, UiHelper.BG_WALNUT, UiHelper.BORDER_BRASS, 10, 6)
-	mute_btn.pressed.connect(func() -> void: toggle_mute_requested.emit())
-	top_bar.add_child(mute_btn)
+	_mute_btn = Button.new()
+	_mute_btn.text = ""
+	_mute_btn.custom_minimum_size = Vector2(74, 42)
+	_mute_btn.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	UiHelper.style_button(_mute_btn, UiHelper.BG_WALNUT, UiHelper.BORDER_BRASS, 10, 6)
+	_mute_btn.pressed.connect(func() -> void: toggle_mute_requested.emit())
+	_top_bar.add_child(_mute_btn)
 	var m_cc: CenterContainer = CenterContainer.new()
 	m_cc.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	m_cc.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	mute_btn.add_child(m_cc)
+	_mute_btn.add_child(m_cc)
 	var m_h: HBoxContainer = HBoxContainer.new()
 	m_h.add_theme_constant_override("separation", 5)
 	m_h.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	m_cc.add_child(m_h)
 	_mute_icon = UiHelper.make_icon_rect(UiIcons.get_ui_icon("sound_on"), 18)
 	m_h.add_child(_mute_icon)
-	var m_lbl: Label = Label.new()
-	m_lbl.text = "[M]"
-	m_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	UiHelper.apply_display_font(m_lbl, 13, UiHelper.TEXT_CREAM, 2)
-	m_h.add_child(m_lbl)
+	_mute_lbl = Label.new()
+	_mute_lbl.text = "[M]"
+	_mute_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	UiHelper.apply_display_font(_mute_lbl, 13, UiHelper.TEXT_CREAM, 2)
+	m_h.add_child(_mute_lbl)
 
-	var pause_btn: Button = Button.new()
-	pause_btn.text = ""
-	pause_btn.custom_minimum_size = Vector2(82, 42)
-	pause_btn.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
-	UiHelper.style_button(pause_btn, UiHelper.BG_WALNUT, UiHelper.BORDER_BRASS, 10, 6)
-	pause_btn.pressed.connect(func() -> void: toggle_pause_requested.emit())
-	top_bar.add_child(pause_btn)
+	_pause_btn = Button.new()
+	_pause_btn.text = ""
+	_pause_btn.custom_minimum_size = Vector2(82, 42)
+	_pause_btn.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	UiHelper.style_button(_pause_btn, UiHelper.BG_WALNUT, UiHelper.BORDER_BRASS, 10, 6)
+	_pause_btn.pressed.connect(func() -> void: toggle_pause_requested.emit())
+	_top_bar.add_child(_pause_btn)
 	var p_cc: CenterContainer = CenterContainer.new()
 	p_cc.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	p_cc.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	pause_btn.add_child(p_cc)
+	_pause_btn.add_child(p_cc)
 	var p_h: HBoxContainer = HBoxContainer.new()
 	p_h.add_theme_constant_override("separation", 5)
 	p_h.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	p_cc.add_child(p_h)
 	p_h.add_child(UiHelper.make_icon_rect(UiIcons.get_ui_icon("pause"), 16))
-	var p_lbl: Label = Label.new()
-	p_lbl.text = "[Esc]"
-	p_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	UiHelper.apply_display_font(p_lbl, 13, UiHelper.TEXT_CREAM, 2)
-	p_h.add_child(p_lbl)
+	_pause_lbl = Label.new()
+	_pause_lbl.text = "[Esc]"
+	_pause_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	UiHelper.apply_display_font(_pause_lbl, 13, UiHelper.TEXT_CREAM, 2)
+	p_h.add_child(_pause_lbl)
 
 	# === Ornate Boss Health Bar ===
 	_boss_panel = PanelContainer.new()
@@ -278,18 +298,18 @@ func _build_hud() -> void:
 	add_child(_toast_vbox)
 
 	# === Bottom-Left Hero Vitals & Satchel Button ===
-	var bl_panel: PanelContainer = PanelContainer.new()
-	bl_panel.add_theme_stylebox_override("panel", UiHelper.make_panel_box(UiHelper.BG_WOOD_DEEP, UiHelper.BORDER_BRASS, 14, 2, 11))
-	bl_panel.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
-	bl_panel.offset_left = 18
-	bl_panel.offset_top = -156
-	bl_panel.offset_right = 310
-	bl_panel.offset_bottom = -16
-	add_child(bl_panel)
+	_bl_panel = PanelContainer.new()
+	_bl_panel.add_theme_stylebox_override("panel", UiHelper.make_panel_box(UiHelper.BG_WOOD_DEEP, UiHelper.BORDER_BRASS, 14, 2, 11))
+	_bl_panel.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
+	_bl_panel.offset_left = 18
+	_bl_panel.offset_top = -156
+	_bl_panel.offset_right = 310
+	_bl_panel.offset_bottom = -16
+	add_child(_bl_panel)
 
 	var bl_v: VBoxContainer = VBoxContainer.new()
 	bl_v.add_theme_constant_override("separation", 7)
-	bl_panel.add_child(bl_v)
+	_bl_panel.add_child(bl_v)
 
 	var hp_row: HBoxContainer = HBoxContainer.new()
 	hp_row.add_theme_constant_override("separation", 6)
@@ -319,12 +339,12 @@ func _build_hud() -> void:
 	bl_v.add_child(dash_row)
 	dash_row.add_child(UiHelper.make_icon_rect(UiIcons.get_ui_icon("dash_paw"), 18))
 
-	var dash_lbl: Label = Label.new()
-	dash_lbl.text = "Dash [Space]"
-	dash_lbl.add_theme_font_override("font", UiHelper.get_bold_font())
-	dash_lbl.add_theme_font_size_override("font_size", 12)
-	dash_lbl.add_theme_color_override("font_color", UiHelper.TEXT_PARCHMENT)
-	dash_row.add_child(dash_lbl)
+	_dash_lbl = Label.new()
+	_dash_lbl.text = "Dash [Space]"
+	_dash_lbl.add_theme_font_override("font", UiHelper.get_bold_font())
+	_dash_lbl.add_theme_font_size_override("font_size", 12)
+	_dash_lbl.add_theme_color_override("font_color", UiHelper.TEXT_PARCHMENT)
+	dash_row.add_child(_dash_lbl)
 
 	_dash_bar = ProgressBar.new()
 	_dash_bar.show_percentage = false
@@ -376,26 +396,32 @@ func _build_hud() -> void:
 	inv_h.add_child(_inv_lbl)
 
 	# === Bottom-Center PoE Active Skills & Passive Gems Bar (symmetrically centered!) ===
-	var bc_vbox: VBoxContainer = VBoxContainer.new()
-	bc_vbox.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
-	bc_vbox.offset_left = 320
-	bc_vbox.offset_right = -320
-	bc_vbox.offset_top = -152
-	bc_vbox.offset_bottom = -16
-	bc_vbox.alignment = BoxContainer.ALIGNMENT_END
-	bc_vbox.add_theme_constant_override("separation", 6)
-	bc_vbox.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	add_child(bc_vbox)
+	_bc_vbox = VBoxContainer.new()
+	_bc_vbox.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
+	_bc_vbox.offset_left = 320
+	_bc_vbox.offset_right = -320
+	_bc_vbox.offset_top = -152
+	_bc_vbox.offset_bottom = -16
+	_bc_vbox.alignment = BoxContainer.ALIGNMENT_END
+	_bc_vbox.add_theme_constant_override("separation", 6)
+	_bc_vbox.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(_bc_vbox)
 
 	_passives_hbox = HBoxContainer.new()
 	_passives_hbox.alignment = BoxContainer.ALIGNMENT_CENTER
 	_passives_hbox.add_theme_constant_override("separation", 6)
-	bc_vbox.add_child(_passives_hbox)
+	_bc_vbox.add_child(_passives_hbox)
 
 	_skills_hbox = HBoxContainer.new()
 	_skills_hbox.alignment = BoxContainer.ALIGNMENT_CENTER
 	_skills_hbox.add_theme_constant_override("separation", 8)
-	bc_vbox.add_child(_skills_hbox)
+	_bc_vbox.add_child(_skills_hbox)
+
+	# === Multi-Touch Virtual Joystick & Dash Pad ===
+	touch_controls = TouchControls.new()
+	touch_controls.dash_triggered.connect(func() -> void: dash_requested.emit())
+	touch_controls.excluded_controls = [_left_pill, _clock_pill, _mute_btn, _pause_btn, _bl_panel]
+	add_child(touch_controls)
 
 	# === Pooled Floating Damage Popups ===
 	for _i in range(42):
@@ -436,6 +462,69 @@ func set_fps_visible(show_fps: bool) -> void:
 	if _fps_pill != null:
 		_fps_pill.visible = show_fps
 
+func set_mobile_mode(is_mobile: bool, allow_mouse: bool = false) -> void:
+	_is_mobile_mode = is_mobile
+	if touch_controls != null:
+		touch_controls.set_touch_enabled(is_mobile, allow_mouse)
+	_apply_responsive_layout()
+
+func get_touch_move_vector() -> Vector2:
+	if touch_controls == null:
+		return Vector2.ZERO
+	return touch_controls.get_move_vector()
+
+func reset_touch_input() -> void:
+	if touch_controls != null:
+		touch_controls.reset_input()
+
+func _apply_responsive_layout() -> void:
+	var vp: Vector2 = get_viewport_rect().size
+	if vp.x <= 10.0:
+		return
+	var is_portrait: bool = vp.x < 960.0
+	if _phase_lbl != null:
+		_phase_lbl.visible = not is_portrait
+	var hide_kb_hints: bool = is_portrait or _is_mobile_mode
+	if _mute_lbl != null:
+		_mute_lbl.visible = not hide_kb_hints
+	if _pause_lbl != null:
+		_pause_lbl.visible = not hide_kb_hints
+	if _mute_btn != null:
+		_mute_btn.custom_minimum_size = Vector2(48 if hide_kb_hints else 74, 42)
+	if _pause_btn != null:
+		_pause_btn.custom_minimum_size = Vector2(48 if hide_kb_hints else 82, 42)
+	if _dash_lbl != null:
+		_dash_lbl.text = "Dash" if _is_mobile_mode else "Dash [Space]"
+	if _top_bar != null:
+		_top_bar.offset_left = 10 if is_portrait else 18
+		_top_bar.offset_right = -10 if is_portrait else -18
+		_top_bar.add_theme_constant_override("separation", 6 if is_portrait else 12)
+	if _timer_lbl != null:
+		_timer_lbl.add_theme_font_size_override("font_size", 17 if is_portrait else 21)
+	if _next_boss_lbl != null:
+		_next_boss_lbl.add_theme_font_size_override("font_size", 11 if is_portrait else 13)
+	if _boss_panel != null:
+		_boss_panel.offset_left = 24 if is_portrait else 250
+		_boss_panel.offset_right = -24 if is_portrait else -250
+	if _bc_vbox != null:
+		if is_portrait:
+			_bc_vbox.offset_left = 18
+			_bc_vbox.offset_right = -18
+			_bc_vbox.offset_top = -278
+			_bc_vbox.offset_bottom = -172
+		else:
+			_bc_vbox.offset_left = 320
+			_bc_vbox.offset_right = -320
+			_bc_vbox.offset_top = -152
+			_bc_vbox.offset_bottom = -16
+	if _toast_vbox != null:
+		_toast_vbox.offset_left = -280 if is_portrait else -360
+		_toast_vbox.offset_right = -14 if is_portrait else -18
+	if _inv_lbl != null and _unread_loot == 0:
+		_inv_lbl.text = "Gear & Gems" if _is_mobile_mode else "Gear & Gems [Tab]"
+	if touch_controls != null:
+		touch_controls.queue_redraw()
+
 func toggle_fps_visible() -> void:
 	if _fps_pill != null:
 		_fps_pill.visible = not _fps_pill.visible
@@ -475,6 +564,7 @@ func show_banner(text: String, col: Color) -> void:
 
 func push_toast(text: String, col: Color, icon_tex: Texture2D = null) -> void:
 	var p: PanelContainer = PanelContainer.new()
+	p.size_flags_horizontal = Control.SIZE_SHRINK_END
 	p.add_theme_stylebox_override("panel", UiHelper.make_panel_box(Color(0.11, 0.08, 0.07, 0.94), col, 10, 2, 7))
 	var h: HBoxContainer = HBoxContainer.new()
 	h.add_theme_constant_override("separation", 7)
@@ -632,6 +722,9 @@ func update_hud(delta: float, stats: HeroStats, player: PlayerController, wave_d
 		if is_instance_valid(bar):
 			bar.value = skill_exec.get_cooldown_fraction(int(uid))
 
+	if touch_controls != null:
+		touch_controls.set_dash_fraction(player.get_dash_ready_fraction())
+
 	_hud_throttle += delta
 	if _hud_throttle < 0.10:
 		return
@@ -669,7 +762,8 @@ func update_hud(delta: float, stats: HeroStats, player: PlayerController, wave_d
 	_dash_bar.max_value = 1.0
 	_dash_bar.value = player.get_dash_ready_fraction()
 	_dust_lbl.text = "%d" % stats.prism_dust
-	var inv_txt: String = "Gear (%d NEW!)" % _unread_loot if _unread_loot > 0 else "Gear & Gems [Tab]"
+	var inv_default: String = "Gear & Gems" if _is_mobile_mode else "Gear & Gems [Tab]"
+	var inv_txt: String = "Gear (%d NEW!)" % _unread_loot if _unread_loot > 0 else inv_default
 	if inv_txt != _last_inv_text:
 		_last_inv_text = inv_txt
 		_inv_lbl.text = inv_txt
