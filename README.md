@@ -18,6 +18,11 @@ A **Vampire Survivors** clone built in **Godot 4.7.2** (`GL Compatibility`) feat
 - `Tab` / `I`: Open / Close Gear & PoE Gem Socket Board (pauses combat)
 - `Esc`: Pause / Resume
 - `M`: Toggle procedural audio mute
+- `F3`: Toggle FPS counter
+
+## Game Design Document
+
+See [docs/GAME_DESIGN_DOCUMENT.md](docs/GAME_DESIGN_DOCUMENT.md) for the living GDD covering combat formulas, hero/gem/unique tables, wave pacing, Prism Dust economy, UI/rendering guardrails, and prioritized rework backlogs.
 
 ## Development & Building
 
