@@ -136,7 +136,7 @@ func init_for_hero(p_hero_id: String) -> void:
 
 	recompute()
 
-func add_hero_xp(amount: float) -> int:
+func add_hero_xp(amount: float) -> Dictionary:
 	var gained_levels: int = 0
 	var adjusted: float = amount * xp_gain_mult
 	hero_xp += adjusted
@@ -146,8 +146,8 @@ func add_hero_xp(amount: float) -> int:
 		gained_levels += 1
 		hero_xp_to_next = 65.0 * pow(1.24, float(hero_level - 1))
 	# Also share XP with every currently socketed gem!
-	grant_xp_to_equipped_gems(adjusted * 0.65)
-	return gained_levels
+	var gems_leveled: Array[GemInstance] = grant_xp_to_equipped_gems(adjusted * 0.65)
+	return {"levels": gained_levels, "gems_leveled": gems_leveled}
 
 func grant_xp_to_equipped_gems(amount: float) -> Array[GemInstance]:
 	var leveled: Array[GemInstance] = []

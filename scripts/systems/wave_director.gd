@@ -79,13 +79,16 @@ func step(delta: float, player_pos: Vector3, grid: SpatialGrid, loot_mgr: LootMa
 			_boss_spawned_flags[i] = true
 			_spawn_boss(i + 1, player_pos)
 
+	var is_web: bool = OS.has_feature("web")
+	var max_act_cap: int = int(float(prof["max_active"]) * 0.72) if is_web else int(prof["max_active"])
+
 	# Swarm Surges
 	if _surge_index < _surge_times.size() and elapsed_time >= _surge_times[_surge_index]:
 		_surge_index += 1
 		wave_banner.emit("Critter Swarm Surge!", Color(1.0, 0.72, 0.30))
 		var pool: Array = prof["pool"]
-		for _k in range(14):
-			if enemies.size() >= int(prof["max_active"]) + 18:
+		for _k in range(12 if is_web else 14):
+			if enemies.size() >= max_act_cap + 14:
 				break
 			var eid: String = String(pool[_k % pool.size()])
 			_spawn_enemy(eid, player_pos, float(prof["hp_scale"]), float(prof["dmg_scale"]), false)
@@ -94,11 +97,10 @@ func step(delta: float, player_pos: Vector3, grid: SpatialGrid, loot_mgr: LootMa
 	_spawn_timer -= delta
 	if _spawn_timer <= 0.0:
 		_spawn_timer = float(prof["spawn_interval"])
-		var max_act: int = int(prof["max_active"])
 		var batch: int = int(prof["batch_size"])
 		var pool: Array = prof["pool"]
 		for _b in range(batch):
-			if enemies.size() >= max_act:
+			if enemies.size() >= max_act_cap:
 				break
 			var eid: String = String(pool[randi() % pool.size()])
 			_spawn_enemy(eid, player_pos, float(prof["hp_scale"]), float(prof["dmg_scale"]), false)

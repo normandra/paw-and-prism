@@ -49,6 +49,35 @@ func query_radius(pos: Vector3, radius: float) -> Array:
 					out.append(e)
 	return out
 
+func compute_separation(enemy: Node3D, radius: float) -> Vector3:
+	var pos: Vector3 = enemy.global_position
+	var cx: int = int(floor(pos.x / CELL_SIZE))
+	var cz: int = int(floor(pos.z / CELL_SIZE))
+	var key: Vector2i = Vector2i(cx, cz)
+	if not _cells.has(key):
+		return Vector3.ZERO
+	var bucket: Array = _cells[key]
+	var sep: Vector3 = Vector3.ZERO
+	var checked: int = 0
+	var max_d: float = radius * 1.12
+	var max_d_sq: float = max_d * max_d
+	for n in bucket:
+		if n == enemy or not is_instance_valid(n) or n.get("is_dead") == true:
+			continue
+		checked += 1
+		if checked > 5:
+			break
+		var np: Vector3 = n.global_position
+		var dx: float = pos.x - np.x
+		var dz: float = pos.z - np.z
+		var d_sq: float = dx * dx + dz * dz
+		if d_sq > 0.0001 and d_sq < max_d_sq:
+			var d: float = sqrt(d_sq)
+			var weight: float = 1.0 - (d / max_d)
+			sep.x += (dx / d) * weight
+			sep.z += (dz / d) * weight
+	return sep
+
 func find_nearest(pos: Vector3, max_range: float, exclude_ids: Dictionary = {}) -> Node3D:
 	var best: Node3D = null
 	var best_d_sq: float = max_range * max_range

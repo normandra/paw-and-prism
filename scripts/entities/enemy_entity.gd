@@ -37,6 +37,7 @@ var _burn_tick: float = 0.0
 var _chill_timer: float = 0.0
 var _knockback_vel: Vector3 = Vector3.ZERO
 var _waddle_phase: float = 0.0
+var _sep_parity: int = 0
 
 # Boss AI state
 var _boss_cd: float = 2.4
@@ -81,7 +82,7 @@ func setup(p_enemy_id: String, hp_scale: float, dmg_scale: float, p_elite: bool 
 
 func _collect_meshes(node: Node) -> void:
 	for ch in node.get_children():
-		if ch is MeshInstance3D and ch.name != "ShadowDisc":
+		if ch is MeshInstance3D and ch.name != "ShadowDisc" and ch.name != "EliteRing":
 			var mi: MeshInstance3D = ch
 			_mesh_nodes.append(mi)
 			_orig_materials.append(mi.material_override)
@@ -142,23 +143,11 @@ func step(delta: float, player_pos: Vector3, grid: SpatialGrid) -> void:
 					Color(0.88, 0.36, 1.0)
 				)
 
-		# Fast soft separation using spatial grid
-		var sep: Vector3 = Vector3.ZERO
-		var neighbors: Array = grid.query_radius(global_position, hit_radius * 1.45)
-		var checked: int = 0
-		for n in neighbors:
-			if n == self:
-				continue
-			checked += 1
-			if checked > 6:
-				break
-			var away: Vector3 = global_position - n.global_position
-			away.y = 0.0
-			var d: float = away.length()
-			if d > 0.001 and d < hit_radius * 1.6:
-				sep += (away / d) * (1.0 - d / (hit_radius * 1.6))
+		# Zero-allocation soft separation every 2nd frame
+		_sep_parity += 1
+		var sep: Vector3 = grid.compute_separation(self, hit_radius * 1.45) if (_sep_parity & 1) == 0 else Vector3.ZERO
 
-		var final_vel: Vector3 = (move_dir * spd) + (sep * 3.2)
+		var final_vel: Vector3 = (move_dir * spd) + (sep * 3.4)
 		global_position += final_vel * delta
 
 	var bound: float = ArenaBuilder.ARENA_HALF_SIZE - 1.2

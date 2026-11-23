@@ -46,7 +46,7 @@ func setup_player_nova(p_pos: Vector3, p_radius: float, p_dmg: float, p_crit_c: 
 
 	_ring_mesh = MeshInstance3D.new()
 	_ring_mesh.mesh = ChibiMeshFactory._get_torus(0.75, 1.0)
-	_ring_mesh.material_override = ChibiMeshFactory.get_toon_mat(Color(p_col.r, p_col.g, p_col.b, 0.72), 1.15, 0.4)
+	_ring_mesh.material_override = ChibiMeshFactory.get_unshaded_mat(Color(p_col.r, p_col.g, p_col.b, 0.78), true)
 	_ring_mesh.position = Vector3(0.0, 0.14, 0.0)
 	_ring_mesh.scale = Vector3(0.3, 0.3, 0.3)
 	_ring_mesh.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
@@ -71,7 +71,7 @@ func setup_meteor(p_pos: Vector3, p_radius: float, p_dmg: float, p_crit_c: float
 	# Ground target ring
 	_ring_mesh = MeshInstance3D.new()
 	_ring_mesh.mesh = ChibiMeshFactory._get_torus(p_radius * 0.88, p_radius)
-	_ring_mesh.material_override = ChibiMeshFactory.get_toon_mat(Color(1.0, 0.42, 0.16, 0.65), 1.0, 0.5)
+	_ring_mesh.material_override = ChibiMeshFactory.get_unshaded_mat(Color(1.0, 0.42, 0.16, 0.70), true)
 	_ring_mesh.position = Vector3(0.0, 0.06, 0.0)
 	_ring_mesh.scale = Vector3(1.0, 0.25, 1.0)
 	_ring_mesh.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
@@ -79,10 +79,11 @@ func setup_meteor(p_pos: Vector3, p_radius: float, p_dmg: float, p_crit_c: float
 
 	# Falling blazing pinecone
 	_meteor_mesh = MeshInstance3D.new()
-	_meteor_mesh.mesh = ChibiMeshFactory._get_sphere(0.85)
+	_meteor_mesh.mesh = ChibiMeshFactory._get_sphere(0.85, 10, 6)
 	_meteor_mesh.material_override = ChibiMeshFactory.get_toon_mat(Color(1.0, 0.48, 0.12), 1.4, 0.3)
 	_meteor_mesh.position = Vector3(0.0, 12.0, 0.0)
 	_meteor_mesh.scale = Vector3(0.9, 1.35, 0.9)
+	_meteor_mesh.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(_meteor_mesh)
 
 func setup_lightning_arc(from_pos: Vector3, to_pos: Vector3, p_col: Color) -> void:
@@ -97,7 +98,7 @@ func setup_lightning_arc(from_pos: Vector3, to_pos: Vector3, p_col: Color) -> vo
 	var length: float = maxf(0.2, diff.length())
 	var bar: MeshInstance3D = MeshInstance3D.new()
 	bar.mesh = ChibiMeshFactory._get_box(Vector3(0.18, 0.18, length))
-	bar.material_override = ChibiMeshFactory.get_toon_mat(p_col, 2.0, 0.1)
+	bar.material_override = ChibiMeshFactory.get_unshaded_mat(p_col)
 	bar.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(bar)
 	rotation.y = atan2(diff.x, diff.z)
@@ -113,15 +114,15 @@ func setup_enemy_telegraph(p_pos: Vector3, p_radius: float, p_windup: float, p_d
 
 	_ring_mesh = MeshInstance3D.new()
 	_ring_mesh.mesh = ChibiMeshFactory._get_torus(p_radius * 0.88, p_radius)
-	_ring_mesh.material_override = ChibiMeshFactory.get_toon_mat(Color(p_col.r, p_col.g, p_col.b, 0.82), 1.0, 0.4)
+	_ring_mesh.material_override = ChibiMeshFactory.get_unshaded_mat(Color(p_col.r, p_col.g, p_col.b, 0.85), true)
 	_ring_mesh.position = Vector3(0.0, 0.06, 0.0)
 	_ring_mesh.scale = Vector3(1.0, 0.2, 1.0)
 	_ring_mesh.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(_ring_mesh)
 
 	_fill_mesh = MeshInstance3D.new()
-	_fill_mesh.mesh = ChibiMeshFactory._get_cylinder(p_radius, p_radius, 0.04, 20)
-	_fill_mesh.material_override = ChibiMeshFactory.get_toon_mat(Color(p_col.r, p_col.g, p_col.b, 0.30), 0.7, 0.6)
+	_fill_mesh.mesh = ChibiMeshFactory._get_cylinder(p_radius, p_radius, 0.04, 16)
+	_fill_mesh.material_override = ChibiMeshFactory.get_unshaded_mat(Color(p_col.r, p_col.g, p_col.b, 0.34), true)
 	_fill_mesh.position = Vector3(0.0, 0.04, 0.0)
 	_fill_mesh.scale = Vector3(0.05, 1.0, 0.05)
 	_fill_mesh.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF

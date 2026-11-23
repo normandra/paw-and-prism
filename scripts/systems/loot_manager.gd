@@ -34,7 +34,8 @@ func drop_for_enemy(enemy: EnemyEntity, elapsed_sec: float) -> void:
 	var mf: float = stats.magic_find
 
 	# Always drop XP shard (merge if too many shards on floor)
-	_spawn_xp_shard(pos, enemy.xp_reward)
+	var web_xp_mult: float = 1.25 if OS.has_feature("web") else 1.0
+	_spawn_xp_shard(pos, enemy.xp_reward * web_xp_mult)
 
 	if enemy.is_boss:
 		# Diablo Loot Fountain!

@@ -35,15 +35,30 @@ func _run_all() -> void:
 		_assert(hmount != null and hmount.get_child_count() > 0, "Helmet visual swapped for " + hid)
 		rig.queue_free()
 
-	# 3. All 7 regular enemies + 3 bosses build 3D rigs cleanly
+	# 3. All 7 regular enemies (single merged BodyMesh + shadow OFF) + 3 bosses build 3D rigs cleanly
 	for eid in EnemyDatabase.get_all_regular_ids():
 		var erig: Node3D = ChibiMeshFactory.build_enemy_rig(eid, true)
-		_assert(erig != null and erig.get_node_or_null("BodyPivot") != null, "Enemy rig built for " + eid)
+		var bmesh: MeshInstance3D = erig.get_node_or_null("BodyPivot/BodyMesh")
+		_assert(erig != null and bmesh != null and bmesh.cast_shadow == GeometryInstance3D.SHADOW_CASTING_SETTING_OFF, "Merged enemy rig (shadow OFF) built for " + eid)
 		erig.queue_free()
 	for bid in EnemyDatabase.get_all_boss_ids():
 		var brig: Node3D = ChibiMeshFactory.build_enemy_rig(bid, false)
 		_assert(brig != null and brig.get_node_or_null("BodyPivot") != null, "Boss rig built for " + bid)
 		brig.queue_free()
+
+	# 3b. Storybook Theme, Fonts & Vector Icon Library check
+	var game_theme: Theme = UiHelper.create_game_theme()
+	_assert(game_theme != null and UiHelper.get_display_font() != null and UiHelper.get_body_font() != null, "Storybook Theme and Fredoka/Nunito fonts loaded")
+	_assert(UiHelper._wght_tag() == 2003265652, "OpenType wght FourCC tag resolves cleanly")
+	for hid in ["shiba", "bunny", "bear", "cat"]:
+		var pt: Texture2D = UiIcons.get_hero_portrait(hid)
+		_assert(pt != null and pt.get_width() > 0, "Hero portrait SVG rendered for " + hid)
+	for gid in GemDatabase.get_ids_by_type(GameEnums.GemType.ACTIVE):
+		var st: Texture2D = UiIcons.get_skill_icon(gid)
+		_assert(st != null and st.get_width() > 0, "Skill SVG rendered for " + gid)
+	for s_slot in range(6):
+		var slt: Texture2D = UiIcons.get_slot_icon(s_slot)
+		_assert(slt != null and slt.get_width() > 0, "Slot SVG rendered for slot %d" % s_slot)
 
 	# 4. Diablo Item Generation, Comparison, Salvage & Prism Dust Crafting
 	var rng: RandomNumberGenerator = RandomNumberGenerator.new()
@@ -65,6 +80,10 @@ func _run_all() -> void:
 	_assert(added_sock and weapon_a.get_socket_count() == 3, "Prism Dust Add Socket adds 3rd socket to Weapon")
 	weapon_a.recolor_sockets(rng)
 	_assert(weapon_a.socket_colors.size() == 3, "Recolor sockets preserves socket count")
+	var mini_sw: PoESocketWidget = PoESocketWidget.new()
+	mini_sw.configure_mini(weapon_a)
+	_assert(mini_sw.mini_mode and mini_sw.custom_minimum_size.x > 0, "PoESocketWidget mini mode configures cleanly")
+	mini_sw.free()
 
 	# 5. PoE Gem System (Active + Support Linking, Tag Matching, Passives, Prism Mastery, Gem XP, Equipment Swap)
 	var test_stats: HeroStats = HeroStats.new("shiba")
@@ -148,6 +167,13 @@ func _run_all() -> void:
 	main_inst._open_inventory()
 	await process_frame
 	_assert(main_inst.state == MainGame.GameState.INVENTORY and main_inst.inventory_panel.visible, "InventoryPanel opens and pauses game")
+	var found_socket_widget: bool = false
+	for slot_card in main_inst.inventory_panel._center_slots_vbox.get_children():
+		for inner_c in slot_card.get_children():
+			for sub in inner_c.get_children():
+				if sub is PoESocketWidget:
+					found_socket_widget = true
+	_assert(found_socket_widget, "PoESocketWidget rendered inside InventoryPanel")
 	main_inst.inventory_panel._active_right_tab = "gems"
 	main_inst.inventory_panel.refresh()
 	main_inst._close_inventory()

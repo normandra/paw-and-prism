@@ -8,6 +8,8 @@ signal sfx_requested(sfx_name: String)
 var _stats: HeroStats = null
 var _rng: RandomNumberGenerator = RandomNumberGenerator.new()
 
+var _frame: PanelContainer = null
+var _hero_portrait: TextureRect = null
 var _left_stats_rtl: RichTextLabel = null
 var _center_slots_vbox: VBoxContainer = null
 var _craft_target_lbl: Label = null
@@ -20,60 +22,83 @@ var _tab_items_btn: Button = null
 var _tab_gems_btn: Button = null
 var _right_content_vbox: VBoxContainer = null
 
-var _active_right_tab: String = "items" # "items" | "gems"
-var _gem_filter: int = -1 # -1 = all, else GameEnums.GemType
+var _active_right_tab: String = "items"
+var _gem_filter: int = -1
 var _selected_bag_idx: int = -1
 var _selected_pouch_idx: int = -1
 var _selected_craft_slot: int = GameEnums.EquipSlot.WEAPON
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
+	theme = UiHelper.create_game_theme()
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	visible = false
 	_rng.randomize()
 	_build_shell()
+	_clamp_frame_size()
+
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_RESIZED:
+		_clamp_frame_size()
+
+func _clamp_frame_size() -> void:
+	if _frame == null:
+		return
+	var vp: Vector2 = get_viewport_rect().size
+	if vp.x <= 10.0 or vp.y <= 10.0:
+		vp = Vector2(1280.0, 720.0)
+	_frame.custom_minimum_size = Vector2(minf(vp.x - 48.0, 1220.0), minf(vp.y - 40.0, 680.0))
 
 func _build_shell() -> void:
 	var dim: ColorRect = ColorRect.new()
-	dim.color = Color(0.03, 0.04, 0.08, 0.78)
+	dim.color = Color(0.03, 0.02, 0.02, 0.80)
 	dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	add_child(dim)
 
-	var frame: PanelContainer = PanelContainer.new()
-	frame.add_theme_stylebox_override("panel", UiHelper.make_panel_box(Color(0.09, 0.10, 0.15, 0.97), Color(0.96, 0.80, 0.34, 0.9), 14, 2, 14))
-	frame.set_anchors_preset(Control.PRESET_FULL_RECT)
-	frame.offset_left = 28
-	frame.offset_top = 24
-	frame.offset_right = -28
-	frame.offset_bottom = -24
-	add_child(frame)
+	var center: CenterContainer = CenterContainer.new()
+	center.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	add_child(center)
+
+	_frame = PanelContainer.new()
+	_frame.add_theme_stylebox_override("panel", UiHelper.make_panel_box(UiHelper.BG_WOOD_DEEP, UiHelper.BORDER_GOLD, 16, 3, 14))
+	center.add_child(_frame)
 
 	var root_v: VBoxContainer = VBoxContainer.new()
 	root_v.add_theme_constant_override("separation", 10)
-	frame.add_child(root_v)
+	_frame.add_child(root_v)
 
 	# Header Row
 	var hdr: HBoxContainer = HBoxContainer.new()
 	hdr.add_theme_constant_override("separation", 12)
 	root_v.add_child(hdr)
 
+	hdr.add_child(UiHelper.make_icon_rect(UiIcons.get_ui_icon("paw_prism_crest"), 34))
+
 	var title: Label = Label.new()
-	title.text = "HERO GEAR & PATH OF EXILE GEM SOCKET BOARD"
-	title.add_theme_font_size_override("font_size", 20)
-	title.add_theme_color_override("font_color", Color(1.0, 0.88, 0.40))
+	title.text = "HERO SATCHEL & PRISM SOCKET BOARD"
+	UiHelper.apply_display_font(title, 22, UiHelper.BORDER_GOLD, 3)
 	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	hdr.add_child(title)
 
+	var dust_pill: PanelContainer = PanelContainer.new()
+	dust_pill.add_theme_stylebox_override("panel", UiHelper.make_panel_box(UiHelper.BG_WELL, Color(0.42, 0.88, 1.0), 10, 2, 7, false))
+	hdr.add_child(dust_pill)
+	var dp_h: HBoxContainer = HBoxContainer.new()
+	dp_h.add_theme_constant_override("separation", 6)
+	dust_pill.add_child(dp_h)
+	dp_h.add_child(UiHelper.make_icon_rect(UiIcons.get_ui_icon("prism_dust"), 20))
 	_dust_header_lbl = Label.new()
 	_dust_header_lbl.text = "Prism Dust: 0"
-	_dust_header_lbl.add_theme_font_size_override("font_size", 16)
-	_dust_header_lbl.add_theme_color_override("font_color", Color(0.48, 0.92, 1.0))
-	hdr.add_child(_dust_header_lbl)
+	_dust_header_lbl.add_theme_font_size_override("font_size", 15)
+	_dust_header_lbl.add_theme_font_override("font", UiHelper.get_bold_font())
+	_dust_header_lbl.add_theme_color_override("font_color", Color(0.55, 0.94, 1.0))
+	dp_h.add_child(_dust_header_lbl)
 
 	var close_btn: Button = Button.new()
 	close_btn.text = "Resume [Tab / Esc]"
-	close_btn.custom_minimum_size = Vector2(165, 36)
-	UiHelper.style_button(close_btn, Color(0.24, 0.44, 0.30), Color(0.56, 0.92, 0.62), 8)
+	close_btn.custom_minimum_size = Vector2(175, 40)
+	close_btn.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	UiHelper.style_button(close_btn, UiHelper.CTA_EMERALD, UiHelper.CTA_EMERALD_RIM, 10)
 	close_btn.pressed.connect(func() -> void: close_panel())
 	hdr.add_child(close_btn)
 
@@ -83,26 +108,45 @@ func _build_shell() -> void:
 	cols.add_theme_constant_override("separation", 12)
 	root_v.add_child(cols)
 
-	# === LEFT COLUMN: Computed Stats & PoE Linked Skills ===
+	# === LEFT COLUMN: Portrait, Computed Stats & PoE Linked Skills ===
 	var left_box: PanelContainer = PanelContainer.new()
 	left_box.custom_minimum_size = Vector2(305, 0)
 	left_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	left_box.size_flags_stretch_ratio = 0.95
-	left_box.add_theme_stylebox_override("panel", UiHelper.make_panel_box(Color(0.11, 0.12, 0.18), Color(0.35, 0.42, 0.58), 10, 1, 10))
+	left_box.size_flags_stretch_ratio = 0.92
+	left_box.add_theme_stylebox_override("panel", UiHelper.make_panel_box(UiHelper.BG_WALNUT, UiHelper.BORDER_SUBTLE, 12, 1, 10, false))
 	cols.add_child(left_box)
+
+	var left_v: VBoxContainer = VBoxContainer.new()
+	left_v.add_theme_constant_override("separation", 8)
+	left_box.add_child(left_v)
+
+	var left_hdr: HBoxContainer = HBoxContainer.new()
+	left_hdr.add_theme_constant_override("separation", 10)
+	left_v.add_child(left_hdr)
+	_hero_portrait = UiHelper.make_icon_rect(UiIcons.get_hero_portrait("shiba"), 44)
+	left_hdr.add_child(_hero_portrait)
+	var lh_lbl: Label = Label.new()
+	lh_lbl.text = "Hero Stats & Active Build"
+	UiHelper.apply_display_font(lh_lbl, 16, UiHelper.BORDER_GOLD, 2)
+	left_hdr.add_child(lh_lbl)
+
+	var left_well: PanelContainer = PanelContainer.new()
+	left_well.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	left_well.add_theme_stylebox_override("panel", UiHelper.make_panel_box(UiHelper.BG_WELL, UiHelper.BORDER_SUBTLE, 10, 1, 10, false))
+	left_v.add_child(left_well)
 
 	_left_stats_rtl = RichTextLabel.new()
 	_left_stats_rtl.bbcode_enabled = true
 	_left_stats_rtl.scroll_active = true
 	_left_stats_rtl.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	_left_stats_rtl.add_theme_font_size_override("normal_font_size", 13)
-	left_box.add_child(_left_stats_rtl)
+	_left_stats_rtl.add_theme_font_size_override("normal_font_size", 14)
+	left_well.add_child(_left_stats_rtl)
 
-	# === CENTER COLUMN: 6 Equipment Slots + Sockets + Dust Crafting ===
+	# === CENTER COLUMN: 6 Equipment Slots + Drawn Sockets + Prism Forge ===
 	var center_box: PanelContainer = PanelContainer.new()
 	center_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	center_box.size_flags_stretch_ratio = 1.25
-	center_box.add_theme_stylebox_override("panel", UiHelper.make_panel_box(Color(0.11, 0.12, 0.18), Color(0.35, 0.42, 0.58), 10, 1, 10))
+	center_box.size_flags_stretch_ratio = 1.32
+	center_box.add_theme_stylebox_override("panel", UiHelper.make_panel_box(UiHelper.BG_WALNUT, UiHelper.BORDER_SUBTLE, 12, 1, 10, false))
 	cols.add_child(center_box)
 
 	var center_v: VBoxContainer = VBoxContainer.new()
@@ -110,10 +154,10 @@ func _build_shell() -> void:
 	center_box.add_child(center_v)
 
 	var center_hint: Label = Label.new()
-	center_hint.text = "Click a gem in Gems tab -> click a glowing socket to insert! Click occupied socket to remove."
+	center_hint.text = "Select a gem in Skill Gems -> click a glowing socket to insert! Click an occupied socket to remove."
 	center_hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	center_hint.add_theme_font_size_override("font_size", 12)
-	center_hint.add_theme_color_override("font_color", Color(0.75, 0.84, 0.95))
+	center_hint.add_theme_color_override("font_color", UiHelper.TEXT_PARCHMENT)
 	center_v.add_child(center_hint)
 
 	var slots_scroll: ScrollContainer = ScrollContainer.new()
@@ -125,9 +169,9 @@ func _build_shell() -> void:
 	_center_slots_vbox.add_theme_constant_override("separation", 7)
 	slots_scroll.add_child(_center_slots_vbox)
 
-	# Prism Dust Crafting Strip
+	# Prism Forge Crafting Strip
 	var craft_panel: PanelContainer = PanelContainer.new()
-	craft_panel.add_theme_stylebox_override("panel", UiHelper.make_panel_box(Color(0.08, 0.10, 0.16), Color(0.45, 0.82, 0.96, 0.8), 8, 1, 8))
+	craft_panel.add_theme_stylebox_override("panel", UiHelper.make_panel_box(UiHelper.BG_WELL, Color(0.45, 0.84, 0.98, 0.72), 10, 1, 8, false))
 	center_v.add_child(craft_panel)
 
 	var craft_v: VBoxContainer = VBoxContainer.new()
@@ -135,41 +179,33 @@ func _build_shell() -> void:
 	craft_panel.add_child(craft_v)
 
 	_craft_target_lbl = Label.new()
-	_craft_target_lbl.text = "Crafting Target: Weapon"
+	_craft_target_lbl.text = "Prism Forge Target: Weapon"
 	_craft_target_lbl.add_theme_font_size_override("font_size", 13)
-	_craft_target_lbl.add_theme_color_override("font_color", Color(0.55, 0.92, 1.0))
+	_craft_target_lbl.add_theme_font_override("font", UiHelper.get_bold_font())
+	_craft_target_lbl.add_theme_color_override("font_color", Color(0.58, 0.94, 1.0))
 	craft_v.add_child(_craft_target_lbl)
 
 	var craft_btns: HBoxContainer = HBoxContainer.new()
-	craft_btns.add_theme_constant_override("separation", 6)
+	craft_btns.add_theme_constant_override("separation", 8)
 	craft_v.add_child(craft_btns)
 
-	_recolor_btn = Button.new()
-	_recolor_btn.text = "Recolor (10)"
-	_recolor_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	UiHelper.style_button(_recolor_btn, Color(0.20, 0.24, 0.36), Color(0.50, 0.84, 1.0))
+	_recolor_btn = _make_icon_button("Recolor (10)", UiIcons.get_ui_icon("craft_recolor"), UiHelper.CTA_SAPPHIRE, UiHelper.CTA_SAPPHIRE_RIM)
 	_recolor_btn.pressed.connect(_on_craft_recolor)
 	craft_btns.add_child(_recolor_btn)
 
-	_link_btn = Button.new()
-	_link_btn.text = "Add Link (15)"
-	_link_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	UiHelper.style_button(_link_btn, Color(0.26, 0.24, 0.16), Color(1.0, 0.85, 0.34))
+	_link_btn = _make_icon_button("Add Link (15)", UiIcons.get_ui_icon("craft_link"), Color(0.32, 0.24, 0.11), UiHelper.BORDER_GOLD)
 	_link_btn.pressed.connect(_on_craft_link)
 	craft_btns.add_child(_link_btn)
 
-	_add_socket_btn = Button.new()
-	_add_socket_btn.text = "+Socket (25)"
-	_add_socket_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	UiHelper.style_button(_add_socket_btn, Color(0.22, 0.28, 0.24), Color(0.52, 0.92, 0.62))
+	_add_socket_btn = _make_icon_button("+Socket (25)", UiIcons.get_ui_icon("craft_socket"), UiHelper.CTA_EMERALD, UiHelper.CTA_EMERALD_RIM)
 	_add_socket_btn.pressed.connect(_on_craft_socket)
 	craft_btns.add_child(_add_socket_btn)
 
-	# === RIGHT COLUMN: Backpack Items & Gem Pouch Tabs ===
+	# === RIGHT COLUMN: Backpack Items & Skill Gems Tabs ===
 	var right_box: PanelContainer = PanelContainer.new()
 	right_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	right_box.size_flags_stretch_ratio = 1.25
-	right_box.add_theme_stylebox_override("panel", UiHelper.make_panel_box(Color(0.11, 0.12, 0.18), Color(0.35, 0.42, 0.58), 10, 1, 10))
+	right_box.size_flags_stretch_ratio = 1.26
+	right_box.add_theme_stylebox_override("panel", UiHelper.make_panel_box(UiHelper.BG_WALNUT, UiHelper.BORDER_SUBTLE, 12, 1, 10, false))
 	cols.add_child(right_box)
 
 	var right_v: VBoxContainer = VBoxContainer.new()
@@ -182,6 +218,8 @@ func _build_shell() -> void:
 
 	_tab_items_btn = Button.new()
 	_tab_items_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_tab_items_btn.custom_minimum_size = Vector2(0, 38)
+	_tab_items_btn.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 	_tab_items_btn.pressed.connect(func() -> void:
 		_active_right_tab = "items"
 		_selected_pouch_idx = -1
@@ -191,6 +229,8 @@ func _build_shell() -> void:
 
 	_tab_gems_btn = Button.new()
 	_tab_gems_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_tab_gems_btn.custom_minimum_size = Vector2(0, 38)
+	_tab_gems_btn.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 	_tab_gems_btn.pressed.connect(func() -> void:
 		_active_right_tab = "gems"
 		_selected_bag_idx = -1
@@ -200,14 +240,27 @@ func _build_shell() -> void:
 
 	_right_content_vbox = VBoxContainer.new()
 	_right_content_vbox.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	_right_content_vbox.add_theme_constant_override("separation", 6)
+	_right_content_vbox.add_theme_constant_override("separation", 7)
 	right_v.add_child(_right_content_vbox)
+
+func _make_icon_button(lbl_txt: String, icon_tex: Texture2D, bg: Color, border: Color) -> Button:
+	var btn: Button = Button.new()
+	btn.text = lbl_txt
+	btn.icon = icon_tex
+	btn.add_theme_constant_override("icon_max_width", 20)
+	btn.add_theme_constant_override("h_separation", 6)
+	btn.custom_minimum_size = Vector2(0, 36)
+	btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	btn.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	UiHelper.style_button(btn, bg, border, 8, 6)
+	return btn
 
 func open_panel(stats: HeroStats) -> void:
 	_stats = stats
 	_selected_bag_idx = -1
 	_selected_pouch_idx = -1
 	visible = true
+	_clamp_frame_size()
 	refresh()
 
 func close_panel() -> void:
@@ -218,12 +271,26 @@ func close_panel() -> void:
 func refresh() -> void:
 	if _stats == null:
 		return
+	if _hero_portrait != null:
+		_hero_portrait.texture = UiIcons.get_hero_portrait(_stats.hero_id)
 	_dust_header_lbl.text = "Prism Dust: %d" % _stats.prism_dust
 	_tab_items_btn.text = "Looted Gear (%d/%d)" % [_stats.item_bag.size(), HeroStats.MAX_BAG_SIZE]
 	_tab_gems_btn.text = "Skill Gems (%d/%d)" % [_stats.gem_pouch.size(), HeroStats.MAX_POUCH_SIZE]
 
-	UiHelper.style_button(_tab_items_btn, Color(0.24, 0.30, 0.46) if _active_right_tab == "items" else Color(0.14, 0.16, 0.24), Color(1.0, 0.84, 0.34) if _active_right_tab == "items" else Color(0.36, 0.42, 0.56))
-	UiHelper.style_button(_tab_gems_btn, Color(0.24, 0.30, 0.46) if _active_right_tab == "gems" else Color(0.14, 0.16, 0.24), Color(1.0, 0.84, 0.34) if _active_right_tab == "gems" else Color(0.36, 0.42, 0.56))
+	UiHelper.style_button(
+		_tab_items_btn,
+		UiHelper.BG_OAK_CARD if _active_right_tab == "items" else UiHelper.BG_WELL,
+		UiHelper.BORDER_GOLD if _active_right_tab == "items" else UiHelper.BORDER_BRASS,
+		9,
+		7
+	)
+	UiHelper.style_button(
+		_tab_gems_btn,
+		UiHelper.BG_OAK_CARD if _active_right_tab == "gems" else UiHelper.BG_WELL,
+		UiHelper.BORDER_GOLD if _active_right_tab == "gems" else UiHelper.BORDER_BRASS,
+		9,
+		7
+	)
 
 	_refresh_left_stats()
 	_refresh_center_slots()
@@ -231,31 +298,37 @@ func refresh() -> void:
 
 func _refresh_left_stats() -> void:
 	var s: HeroStats = _stats
-	var txt: String = "[b][color=#ffd966]Hero Stats (Lv.%d)[/color][/b]\n" % s.hero_level
-	txt += "Max HP: [color=#ff8a9b]%d[/color]  |  Regen: %.1f/s\n" % [int(round(s.max_hp)), s.hp_regen]
-	txt += "Armor: %d  |  Dmg Red: %d%%\n" % [int(round(s.armor)), int(round(s.dmg_reduction))]
-	txt += "Damage Mult: [color=#ffb36b]%d%%[/color]  |  Flat: +%d\n" % [int(round(s.damage_mult * 100.0)), int(round(s.flat_damage))]
-	txt += "Attack/Cast Speed: [color=#8ae69a]%d%%[/color]\n" % int(round(s.cast_speed_mult * 100.0))
-	txt += "Crit Chance: %.1f%%  |  Crit Dmg: %d%%\n" % [s.crit_chance, int(round(s.crit_mult))]
-	txt += "Area Size: %d%%  |  Move Spd: %.1f\n" % [int(round(s.area_mult * 100.0)), s.move_speed]
-	txt += "Life on Hit: %.1f  |  Extra Proj: +%d\n" % [s.life_on_hit, s.extra_projectiles]
-	txt += "XP Gain: %d%%  |  Magic Find: +%d%%\n\n" % [int(round(s.xp_gain_mult * 100.0)), int(round(s.magic_find))]
+	var hdef: Dictionary = HeroDatabase.get_hero(s.hero_id)
+	var txt: String = "[b][color=#ffd966]%s · Lv.%d[/color][/b]\n\n" % [String(hdef["hero_name"]), s.hero_level]
 
-	txt += "[b][color=#7de0ff]Active PoE Skills (%d)[/color][/b]\n" % s.active_skill_configs.size()
+	txt += "[b][color=#ff9eb0]VITALS[/color][/b]\n"
+	txt += "Max HP: [color=#fff5e0]%d[/color]   |   Regen: %.1f/s\n" % [int(round(s.max_hp)), s.hp_regen]
+	txt += "Armor: %d   |   Dmg Red: %d%%\n\n" % [int(round(s.armor)), int(round(s.dmg_reduction))]
+
+	txt += "[b][color=#ffb86c]OFFENSE[/color][/b]\n"
+	txt += "Damage: [color=#fff5e0]%d%%[/color]   |   Flat: +%d\n" % [int(round(s.damage_mult * 100.0)), int(round(s.flat_damage))]
+	txt += "Cast Speed: [color=#8ae69a]%d%%[/color]   |   Extra Proj: +%d\n" % [int(round(s.cast_speed_mult * 100.0)), s.extra_projectiles]
+	txt += "Crit: %.1f%%   |   Crit Dmg: %d%%\n\n" % [s.crit_chance, int(round(s.crit_mult))]
+
+	txt += "[b][color=#82d4ff]UTILITY[/color][/b]\n"
+	txt += "Area: %d%%   |   Move Spd: %.1f\n" % [int(round(s.area_mult * 100.0)), s.move_speed]
+	txt += "Life on Hit: %.1f   |   XP: %d%%   |   MF: +%d%%\n\n" % [s.life_on_hit, int(round(s.xp_gain_mult * 100.0)), int(round(s.magic_find))]
+
+	txt += "[b][color=#7de0ff]ACTIVE POE SKILLS (%d)[/color][/b]\n" % s.active_skill_configs.size()
 	if s.active_skill_configs.is_empty():
-		txt += "[color=#ff6666]No Active Skill gem socketed! Socket one in any matching slot.[/color]\n"
+		txt += "[color=#ff7070]No Active Skill gem socketed! Insert one into any matching socket.[/color]\n"
 	for cfg in s.active_skill_configs:
 		var hex: String = GameEnums.gem_color_hex(int(cfg["color"]))
 		txt += "• [b][color=%s]%s Lv.%d[/color][/b] (%.0f dmg / %.2fs)\n" % [hex, String(cfg["gem_name"]), int(cfg["effective_level"]), float(cfg["damage"]), float(cfg["cooldown"])]
 		var sups: Array = cfg["linked_support_names"]
 		if sups.is_empty():
-			txt += "   [color=#9999aa]No linked supports[/color]\n"
+			txt += "   [color=#9c8e7a]No linked supports[/color]\n"
 		else:
 			txt += "   [color=#ffd966]Linked:[/color] " + ", ".join(sups) + "\n"
 
-	txt += "\n[b][color=#a8f0b0]Socketed Passive Gems (%d)[/color][/b]\n" % s.active_passives.size()
+	txt += "\n[b][color=#a8f0b0]PASSIVE GEMS (%d)[/color][/b]\n" % s.active_passives.size()
 	if s.active_passives.is_empty():
-		txt += "[color=#9999aa]None socketed yet.[/color]\n"
+		txt += "[color=#9c8e7a]None socketed yet.[/color]\n"
 	for p_info in s.active_passives:
 		var pg: GemInstance = p_info["gem"]
 		var hex: String = GameEnums.gem_color_hex(pg.get_gem_color())
@@ -281,84 +354,96 @@ func _refresh_center_slots() -> void:
 	]:
 		var item: ItemInstance = _stats.equipped.get(slot, null)
 		var is_craft_sel: bool = (slot == _selected_craft_slot)
-		var border_col: Color = GameEnums.rarity_color(item.rarity) if item != null else Color(0.32, 0.34, 0.42)
-		if is_craft_sel:
-			border_col = Color(0.50, 0.92, 1.0)
+		var border_col: Color = Color(0.50, 0.92, 1.0) if is_craft_sel else (UiHelper.rarity_border_color(item.rarity) if item != null else UiHelper.BORDER_SUBTLE)
 
 		var card: PanelContainer = PanelContainer.new()
-		card.add_theme_stylebox_override("panel", UiHelper.make_panel_box(Color(0.14, 0.15, 0.22), border_col, 8, 2 if is_craft_sel else 1, 7))
+		card.add_theme_stylebox_override("panel", UiHelper.make_panel_box(UiHelper.BG_WELL, border_col, 10, 2 if is_craft_sel else 1, 8, false))
 		_center_slots_vbox.add_child(card)
 
 		var cv: VBoxContainer = VBoxContainer.new()
 		cv.add_theme_constant_override("separation", 5)
 		card.add_child(cv)
 
-		var top_btn: Button = Button.new()
-		top_btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		# Clickable item header card (no blinding white borders on common items)
+		var hdr_panel: PanelContainer = PanelContainer.new()
+		hdr_panel.mouse_filter = Control.MOUSE_FILTER_STOP
+		hdr_panel.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+		var r_col: Color = GameEnums.rarity_color(item.rarity) if item != null else Color(0.55, 0.50, 0.45)
+		var b_col: Color = UiHelper.rarity_border_color(item.rarity) if item != null else UiHelper.BORDER_SUBTLE
+		hdr_panel.add_theme_stylebox_override("panel", UiHelper.make_accent_card_box(UiHelper.BG_OAK_CARD if item != null else UiHelper.BG_WELL, b_col, 8, 7))
+		var cap_slot: int = slot
+		hdr_panel.gui_input.connect(func(ev: InputEvent) -> void:
+			if ev is InputEventMouseButton and ev.pressed and ev.button_index == MOUSE_BUTTON_LEFT:
+				_selected_craft_slot = cap_slot
+				sfx_requested.emit("ui_click")
+				refresh()
+		)
+		cv.add_child(hdr_panel)
+
+		var hh: HBoxContainer = HBoxContainer.new()
+		hh.add_theme_constant_override("separation", 8)
+		hh.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		hdr_panel.add_child(hh)
+		hh.add_child(UiHelper.make_icon_rect(UiIcons.get_slot_icon(slot), 24))
+
+		var hv: VBoxContainer = VBoxContainer.new()
+		hv.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		hv.add_theme_constant_override("separation", 2)
+		hv.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		hh.add_child(hv)
+
+		var name_lbl: Label = Label.new()
+		name_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		name_lbl.add_theme_font_override("font", UiHelper.get_bold_font())
+		name_lbl.add_theme_font_size_override("font_size", 13)
+		name_lbl.add_theme_color_override("font_color", r_col)
 		if item == null:
-			top_btn.text = "%s: [Empty Slot]" % GameEnums.slot_label(slot)
-			UiHelper.style_button(top_btn, Color(0.12, 0.13, 0.18), Color(0.28, 0.30, 0.38), 6)
+			name_lbl.text = "%s: Empty Slot" % GameEnums.slot_label(slot)
+			hv.add_child(name_lbl)
 		else:
+			name_lbl.text = "%s (iLv.%d)" % [item.item_name, item.item_level]
+			hv.add_child(name_lbl)
 			var aff_strs: Array[String] = []
 			for a in item.affixes:
 				aff_strs.append(GameEnums.format_stat(int(a["stat"]), float(a["value"])))
-			top_btn.text = "%s: %s (iLv.%d)\n%s" % [GameEnums.slot_label(slot), item.item_name, item.item_level, "  |  ".join(aff_strs)]
+			var aff_lbl: Label = Label.new()
+			aff_lbl.text = "  |  ".join(aff_strs)
+			aff_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+			aff_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			aff_lbl.add_theme_font_size_override("font_size", 11)
+			aff_lbl.add_theme_color_override("font_color", UiHelper.TEXT_PARCHMENT)
+			hv.add_child(aff_lbl)
 			if not item.unique_effect_desc.is_empty():
-				top_btn.text += "\nUnique: " + item.unique_effect_desc
-			UiHelper.style_button(top_btn, Color(0.16, 0.18, 0.26), GameEnums.rarity_color(item.rarity), 6)
-		top_btn.add_theme_font_size_override("font_size", 12)
-		var cap_slot: int = slot
-		top_btn.pressed.connect(func() -> void:
-			_selected_craft_slot = cap_slot
-			sfx_requested.emit("ui_click")
-			refresh()
-		)
-		cv.add_child(top_btn)
+				var u_lbl: Label = Label.new()
+				u_lbl.text = "Unique: " + item.unique_effect_desc
+				u_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+				u_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+				u_lbl.add_theme_font_size_override("font_size", 11)
+				u_lbl.add_theme_color_override("font_color", Color(1.0, 0.72, 0.34))
+				hv.add_child(u_lbl)
 
 		if item != null:
-			var sock_row: HBoxContainer = HBoxContainer.new()
-			sock_row.add_theme_constant_override("separation", 4)
-			cv.add_child(sock_row)
+			var sock_widget: PoESocketWidget = PoESocketWidget.new()
+			sock_widget.configure(slot, item, sel_gem)
+			sock_widget.socket_clicked.connect(_on_socket_clicked)
+			cv.add_child(sock_widget)
 
-			for s_idx in range(item.get_socket_count()):
-				var scol: int = item.socket_colors[s_idx]
-				var g_in: GemInstance = item.socketed_gems[s_idx]
-				var s_btn: Button = Button.new()
-				s_btn.custom_minimum_size = Vector2(72, 34)
-				s_btn.add_theme_font_size_override("font_size", 11)
-				var base_c: Color = GameEnums.gem_color_value(scol)
-				var compatible: bool = (sel_gem != null and item.can_socket(s_idx, sel_gem))
-				if g_in != null:
-					var gtype_tag: String = "A" if g_in.get_gem_type() == GameEnums.GemType.ACTIVE else ("S" if g_in.get_gem_type() == GameEnums.GemType.SUPPORT else "P")
-					s_btn.text = "[%s] %s Lv.%d" % [gtype_tag, g_in.get_short_label(), g_in.level]
-					UiHelper.style_button(s_btn, base_c.darkened(0.55), Color(1.0, 0.88, 0.25) if compatible else base_c, 6)
-				else:
-					s_btn.text = "(%s) Empty" % GameEnums.gem_color_letter(scol)
-					UiHelper.style_button(s_btn, base_c.darkened(0.75), Color(1.0, 0.90, 0.25) if compatible else base_c.darkened(0.2), 6)
-
-				var c_slot: int = slot
-				var c_idx: int = s_idx
-				s_btn.pressed.connect(func() -> void: _on_socket_clicked(c_slot, c_idx))
-				sock_row.add_child(s_btn)
-
-				if s_idx < item.links.size():
-					var link_lbl: Label = Label.new()
-					link_lbl.text = "===" if item.links[s_idx] else " · "
-					link_lbl.add_theme_font_size_override("font_size", 14)
-					link_lbl.add_theme_color_override("font_color", Color(1.0, 0.86, 0.30) if item.links[s_idx] else Color(0.40, 0.42, 0.50))
-					sock_row.add_child(link_lbl)
-
-	# Update Crafting buttons state
 	var target_item: ItemInstance = _stats.equipped.get(_selected_craft_slot, null)
 	if target_item == null:
-		_craft_target_lbl.text = "Crafting Target: %s (Empty)" % GameEnums.slot_label(_selected_craft_slot)
+		_craft_target_lbl.text = "Prism Forge Target: %s (Empty)" % GameEnums.slot_label(_selected_craft_slot)
 		_recolor_btn.disabled = true
+		_link_btn.text = "Add Link (15)"
 		_link_btn.disabled = true
 		_add_socket_btn.disabled = true
 	else:
-		_craft_target_lbl.text = "Crafting: %s (%d/%d Sockets)" % [target_item.item_name, target_item.get_socket_count(), target_item.get_max_sockets()]
+		_craft_target_lbl.text = "Prism Forge: %s (%d/%d Sockets)" % [target_item.item_name, target_item.get_socket_count(), target_item.get_max_sockets()]
 		_recolor_btn.disabled = (_stats.prism_dust < 10)
-		_link_btn.disabled = (_stats.prism_dust < 15 or target_item.are_all_linked())
+		if target_item.are_all_linked():
+			_link_btn.text = "All Linked"
+			_link_btn.disabled = true
+		else:
+			_link_btn.text = "Add Link (15)"
+			_link_btn.disabled = (_stats.prism_dust < 15)
 		_add_socket_btn.disabled = (_stats.prism_dust < 25 or target_item.get_socket_count() >= target_item.get_max_sockets())
 
 func _refresh_right_column() -> void:
@@ -371,13 +456,11 @@ func _refresh_right_column() -> void:
 		_build_gems_tab()
 
 func _build_items_tab() -> void:
-	var top_actions: HBoxContainer = HBoxContainer.new()
-	_right_content_vbox.add_child(top_actions)
-
 	var bulk_btn: Button = Button.new()
-	bulk_btn.text = "Salvage All Common & Magic"
-	bulk_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	UiHelper.style_button(bulk_btn, Color(0.32, 0.18, 0.20), Color(0.95, 0.52, 0.46), 6)
+	bulk_btn.text = ""
+	bulk_btn.custom_minimum_size = Vector2(0, 38)
+	bulk_btn.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	UiHelper.style_button(bulk_btn, UiHelper.CTA_RUBY, UiHelper.CTA_RUBY_RIM, 8, 6)
 	bulk_btn.pressed.connect(func() -> void:
 		var res: Dictionary = _stats.salvage_common_and_magic()
 		if int(res["count"]) > 0:
@@ -386,7 +469,21 @@ func _build_items_tab() -> void:
 			gear_changed.emit()
 			refresh()
 	)
-	top_actions.add_child(bulk_btn)
+	_right_content_vbox.add_child(bulk_btn)
+	var b_cc: CenterContainer = CenterContainer.new()
+	b_cc.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	b_cc.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	bulk_btn.add_child(b_cc)
+	var b_h: HBoxContainer = HBoxContainer.new()
+	b_h.add_theme_constant_override("separation", 8)
+	b_h.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	b_cc.add_child(b_h)
+	b_h.add_child(UiHelper.make_icon_rect(UiIcons.get_ui_icon("salvage"), 18))
+	var b_lbl: Label = Label.new()
+	b_lbl.text = "Salvage Common & Magic"
+	b_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	UiHelper.apply_display_font(b_lbl, 14, UiHelper.TEXT_CREAM, 2)
+	b_h.add_child(b_lbl)
 
 	var scroll: ScrollContainer = ScrollContainer.new()
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -394,37 +491,89 @@ func _build_items_tab() -> void:
 
 	var list_v: VBoxContainer = VBoxContainer.new()
 	list_v.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	list_v.add_theme_constant_override("separation", 5)
+	list_v.add_theme_constant_override("separation", 6)
 	scroll.add_child(list_v)
 
 	if _stats.item_bag.is_empty():
+		var emp_box: PanelContainer = PanelContainer.new()
+		emp_box.add_theme_stylebox_override("panel", UiHelper.make_panel_box(UiHelper.BG_WELL, UiHelper.BORDER_SUBTLE, 10, 1, 14, false))
 		var emp: Label = Label.new()
-		emp.text = "No unequipped items in bag yet.\nDefeat critters, elites & bosses to loot Diablo gear!"
+		emp.text = "No unequipped gear in satchel yet.\nDefeat critters, elites, chests & bosses to loot Diablo gear!"
 		emp.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		list_v.add_child(emp)
+		emp.add_theme_color_override("font_color", UiHelper.TEXT_PARCHMENT)
+		emp_box.add_child(emp)
+		list_v.add_child(emp_box)
 	else:
 		for i in range(_stats.item_bag.size()):
 			var it: ItemInstance = _stats.item_bag[i]
-			var btn: Button = Button.new()
-			btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
-			btn.text = "[%s] %s (iLv.%d)  %s" % [GameEnums.slot_label(it.equip_slot), it.item_name, it.item_level, it.get_socket_summary_text()]
-			btn.add_theme_font_size_override("font_size", 12)
+			var r_col: Color = GameEnums.rarity_color(it.rarity)
+			var b_col: Color = UiHelper.rarity_border_color(it.rarity)
 			var is_sel: bool = (i == _selected_bag_idx)
-			UiHelper.style_button(btn, Color(0.22, 0.24, 0.34) if is_sel else Color(0.14, 0.16, 0.22), GameEnums.rarity_color(it.rarity), 6)
-			var idx_cap: int = i
-			btn.pressed.connect(func() -> void:
-				_selected_bag_idx = idx_cap
-				sfx_requested.emit("ui_click")
-				refresh()
-			)
-			list_v.add_child(btn)
 
-	# Diablo Side-by-Side Comparison Inspector
+			var row_card: PanelContainer = PanelContainer.new()
+			row_card.mouse_filter = Control.MOUSE_FILTER_STOP
+			row_card.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+			row_card.add_theme_stylebox_override(
+				"panel",
+				UiHelper.make_accent_card_box(UiHelper.BG_OAK_CARD if not is_sel else Color(0.30, 0.23, 0.16), Color(1.0, 0.90, 0.36) if is_sel else b_col, 8, 8)
+			)
+			var idx_cap: int = i
+			row_card.gui_input.connect(func(ev: InputEvent) -> void:
+				if ev is InputEventMouseButton and ev.pressed and ev.button_index == MOUSE_BUTTON_LEFT:
+					_selected_bag_idx = idx_cap
+					sfx_requested.emit("ui_click")
+					refresh()
+			)
+			list_v.add_child(row_card)
+
+			var rv: VBoxContainer = VBoxContainer.new()
+			rv.add_theme_constant_override("separation", 4)
+			rv.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			row_card.add_child(rv)
+
+			var top_h: HBoxContainer = HBoxContainer.new()
+			top_h.add_theme_constant_override("separation", 8)
+			top_h.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			rv.add_child(top_h)
+
+			top_h.add_child(UiHelper.make_icon_rect(UiIcons.get_slot_icon(it.equip_slot), 24))
+
+			var name_l: Label = Label.new()
+			name_l.text = it.item_name
+			name_l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			name_l.clip_text = true
+			name_l.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+			name_l.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			name_l.add_theme_font_override("font", UiHelper.get_bold_font())
+			name_l.add_theme_font_size_override("font_size", 13)
+			name_l.add_theme_color_override("font_color", r_col)
+			top_h.add_child(name_l)
+
+			var ilvl_pill: PanelContainer = UiHelper.make_badge_pill("i%d" % it.item_level, UiHelper.BG_WELL, UiHelper.BORDER_SUBTLE, UiHelper.TEXT_PARCHMENT, 10)
+			top_h.add_child(ilvl_pill)
+
+			var bot_h: HBoxContainer = HBoxContainer.new()
+			bot_h.add_theme_constant_override("separation", 8)
+			bot_h.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			rv.add_child(bot_h)
+
+			var meta_l: Label = Label.new()
+			meta_l.text = "%s · %s" % [GameEnums.slot_label(it.equip_slot), GameEnums.rarity_label(it.rarity)]
+			meta_l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			meta_l.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			meta_l.add_theme_font_size_override("font_size", 11)
+			meta_l.add_theme_color_override("font_color", UiHelper.TEXT_PARCHMENT)
+			bot_h.add_child(meta_l)
+
+			var mini_sock: PoESocketWidget = PoESocketWidget.new()
+			mini_sock.configure_mini(it)
+			bot_h.add_child(mini_sock)
+
 	if _selected_bag_idx >= 0 and _selected_bag_idx < _stats.item_bag.size():
 		var sel_item: ItemInstance = _stats.item_bag[_selected_bag_idx]
 		var cur_item: ItemInstance = _stats.equipped.get(sel_item.equip_slot, null)
 		var comp_box: PanelContainer = PanelContainer.new()
-		comp_box.add_theme_stylebox_override("panel", UiHelper.make_panel_box(Color(0.08, 0.10, 0.15), GameEnums.rarity_color(sel_item.rarity), 8, 2, 8))
+		comp_box.add_theme_stylebox_override("panel", UiHelper.make_panel_box(UiHelper.BG_WELL, UiHelper.rarity_border_color(sel_item.rarity), 10, 2, 10, false))
 		_right_content_vbox.add_child(comp_box)
 
 		var cv: VBoxContainer = VBoxContainer.new()
@@ -438,17 +587,16 @@ func _build_items_tab() -> void:
 		rtl.add_theme_font_size_override("normal_font_size", 12)
 
 		var r_hex: String = "#" + GameEnums.rarity_color(sel_item.rarity).to_html(false)
-		var txt: String = "[b][color=%s]%s[/color][/b] (%s iLv.%d)\n" % [r_hex, sel_item.item_name, GameEnums.slot_label(sel_item.equip_slot), sel_item.item_level]
-		txt += "Sockets: %s\n" % sel_item.get_socket_summary_text()
+		var txt: String = "[b][color=%s]%s[/color][/b] (%s · iLv.%d)\n" % [r_hex, sel_item.item_name, GameEnums.slot_label(sel_item.equip_slot), sel_item.item_level]
 		if not sel_item.unique_effect_desc.is_empty():
 			txt += "[color=#ff9e44]Unique: %s[/color]\n" % sel_item.unique_effect_desc
-		txt += "[color=#99b8ff]vs Equipped (%s):[/color]\n" % (cur_item.item_name if cur_item != null else "Empty")
+		txt += "[color=#99c2ff]vs Equipped (%s):[/color]\n" % (cur_item.item_name if cur_item != null else "Empty")
 		for diff in UiHelper.compare_items(sel_item, cur_item):
 			var st: int = int(diff["stat"])
 			var d_val: float = float(diff["delta"])
 			var n_val: float = float(diff["new_val"])
-			var arrow: String = "[color=#66ee77]▲ +%.1f[/color]" % d_val if d_val > 0.01 else ("[color=#ff6666]▼ %.1f[/color]" % d_val if d_val < -0.01 else "[color=#aaaaaa]=[/color]")
-			txt += "• %s: %.1f (%s)\n" % [GameEnums.stat_label(st), n_val, arrow]
+			var delta_str: String = "[color=#66ee77](+%.1f)[/color]" % d_val if d_val > 0.01 else ("[color=#ff6666](%.1f)[/color]" % d_val if d_val < -0.01 else "[color=#999999](=)[/color]")
+			txt += "• %s: %.1f  %s\n" % [GameEnums.stat_label(st), n_val, delta_str]
 		rtl.text = txt
 		cv.add_child(rtl)
 
@@ -457,9 +605,10 @@ func _build_items_tab() -> void:
 		cv.add_child(btn_row)
 
 		var eq_btn: Button = Button.new()
-		eq_btn.text = "Equip (Preserves Gems)"
+		eq_btn.text = "Equip (Keeps Gems)"
 		eq_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		UiHelper.style_button(eq_btn, Color(0.22, 0.48, 0.30), Color(0.55, 0.96, 0.62), 6)
+		eq_btn.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+		UiHelper.style_button(eq_btn, UiHelper.CTA_EMERALD, UiHelper.CTA_EMERALD_RIM, 8, 7)
 		eq_btn.pressed.connect(func() -> void:
 			_stats.equip_item_from_bag(_selected_bag_idx)
 			_selected_bag_idx = -1
@@ -470,8 +619,12 @@ func _build_items_tab() -> void:
 		btn_row.add_child(eq_btn)
 
 		var sal_btn: Button = Button.new()
-		sal_btn.text = "Salvage (+%d Dust)" % sel_item.get_salvage_dust()
-		UiHelper.style_button(sal_btn, Color(0.36, 0.20, 0.20), Color(0.95, 0.55, 0.45), 6)
+		sal_btn.text = "Salvage (+%d)" % sel_item.get_salvage_dust()
+		sal_btn.icon = UiIcons.get_ui_icon("salvage")
+		sal_btn.add_theme_constant_override("icon_max_width", 18)
+		sal_btn.add_theme_constant_override("h_separation", 6)
+		sal_btn.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+		UiHelper.style_button(sal_btn, UiHelper.CTA_RUBY, UiHelper.CTA_RUBY_RIM, 8, 7)
 		sal_btn.pressed.connect(func() -> void:
 			_stats.salvage_bag_item(_selected_bag_idx)
 			_selected_bag_idx = -1
@@ -483,7 +636,7 @@ func _build_items_tab() -> void:
 
 func _build_gems_tab() -> void:
 	var filter_row: HBoxContainer = HBoxContainer.new()
-	filter_row.add_theme_constant_override("separation", 5)
+	filter_row.add_theme_constant_override("separation", 6)
 	_right_content_vbox.add_child(filter_row)
 
 	for pair in [[-1, "All"], [GameEnums.GemType.ACTIVE, "Active"], [GameEnums.GemType.SUPPORT, "Support"], [GameEnums.GemType.PASSIVE, "Passive"]]:
@@ -492,7 +645,14 @@ func _build_gems_tab() -> void:
 		var fb: Button = Button.new()
 		fb.text = f_lbl
 		fb.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		UiHelper.style_button(fb, Color(0.24, 0.32, 0.48) if _gem_filter == f_id else Color(0.14, 0.16, 0.24), Color(0.60, 0.85, 1.0) if _gem_filter == f_id else Color(0.35, 0.40, 0.52), 6)
+		fb.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+		UiHelper.style_button(
+			fb,
+			UiHelper.BG_OAK_CARD if _gem_filter == f_id else UiHelper.BG_WELL,
+			UiHelper.BORDER_GOLD if _gem_filter == f_id else UiHelper.BORDER_BRASS,
+			8,
+			5
+		)
 		fb.pressed.connect(func() -> void:
 			_gem_filter = f_id
 			_selected_pouch_idx = -1
@@ -506,7 +666,7 @@ func _build_gems_tab() -> void:
 
 	var list_v: VBoxContainer = VBoxContainer.new()
 	list_v.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	list_v.add_theme_constant_override("separation", 5)
+	list_v.add_theme_constant_override("separation", 6)
 	scroll.add_child(list_v)
 
 	var shown_count: int = 0
@@ -517,30 +677,65 @@ func _build_gems_tab() -> void:
 		shown_count += 1
 		var gcol: Color = GameEnums.gem_color_value(g.get_gem_color())
 		var is_sel: bool = (i == _selected_pouch_idx)
-		var btn: Button = Button.new()
-		btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
-		btn.text = "[%s] %s Lv.%d (%s)" % [GameEnums.gem_type_label(g.get_gem_type()), g.get_gem_name(), g.level, GameEnums.gem_color_letter(g.get_gem_color())]
-		btn.add_theme_font_size_override("font_size", 12)
-		UiHelper.style_button(btn, gcol.darkened(0.62) if is_sel else Color(0.14, 0.16, 0.22), Color(1.0, 0.90, 0.30) if is_sel else gcol, 6)
-		var idx_cap: int = i
-		btn.pressed.connect(func() -> void:
-			_selected_pouch_idx = -1 if _selected_pouch_idx == idx_cap else idx_cap
-			sfx_requested.emit("ui_click")
-			refresh()
+		var gtype: int = g.get_gem_type()
+
+		var gem_card: PanelContainer = PanelContainer.new()
+		gem_card.mouse_filter = Control.MOUSE_FILTER_STOP
+		gem_card.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+		gem_card.add_theme_stylebox_override(
+			"panel",
+			UiHelper.make_accent_card_box(gcol.darkened(0.65) if is_sel else UiHelper.BG_OAK_CARD, Color(1.0, 0.90, 0.30) if is_sel else gcol, 8, 7)
 		)
-		list_v.add_child(btn)
+		var idx_cap: int = i
+		gem_card.gui_input.connect(func(ev: InputEvent) -> void:
+			if ev is InputEventMouseButton and ev.pressed and ev.button_index == MOUSE_BUTTON_LEFT:
+				_selected_pouch_idx = -1 if _selected_pouch_idx == idx_cap else idx_cap
+				sfx_requested.emit("ui_click")
+				refresh()
+		)
+		list_v.add_child(gem_card)
+
+		var gh: HBoxContainer = HBoxContainer.new()
+		gh.add_theme_constant_override("separation", 8)
+		gh.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		gem_card.add_child(gh)
+
+		var gtex: Texture2D = UiIcons.get_skill_icon(g.gem_id) if gtype == GameEnums.GemType.ACTIVE else UiIcons.get_gem_icon(gtype, g.get_gem_color())
+		gh.add_child(UiHelper.make_icon_rect(gtex, 24))
+
+		var short_type: String = "ACT" if gtype == GameEnums.GemType.ACTIVE else ("SUP" if gtype == GameEnums.GemType.SUPPORT else "PAS")
+		var type_pill: PanelContainer = UiHelper.make_badge_pill(short_type, gcol.darkened(0.60), gcol, UiHelper.TEXT_CREAM, 10)
+		type_pill.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		gh.add_child(type_pill)
+
+		var gname_lbl: Label = Label.new()
+		gname_lbl.text = g.get_gem_name()
+		gname_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		gname_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		gname_lbl.add_theme_font_override("font", UiHelper.get_bold_font())
+		gname_lbl.add_theme_font_size_override("font_size", 13)
+		gname_lbl.add_theme_color_override("font_color", UiHelper.TEXT_CREAM)
+		gh.add_child(gname_lbl)
+
+		var lvl_pill: PanelContainer = UiHelper.make_badge_pill("Lv.%d" % g.level, UiHelper.BG_WELL, UiHelper.BORDER_GOLD, Color(1.0, 0.90, 0.45), 10)
+		lvl_pill.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		gh.add_child(lvl_pill)
 
 	if shown_count == 0:
+		var emp_box: PanelContainer = PanelContainer.new()
+		emp_box.add_theme_stylebox_override("panel", UiHelper.make_panel_box(UiHelper.BG_WELL, UiHelper.BORDER_SUBTLE, 10, 1, 14, false))
 		var emp: Label = Label.new()
 		emp.text = "No gems matching filter in pouch.\nClick any socketed gem in Center Column to unsocket it here!"
 		emp.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		list_v.add_child(emp)
+		emp.add_theme_color_override("font_color", UiHelper.TEXT_PARCHMENT)
+		emp_box.add_child(emp)
+		list_v.add_child(emp_box)
 
 	if _selected_pouch_idx >= 0 and _selected_pouch_idx < _stats.gem_pouch.size():
 		var sel_gem: GemInstance = _stats.gem_pouch[_selected_pouch_idx]
 		var gcol: Color = GameEnums.gem_color_value(sel_gem.get_gem_color())
 		var gbox: PanelContainer = PanelContainer.new()
-		gbox.add_theme_stylebox_override("panel", UiHelper.make_panel_box(Color(0.08, 0.10, 0.15), gcol, 8, 2, 8))
+		gbox.add_theme_stylebox_override("panel", UiHelper.make_panel_box(UiHelper.BG_WELL, gcol, 10, 2, 10, false))
 		_right_content_vbox.add_child(gbox)
 
 		var gv: VBoxContainer = VBoxContainer.new()
@@ -573,7 +768,8 @@ func _build_gems_tab() -> void:
 			lvl_btn.text = "Level Up (%d Dust)" % up_cost
 			lvl_btn.disabled = (_stats.prism_dust < up_cost)
 			lvl_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-			UiHelper.style_button(lvl_btn, Color(0.20, 0.34, 0.48), Color(0.55, 0.92, 1.0), 6)
+			lvl_btn.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+			UiHelper.style_button(lvl_btn, UiHelper.CTA_SAPPHIRE, UiHelper.CTA_SAPPHIRE_RIM, 8, 6)
 			lvl_btn.pressed.connect(func() -> void:
 				if _stats.prism_dust >= up_cost:
 					_stats.prism_dust -= up_cost
@@ -586,8 +782,12 @@ func _build_gems_tab() -> void:
 			g_btns.add_child(lvl_btn)
 
 		var sal_g_btn: Button = Button.new()
-		sal_g_btn.text = "Salvage (+%d Dust)" % sel_gem.get_salvage_dust()
-		UiHelper.style_button(sal_g_btn, Color(0.36, 0.20, 0.20), Color(0.95, 0.55, 0.45), 6)
+		sal_g_btn.text = "Salvage (+%d)" % sel_gem.get_salvage_dust()
+		sal_g_btn.icon = UiIcons.get_ui_icon("salvage")
+		sal_g_btn.add_theme_constant_override("icon_max_width", 18)
+		sal_g_btn.add_theme_constant_override("h_separation", 6)
+		sal_g_btn.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+		UiHelper.style_button(sal_g_btn, UiHelper.CTA_RUBY, UiHelper.CTA_RUBY_RIM, 8, 6)
 		sal_g_btn.pressed.connect(func() -> void:
 			_stats.salvage_gem_from_pouch(_selected_pouch_idx)
 			_selected_pouch_idx = -1
@@ -621,7 +821,6 @@ func _on_craft_recolor() -> void:
 	var item: ItemInstance = _stats.equipped.get(_selected_craft_slot, null)
 	if item == null:
 		return
-	# Rescue gems if their color no longer fits after recolor
 	var rescued: Array[GemInstance] = item.extract_all_gems()
 	_stats.prism_dust -= 10
 	item.recolor_sockets(_rng)

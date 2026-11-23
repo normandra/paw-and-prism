@@ -36,10 +36,20 @@ var _selected_hero_id: String = "shiba"
 var _pending_level_ups: int = 0
 var _shake_trauma: float = 0.0
 var _rng: RandomNumberGenerator = RandomNumberGenerator.new()
+var _review_mode: bool = false
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	_rng.randomize()
+
+	if OS.has_feature("web"):
+		get_viewport().msaa_3d = Viewport.MSAA_DISABLED
+		if DisplayServer.screen_get_scale() > 1.5:
+			get_viewport().scaling_3d_scale = 0.78
+		var has_rev = JavaScriptBridge.eval("window.location.search.includes('review=1')")
+		_review_mode = bool(has_rev)
+	elif OS.get_cmdline_args().has("--review"):
+		_review_mode = true
 
 	world_root = Node3D.new()
 	world_root.name = "WorldRoot"
@@ -220,7 +230,8 @@ func start_new_run(hero_id: String) -> void:
 	level_up_modal.visible = false
 	end_screen.visible = false
 	hud.visible = true
-	hud.reset_hud()
+	hud.reset_hud(_selected_hero_id)
+	hud.set_fps_visible(_review_mode)
 	hud.rebuild_skill_bar(stats)
 	hud.show_banner("Survive 20 Minutes & Defeat All 3 Bosses!", Color(1.0, 0.90, 0.42))
 	sfx.play("level_up")
@@ -228,6 +239,28 @@ func start_new_run(hero_id: String) -> void:
 func _input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed and not event.echo:
 		var kc: int = event.keycode
+		if kc == KEY_F3:
+			if hud != null:
+				hud.toggle_fps_visible()
+			get_viewport().set_input_as_handled()
+			return
+		if _review_mode and stats != null:
+			if kc == KEY_F8:
+				_seed_review_loot()
+				get_viewport().set_input_as_handled()
+				return
+			elif kc == KEY_F7 and state == GameState.PLAYING:
+				_pending_level_ups += 1
+				_try_show_next_level_up()
+				get_viewport().set_input_as_handled()
+				return
+			elif kc == KEY_F9:
+				wave_director.bosses_defeated_count = 3
+				wave_director.kills_count = maxi(wave_director.kills_count, 312)
+				wave_director.elapsed_time = 1178.0
+				_on_victory()
+				get_viewport().set_input_as_handled()
+				return
 		if kc == KEY_M:
 			_toggle_mute()
 			get_viewport().set_input_as_handled()
@@ -295,10 +328,11 @@ func _process(delta: float) -> void:
 	if state == GameState.TITLE:
 		_showcase_time += delta
 		if _showcase_rig != null:
-			_showcase_rig.rotation.y += delta * 0.7
-			_showcase_rig.position.y = absf(sin(_showcase_time * 3.0)) * 0.14
+			# Always face toward the camera with a cheerful gentle sway
+			_showcase_rig.rotation.y = sin(_showcase_time * 0.9) * 0.48
+			_showcase_rig.position.y = absf(sin(_showcase_time * 3.0)) * 0.12
 		if camera != null:
-			camera.look_at_from_position(Vector3(0.0, 2.35, 4.9), Vector3(0.0, 1.05, 0.0), Vector3.UP)
+			camera.look_at_from_position(Vector3(0.0, 2.38, 5.85), Vector3(0.0, 0.56, 0.0), Vector3.UP)
 		return
 
 	if state != GameState.PLAYING or get_tree().paused:
@@ -349,14 +383,21 @@ func _on_player_hurt(dmg: float, _hp_after: float) -> void:
 
 func _on_xp_collected(amount: float) -> void:
 	sfx.play("xp_plink", 0.14, 55)
-	var old_skill_count: int = stats.active_skill_configs.size()
-	var gained: int = stats.add_hero_xp(amount)
+	var res: Dictionary = stats.add_hero_xp(amount)
+	var gained: int = int(res.get("levels", 0))
+	var gems_leveled: Array = res.get("gems_leveled", [])
+	for gl in gems_leveled:
+		var g_inst: GemInstance = gl
+		hud.push_toast(
+			"%s Lv.%d!" % [g_inst.get_gem_name(), g_inst.level],
+			GameEnums.gem_color_value(g_inst.get_gem_color()),
+			UiIcons.get_gem_icon(g_inst.get_gem_type(), g_inst.get_gem_color())
+		)
+	if gained > 0 or not gems_leveled.is_empty():
+		hud.rebuild_skill_bar(stats)
 	if gained > 0:
 		_pending_level_ups += gained
-		hud.rebuild_skill_bar(stats)
 		_try_show_next_level_up()
-	elif stats.active_skill_configs.size() == old_skill_count:
-		hud.rebuild_skill_bar(stats)
 
 func _try_show_next_level_up() -> void:
 	if _pending_level_ups <= 0 or state != GameState.PLAYING:
@@ -401,7 +442,7 @@ func _on_level_up_chosen(opt: Dictionary) -> void:
 func _on_item_looted(item: ItemInstance) -> void:
 	hud.add_unread_loot()
 	var col: Color = GameEnums.rarity_color(item.rarity)
-	hud.push_toast("[%s] %s (%s)" % [GameEnums.rarity_label(item.rarity), item.item_name, item.get_socket_summary_text()], col)
+	hud.push_toast("[%s] %s (%s)" % [GameEnums.rarity_label(item.rarity), item.item_name, item.get_socket_summary_text()], col, UiIcons.get_slot_icon(item.equip_slot))
 	if item.rarity >= GameEnums.Rarity.UNIQUE:
 		sfx.play("loot_unique")
 		hud.show_banner("UNIQUE DROP: %s!" % item.item_name, col)
@@ -413,8 +454,24 @@ func _on_item_looted(item: ItemInstance) -> void:
 func _on_gem_looted(gem: GemInstance) -> void:
 	hud.add_unread_loot()
 	var col: Color = GameEnums.gem_color_value(gem.get_gem_color())
-	hud.push_toast("[%s GEM] %s Lv.%d" % [GameEnums.gem_type_label(gem.get_gem_type()), gem.get_gem_name(), gem.level], col)
+	var gtex: Texture2D = UiIcons.get_skill_icon(gem.gem_id) if gem.get_gem_type() == GameEnums.GemType.ACTIVE else UiIcons.get_gem_icon(gem.get_gem_type(), gem.get_gem_color())
+	hud.push_toast("[%s GEM] %s Lv.%d" % [GameEnums.gem_type_label(gem.get_gem_type()), gem.get_gem_name(), gem.level], col, gtex)
 	sfx.play("gem_drop")
+
+func _seed_review_loot() -> void:
+	if stats == null:
+		return
+	if stats.item_bag.is_empty():
+		stats.item_bag.append(ItemDatabase.create_unique_item("unique_acorn_scepter", 10))
+		stats.item_bag.append(ItemDatabase.generate_item(8, GameEnums.Rarity.RARE, 0.0, GameEnums.EquipSlot.HELMET, _rng))
+		stats.item_bag.append(ItemDatabase.generate_item(6, GameEnums.Rarity.MAGIC, 0.0, GameEnums.EquipSlot.RING, _rng))
+	if stats.gem_pouch.is_empty():
+		stats.gem_pouch.append(GemInstance.new("petal_cyclone", 2))
+		stats.gem_pouch.append(GemInstance.new("sup_gmp", 2))
+		stats.gem_pouch.append(GemInstance.new("pas_prism_mastery", 1))
+	stats.prism_dust = maxi(stats.prism_dust, 65)
+	if inventory_panel != null and inventory_panel.visible:
+		inventory_panel.refresh()
 
 func _on_player_died() -> void:
 	if state == GameState.ENDED:
