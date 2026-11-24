@@ -84,10 +84,10 @@ func _update_hover_tooltip() -> void:
 		return
 	var g: GemInstance = item.socketed_gems[_hover_idx]
 	if g != null:
-		tooltip_text = g.get_tooltip_text() + "\n(Click to unsocket)"
+		tooltip_text = g.get_tooltip_text() + "\n(Click to remove)"
 	else:
 		var scol_name: String = GameEnums.gem_color_letter(item.socket_colors[_hover_idx])
-		tooltip_text = "Empty (%s) Socket\nSelect a matching gem from Skill Gems tab and click to insert." % scol_name
+		tooltip_text = "Empty (%s) Socket\nSelect a matching Main or Mod ability and click to insert." % scol_name
 
 func _draw() -> void:
 	if item == null:
@@ -143,19 +143,12 @@ func _draw() -> void:
 			var g_col: Color = GameEnums.gem_color_value(g_in.get_gem_color())
 			var gtype: int = g_in.get_gem_type()
 			var r: float = 11.2
-			if gtype == GameEnums.GemType.SUPPORT:
-				# Round orb gem
+			if gtype == GameEnums.GemType.MODIFIER:
+				# Round Modifier orb gem with rim
 				draw_circle(c, r * 0.92, g_col)
 				draw_arc(c, r * 0.92, 0.0, TAU, 18, g_col.darkened(0.35), 1.5, true)
-			elif gtype == GameEnums.GemType.PASSIVE:
-				# Hexagonal prism gem
-				var hex_pts: PackedVector2Array = PackedVector2Array()
-				for k in range(6):
-					var ang: float = -PI * 0.5 + float(k) * TAU / 6.0
-					hex_pts.append(c + Vector2(cos(ang) * r, sin(ang) * r))
-				draw_colored_polygon(hex_pts, g_col)
 			else:
-				# Pentagon faceted Active gem
+				# Pentagon faceted Main Ability gem
 				var pent_pts: PackedVector2Array = PackedVector2Array([
 					c + Vector2(0, -r),
 					c + Vector2(r * 0.92, -r * 0.25),
@@ -170,7 +163,7 @@ func _draw() -> void:
 			var pill_rect: Rect2 = Rect2(c.x - 23.0, 44.0, 46.0, 17.0)
 			var pill_sb: StyleBoxFlat = UiHelper.make_panel_box(Color(0.08, 0.06, 0.06, 0.95), g_col, 5, 1, 0, false)
 			draw_style_box(pill_sb, pill_rect)
-			var badge_txt: String = "%s %d" % [g_in.get_short_label().substr(0, 3), g_in.level]
+			var badge_txt: String = g_in.get_short_label().substr(0, 4)
 			draw_string(font, Vector2(c.x - 21.0, 56.5), badge_txt, HORIZONTAL_ALIGNMENT_CENTER, 42.0, 10, UiHelper.TEXT_CREAM)
 		else:
 			var letter: String = GameEnums.gem_color_letter(scol)

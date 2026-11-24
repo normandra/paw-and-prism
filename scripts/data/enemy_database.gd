@@ -97,11 +97,10 @@ static func _ensure_init() -> void:
 		"boss_grizzle": {
 			"id": "boss_grizzle",
 			"enemy_name": "Sir Grizzle, Honey-Armored King",
-			"hp": 2400.0,
+			"hp": 1250.0,
 			"speed": 4.0,
-			"damage": 26.0,
+			"damage": 24.0,
 			"radius": 1.85,
-			"xp": 320.0,
 			"color": Color(0.58, 0.34, 0.16),
 			"accent": Color(1.0, 0.78, 0.18),
 			"is_boss": true,
@@ -111,11 +110,10 @@ static func _ensure_init() -> void:
 		"boss_whiskers": {
 			"id": "boss_whiskers",
 			"enemy_name": "Lady Whiskers, Arcane Owl-Empress",
-			"hp": 6200.0,
+			"hp": 2800.0,
 			"speed": 4.3,
-			"damage": 34.0,
+			"damage": 30.0,
 			"radius": 1.95,
-			"xp": 540.0,
 			"color": Color(0.32, 0.26, 0.66),
 			"accent": Color(0.45, 0.90, 1.0),
 			"is_boss": true,
@@ -125,11 +123,10 @@ static func _ensure_init() -> void:
 		"boss_bramblehorn": {
 			"id": "boss_bramblehorn",
 			"enemy_name": "King Bramblehorn, Prism Stag-Dragon",
-			"hp": 13500.0,
+			"hp": 5400.0,
 			"speed": 4.6,
-			"damage": 44.0,
+			"damage": 38.0,
 			"radius": 2.25,
-			"xp": 1000.0,
 			"color": Color(0.24, 0.14, 0.36),
 			"accent": Color(1.0, 0.42, 0.84),
 			"is_boss": true,
@@ -149,14 +146,14 @@ static func get_all_boss_ids() -> Array[String]:
 	return ["boss_grizzle", "boss_whiskers", "boss_bramblehorn"]
 
 static func get_wave_profile(elapsed_sec: float) -> Dictionary:
-	# 20-minute (1200s) difficulty & pool progression
+	# 20-minute (1200s) difficulty & pool progression (rebalanced for pure loot-driven power)
 	if elapsed_sec < 120.0:
 		return {
 			"phase_name": "Sunny Meadow",
 			"pool": ["slime_frog", "hedgehog"],
 			"spawn_interval": 0.95,
 			"batch_size": 2,
-			"hp_scale": 1.0 + elapsed_sec * 0.002,
+			"hp_scale": 1.0,
 			"dmg_scale": 1.0,
 			"max_active": 42,
 		}
@@ -166,8 +163,8 @@ static func get_wave_profile(elapsed_sec: float) -> Dictionary:
 			"pool": ["slime_frog", "hedgehog", "bat_owl"],
 			"spawn_interval": 0.78,
 			"batch_size": 3,
-			"hp_scale": 1.25 + (elapsed_sec - 120.0) * 0.003,
-			"dmg_scale": 1.12,
+			"hp_scale": 1.20,
+			"dmg_scale": 1.10,
 			"max_active": 62,
 		}
 	elif elapsed_sec < 420.0:
@@ -176,8 +173,8 @@ static func get_wave_profile(elapsed_sec: float) -> Dictionary:
 			"pool": ["hedgehog", "bat_owl", "acorn_boar", "slime_frog"],
 			"spawn_interval": 0.65,
 			"batch_size": 3,
-			"hp_scale": 1.7 + (elapsed_sec - 260.0) * 0.004,
-			"dmg_scale": 1.28,
+			"hp_scale": 1.45,
+			"dmg_scale": 1.22,
 			"max_active": 80,
 		}
 	elif elapsed_sec < 640.0:
@@ -186,8 +183,8 @@ static func get_wave_profile(elapsed_sec: float) -> Dictionary:
 			"pool": ["bat_owl", "acorn_boar", "gloom_fox", "hedgehog"],
 			"spawn_interval": 0.56,
 			"batch_size": 4,
-			"hp_scale": 2.4 + (elapsed_sec - 420.0) * 0.006,
-			"dmg_scale": 1.55,
+			"hp_scale": 1.85,
+			"dmg_scale": 1.42,
 			"max_active": 96,
 		}
 	elif elapsed_sec < 840.0:
@@ -196,8 +193,8 @@ static func get_wave_profile(elapsed_sec: float) -> Dictionary:
 			"pool": ["acorn_boar", "gloom_fox", "raccoon_bandit", "shroom_toad"],
 			"spawn_interval": 0.50,
 			"batch_size": 4,
-			"hp_scale": 3.8 + (elapsed_sec - 640.0) * 0.008,
-			"dmg_scale": 1.85,
+			"hp_scale": 2.35,
+			"dmg_scale": 1.65,
 			"max_active": 112,
 		}
 	elif elapsed_sec < 1050.0:
@@ -206,8 +203,8 @@ static func get_wave_profile(elapsed_sec: float) -> Dictionary:
 			"pool": ["gloom_fox", "raccoon_bandit", "shroom_toad", "acorn_boar", "bat_owl"],
 			"spawn_interval": 0.44,
 			"batch_size": 5,
-			"hp_scale": 5.5 + (elapsed_sec - 840.0) * 0.011,
-			"dmg_scale": 2.20,
+			"hp_scale": 2.95,
+			"dmg_scale": 1.90,
 			"max_active": 124,
 		}
 	else:
@@ -216,7 +213,7 @@ static func get_wave_profile(elapsed_sec: float) -> Dictionary:
 			"pool": ["raccoon_bandit", "shroom_toad", "gloom_fox", "acorn_boar"],
 			"spawn_interval": 0.40,
 			"batch_size": 5,
-			"hp_scale": 7.8 + (elapsed_sec - 1050.0) * 0.015,
-			"dmg_scale": 2.65,
+			"hp_scale": 3.60,
+			"dmg_scale": 2.20,
 			"max_active": 135,
 		}

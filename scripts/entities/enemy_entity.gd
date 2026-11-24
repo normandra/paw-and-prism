@@ -19,7 +19,6 @@ var current_hp: float = 30.0
 var move_speed: float = 3.5
 var contact_damage: float = 8.0
 var hit_radius: float = 0.7
-var xp_reward: float = 10.0
 
 var _is_ranged: bool = false
 var _explodes_on_death: bool = false
@@ -65,7 +64,6 @@ func setup(p_enemy_id: String, hp_scale: float, dmg_scale: float, p_elite: bool 
 	move_speed = float(def["speed"]) * (1.12 if is_elite else 1.0)
 	contact_damage = float(def["damage"]) * dmg_scale * elite_dmg_mult
 	hit_radius = float(def["radius"]) * (1.28 if (is_elite and not is_boss) else 1.0)
-	xp_reward = float(def["xp"]) * (3.5 if (is_elite and not is_boss) else 1.0)
 
 	_waddle_phase = randf() * TAU
 	_ranged_cd = randf_range(1.2, 2.5)
@@ -257,6 +255,9 @@ func apply_burn(dps: float, dur: float) -> void:
 
 func apply_chill(dur: float) -> void:
 	_chill_timer = maxf(_chill_timer, dur)
+
+func was_chilled() -> bool:
+	return _chill_timer > 0.0
 
 func take_damage(amount: float, knockback_vec: Vector3 = Vector3.ZERO, trigger_flash: bool = true) -> void:
 	if is_dead:

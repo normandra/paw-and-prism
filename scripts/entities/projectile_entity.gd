@@ -19,6 +19,7 @@ var chains_left: int = 0
 var forks_left: int = 0
 var homing: bool = false
 var is_boomerang: bool = false
+var ricochet: bool = false
 var explodes_radius: float = 0.0
 
 var crit_chance: float = 8.0
@@ -32,6 +33,7 @@ var source_cfg: Dictionary = {}
 var _age: float = 0.0
 var _hit_ids: Dictionary = {}
 var _boomerang_returning: bool = false
+var _ricocheted: bool = false
 var _mesh_pivot: Node3D = null
 
 func setup_player_proj(p_pos: Vector3, p_dir: Vector3, cfg: Dictionary, style: String, already_hit: Dictionary = {}) -> void:
@@ -45,8 +47,8 @@ func setup_player_proj(p_pos: Vector3, p_dir: Vector3, cfg: Dictionary, style: S
 	damage = float(cfg.get("damage", 20.0))
 	crit_chance = float(cfg.get("crit_chance", 8.0))
 	crit_mult = float(cfg.get("crit_mult", 165.0))
-	is_fire = float(cfg.get("added_fire_pct", 0.0)) > 0.0 or (cfg.get("tags", []).has(GameEnums.SkillTag.FIRE))
-	is_cold = float(cfg.get("added_cold_pct", 0.0)) > 0.0 or (cfg.get("tags", []).has(GameEnums.SkillTag.COLD))
+	is_fire = bool(cfg.get("ignite", false))
+	is_cold = bool(cfg.get("chill", false))
 	leech_pct = float(cfg.get("leech_pct", 0.0))
 
 	pierce_left = int(cfg.get("pierce", 0))
@@ -54,9 +56,12 @@ func setup_player_proj(p_pos: Vector3, p_dir: Vector3, cfg: Dictionary, style: S
 	forks_left = int(cfg.get("forks", 0))
 	homing = bool(cfg.get("homing", false))
 	is_boomerang = (style == "bone")
+	ricochet = bool(cfg.get("ricochet", false))
+	_ricocheted = false
 	explodes_radius = float(cfg.get("area_radius", 2.8)) if style == "fireball" else 0.0
 	hit_radius = 0.72 if is_boomerang else 0.56
-	lifetime = 2.6 if is_boomerang else (2.4 if homing else 1.8)
+	var base_life: float = 2.6 if is_boomerang else (2.4 if homing else 1.8)
+	lifetime = maxf(0.45, base_life * float(cfg.get("lifetime_mult", 1.0)))
 	_hit_ids = already_hit.duplicate()
 
 	_build_visual(style)
@@ -105,7 +110,24 @@ func _build_visual(style: String) -> void:
 
 func step(delta: float, grid: SpatialGrid, player_pos: Vector3) -> bool:
 	_age += delta
-	if _age >= lifetime:
+	var edge_bound: float = ArenaBuilder.ARENA_HALF_SIZE - 1.0
+	var at_edge: bool = (not is_enemy_proj) and (absf(global_position.x) > edge_bound or absf(global_position.z) > edge_bound)
+	if _age >= lifetime or at_edge:
+		if ricochet and not _ricocheted and not is_enemy_proj and not is_boomerang:
+			_ricocheted = true
+			_age = 0.0
+			lifetime = maxf(0.75, lifetime * 0.85)
+			_hit_ids.clear()
+			var bounce_target: Node3D = grid.find_nearest(global_position, 18.0) if grid != null else null
+			if bounce_target != null:
+				var bdir: Vector3 = bounce_target.global_position - global_position
+				bdir.y = 0.0
+				direction = bdir.normalized() if bdir.length_squared() > 0.001 else -direction
+			else:
+				direction = -direction
+			global_position.x = clampf(global_position.x, -edge_bound, edge_bound)
+			global_position.z = clampf(global_position.z, -edge_bound, edge_bound)
+			return true
 		if not is_enemy_proj and explodes_radius > 0.0:
 			explosion_requested.emit(global_position, explodes_radius, source_cfg)
 		return false
@@ -168,8 +190,6 @@ func step(delta: float, grid: SpatialGrid, player_pos: Vector3) -> bool:
 
 		var is_crit: bool = randf() * 100.0 < crit_chance
 		var dmg: float = damage * (crit_mult * 0.01 if is_crit else 1.0)
-		var extra_elem: float = 1.0 + float(source_cfg.get("added_fire_pct", 0.0)) * 0.01 + float(source_cfg.get("added_cold_pct", 0.0)) * 0.01
-		dmg *= extra_elem
 
 		if is_fire and e.has_method("apply_burn"):
 			e.apply_burn(dmg * 0.25, 3.0)

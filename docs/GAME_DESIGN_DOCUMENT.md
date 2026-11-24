@@ -1,7 +1,7 @@
 # Paw & Prism — Living Game Design Document (GDD)
 
 > **Status:** Living Design Reference & Rework Blueprint  
-> **Baseline Build:** `v1.0` (`main` commit `a962ebd` / WebGL build `gh-pages` `b7c42b7`)  
+> **Version:** `v2.0` (Behavioral Loot, Zero-Leveling & Playable Tutorial Revamp)  
 > **Engine & Renderer:** Godot `4.7.2` (`GL Compatibility`)  
 > **Live Web Build:** https://normandra.github.io/paw-and-prism/  
 > **Repository:** https://github.com/normandra/paw-and-prism  
@@ -11,435 +11,276 @@
 
 ## How to Use This Document
 
-Each section is split into two layers so you can tune numbers or plan full reworks without losing sight of how the game currently runs:
-1. **`Current Implementation` (Code-Verified Baseline):** Exact formulas, tables, timers, and script locations currently running in Godot.
-2. **`Rework Ideas & Design Knobs`:** Open design questions, balance levers, and checkable `[ ]` rework tasks ready to edit directly in this file.
+Each section separates verified mechanics from future exploration:
+1. **`Current Implementation` (Code-Verified `v2.0`):** Exact systems, tables, parameters, and script owners active in the project.
+2. **`Rework Ideas & Design Knobs`:** Checkable `[ ]` balance levers and next-step feature ideas ready to edit directly.
 
 ---
 
 ## 1. High Concept, Core Pillars & Gameplay Loop
 
-**Pitch:** *Vampire Survivors meets Diablo loot & Path of Exile gem linking in a cozy 3D storybook critter meadow.* Choose an adorable woodland hero, kite escalating waves across a 20-minute day-to-twilight gauntlet, scoop up linked skill/support/passive gems and Diablo gear drops on the fly, open your Hero Satchel mid-run to snap together broken gem combos with Prism Dust, and topple 3 telegraphed bosses.
+**Pitch:** *Vampire Survivors meets Diablo behavioral item tradeoffs and Path of Exile ability linking in a cozy 3D woodland meadow.* Pick a chibi critter hero (or learn step-by-step in the bare-pawed Tutorial), weave through 20 minutes of escalating critter swarms from Morning to Twilight, hunt strictly **3 ground loot types** (*Items*, *Main Socket Abilities*, and *Modifier Abilities*), weigh build-defining Relic tradeoffs inside an icon-first Satchel, and defeat 3 telegraphed bosses.
 
 ### Core Design Pillars
 
-| Pillar | Inspiration | Current Role in *Paw & Prism* | Primary Code Owners |
+| Pillar | Design Choice | Current Implementation (`v2.0`) | Primary Code Owners |
 |---|---|---|---|
-| **1. 3D Chibi Critters** | Cozy storybook diorama | 4 procedural chibi heroes with visible helmet/weapon swapping; 7 regular critter species + 3 unique bosses | `chibi_mesh_factory.gd`, `hero_database.gd`, `arena_builder.gd` |
-| **2. Diablo Loot Chase** | *Diablo II / III / IV* | Enemies, elites, Acorn Chests, and bosses drop `Common`/`Magic`/`Rare`/`Unique` items across 6 slots with loot beams and delta comparison | `item_database.gd`, `loot_manager.gd`, `inventory_panel.gd` |
-| **3. PoE Gem Linking** | *Path of Exile* | 32 dropped gems (Active, Support, Passive) socket into colored gear links; tag-compatible Supports mutate linked Actives; gems level up with XP | `gem_database.gd`, `item_instance.gd`, `hero_stats.gd`, `poe_socket_widget.gd` |
-| **4. 20-Min 3-Boss Gauntlet** | *Vampire Survivors* / *Halls of Torment* | 1200s escalation through Morning → Golden Sunset → Twilight Grove, anchored by scripted boss fights at `06:30`, `13:00`, and `19:30` | `wave_director.gd`, `enemy_database.gd`, `enemy_entity.gd` |
+| **1. Zero Leveling / Pure Loot Power** | No XP bars, XP shards, or "pick 1 of 3" stat-stick modals | All hero power & playstyle mutations come exclusively from equipped Items and socketed/linked Abilities | `hero_stats.gd`, `loot_manager.gd` |
+| **2. Behavioral Items & Rarity Tradeoffs** | Rarity shapes socket count & behavioral tradeoffs, never dull `+X%` fluff | `Common` / `Magic` / `Rare` / `Unique` items across 6 slots grant `18` behavioral/tradeoff Global Effects + `5` Unique Keystones + fixed socket/link rolls | `item_database.gd`, `item_instance.gd`, `inventory_panel.gd` |
+| **3. PoE Ability Linking (Main + Modifier)** | Clean 2-type gem grammar | `10` Main Socket Abilities + `10` Modifier Abilities insert into fixed colored (`R`/`G`/`B`/`W`) sockets and share effects across linked gaps | `gem_database.gd`, `poe_socket_widget.gd`, `skill_executor.gd` |
+| **4. PoE-Style Playable Tutorial** | Learn by looting & linking hands-on | Dedicated bare-pawed `TUTORIAL` run walking through **First Item -> First Main Ability -> First Linked Modifier** | `tutorial_director.gd`, `main_game.gd` |
+| **5. 20-Min 3-Boss Gauntlet + Mobile** | Readable swarms & touch support | 7 regular critter species, 3 scripted bosses (`06:30`, `13:00`, `19:30`), 3D biome shifts, icon-first UI & multi-touch virtual joystick | `wave_director.gd`, `touch_controls.gd`, `hud_controller.gd` |
 
-### Core Moment-to-Moment Loop
+### Core Moment-to-Moment Loop (`v2.0`)
 
 ```mermaid
 flowchart LR
-    K["Auto-Cast Linked Skills + Kite Critters"] --> D["Drop XP Shards, Dust, Gems & Diablo Gear"]
-    D --> L["Level-Up Draft (3 Enchantment Cards)"]
-    D --> B["Open Satchel [Tab / I] (Pauses Run)"]
-    B --> E["Compare & Swap Gear (Preserves Socketed Gems)"]
-    B --> P["Socket Active + Support + Passive Gems"]
-    B --> F["Prism Forge (Recolor / Add Link / Add Socket / Level Gem)"]
-    L --> S["Power Spike for Waves & Surge Events"]
-    E --> S
-    P --> S
-    F --> S
+    K["Auto-Cast Linked Main Abilities + Hop-Dash"] --> D["Enemies, Elites, Chests & Bosses Drop 3 Loot Types"]
+    D --> L1["1. Items / Relics (Global Behavioral Effects + Fixed Sockets/Links)"]
+    D --> L2["2. Main Socket Abilities (Active Skills)"]
+    D --> L3["3. Modifier Abilities (Behavior Mutators)"]
+    L1 --> B["Open Hero Satchel [Tab / I] (Pauses Run)"]
+    L2 --> B
+    L3 --> B
+    B --> T["Compare Visual Tradeoffs (+ Gained / - Lost Effects & Socket Links)"]
+    B --> S["Socket & Link Main + Modifier Abilities"]
+    T --> K
     S --> K
-    S --> BO["Defeat 3 Bosses (06:30 -> 13:00 -> 19:30)"]
+    K --> BO["Defeat 3 Bosses (06:30 -> 13:00 -> 19:30)"]
     BO --> V["Victory! Meadow Saved!"]
 ```
 
 ### Rework Ideas — Core Loop
-- [ ] **Mid-run Risk vs. Pause Flow:** Decide whether `[Tab / I]` should stay an unrestricted pause-anytime tactical board or offer an optional *"Smooth Flow / Ironpaw Mode"* with quick-swap hotbars or shrine-gated crafting.
-- [ ] **Post-Boss Victory Option:** Add an **"Endless Twilight Mode"** button on the Victory screen after Boss 3 instead of ending immediately, letting players stress-test 6-link builds past `20:00`.
-- [ ] **Run Modifiers / Pact Shrine:** Allow optional difficulty curses (e.g., `+30% Enemy Speed`, `+1 Extra Boss Affix` for `+40% Magic Find`) at run start.
+- [ ] **Post-Boss Endless Mode:** Add an optional **"Endless Twilight"** button on the Victory screen after defeating Boss 3 to test fully 4-linked builds past `20:00`.
+- [ ] **Risk Shrines / Pacts:** Add clickable in-world Altars that corrupt or upgrade a worn Relic (e.g., add a extra Tradeoff effect or flip socket colors).
+- [ ] **Smart Quick-Swap Tray:** Allow swapping to a recently looted Relic directly from a compact bottom-right toast button without pausing for common upgrades.
 
 ---
 
-## 2. Controls, Camera & Core Combat Math
+## 2. Controls, Camera & Core Combat Rules
 
 ### Controls (`Current Implementation`)
 
 | Input | Action | Notes |
 |---|---|---|
-| `WASD` / `Arrow Keys` | 8-directional movement | Clamped to `±66.5m` inside `136×136m` arena (`ARENA_HALF_SIZE = 68.0`) |
-| `Space` / `Shift` | Hop-Dash (`dash` action) | `0.22s` dash burst at `2.55×` move speed, `0.26s` i-frames, `2.2s` base CD (`min 0.65s`) |
-| **Touch Drag** *(Mobile)* | Analog floating virtual joystick (`touch_controls.gd`) | Spawned anywhere outside HUD buttons; `10%` deadzone, `55%` full speed, smooth follow-tether; auto-enables on touchscreen (`?mobile=1` simulates with mouse) |
-| **Touch `DASH` Pad** *(Mobile)* | Circular Hop-Dash pad (`bottom-right`) | `54px` radius espresso/gold button with live radial cooldown arc (`DASH_RADIUS * 1.28` hit test) |
-| `Tab` / `I` | Toggle Hero Satchel & Prism Socket Board | Pauses simulation; swaps gear and sockets without dropping run state |
-| `Esc` | Pause / Resume (`EndScreen` pause overlay) | Also closes Satchel if open |
-| `M` | Toggle procedural audio mute | Reflected in HUD button `[M]` |
-| `F3` | Toggle FPS pill in top-right HUD | Visible by default when `?review=1` URL param or `--review` CLI arg is set |
-| `F7` / `F8` / `F9` (`?review=1` only) | Debug test hooks | `F7`: trigger Level-Up modal · `F8`: seed Unique/Rare/Magic loot + gems · `F9`: trigger Victory |
+| `WASD` / `Arrow Keys` | 8-directional movement | Clamped to `±66.5m` inside `136×136m` arena (`ArenaBuilder.ARENA_HALF_SIZE = 68.0`) |
+| `Space` / `Shift` | Hop-Dash (`dash` action) | `0.22s` dash burst at `2.55×` move speed (`1.28×` extra while Zoomies active), `0.26s` i-frames, `1.85s` charge cooldown (`1` base charge, `2` charges with `double_dash` or `comet_dash`) |
+| **Touch Drag** *(Mobile)* | Analog floating virtual joystick (`touch_controls.gd`) | Spawned outside HUD buttons; `10%` deadzone, `55%` full speed; auto-enabled on touchscreens or `?mobile=1` |
+| **Touch `DASH` Pad** *(Mobile)* | Circular Hop-Dash pad (`bottom-right`) | `54px` radius espresso/gold button with live radial cooldown arc (`DASH_RADIUS * 1.28` hit area) |
+| `Tab` / `I` | Toggle Hero Satchel | Pauses combat; shows Active Build, 6 Equipped Gear + PoE Sockets, Items/Main/Mods tabs & Tradeoff Inspector |
+| `Esc` | Pause / Resume (`EndScreen`) | Also closes Satchel if open |
+| `M` | Toggle procedural audio mute | Reflected in HUD `[M]` button |
+| `F3` | Toggle FPS readout pill | Visible automatically when `?review=1` or `--review` is active |
+| `F8` / `F9` (`?review=1` only) | Debug helpers | `F8`: seed Unique/Rare/Magic items + sample Main/Mod gems · `F9`: trigger Victory screen |
 
 ### Camera Rig (`main_game.gd`)
 - **Perspective FOV:** `48.0°`, `far = 160.0`
-- **Title Showcase Camera:** Landscape `Vector3(0.0, 2.38, 5.85)` aiming at `(0, 0.56, 0)`; Portrait (`vp.y > vp.x * 1.05`) pulls back to `Vector3(0.0, 2.65, 7.20)` aiming at `(0, 0.25, 0)` to clear the 2×2 hero picker.
-- **Gameplay Chase Camera:** Landscape offset `Vector3(0.0, 17.5, 13.5)`; Portrait widens to `Vector3(0.0, 22.5, 17.0)`; exponential lerp `min(1.0, delta * 9.0)` + quadratic trauma screen shake (`_shake_trauma² * 0.55`).
+- **Title Showcase Camera:** Landscape `Vector3(0.0, 2.38, 5.85)` aiming at `(0, 0.56, 0)`; Portrait (`vp.y > vp.x * 1.05`) `Vector3(0.0, 2.65, 7.20)` aiming at `(0, 0.25, 0)`.
+- **Gameplay Chase Camera:** Landscape offset `Vector3(0.0, 17.5, 13.5)`; Portrait `Vector3(0.0, 22.5, 17.0)`; smooth lerp `min(1.0, delta * 9.0)` + quadratic trauma screen shake (`_shake_trauma² * 0.55`).
 
-### Exact Combat & Progression Formulas (`player_controller.gd`, `hero_stats.gd`, `gem_instance.gd`)
+### Combat & Scaling Mechanics (`player_controller.gd`, `hero_stats.gd`, `skill_executor.gd`)
+- **Hero Baseline Stats (fixed per hero, zero stat-stick bloat):**
+  - `hp_regen = 0.8/s`, `crit_chance = 8.0%`, `crit_mult = 165.0%`.
+  - Post-hit invulnerability: `0.45s` (`1.6s` when *Nine-Lives Bell* `cheat_death` saves from lethal hit with `55%` Max HP heal, `90s` CD).
+  - Incoming damage formula: `max(1.0, raw_dmg * incoming_dmg_mult)` (`1.45×` when `glass_spark` is equipped, `1.0×` otherwise).
+- **Dynamic Cooldown Flow (`skill_executor.gd`):**
+  - Base compiled cooldown floor: `max(0.18s, final_cd)`.
+  - Dynamic tick multiplier `cd_rate`: `1.0×` baseline; modified by **`turret_stance`** (`2.0×` faster while standing still, `0.75×` slower while moving) and **`zoomies_on_kill`** (`1.25×` cast rate + `1.28×` move speed for `2.0s` after any kill).
+- **Elemental & Leech Riders:**
+  - Fire skills & `mod_ignite`: apply `25–28%` DPS Burn for `3.0s`.
+  - Cold skills & `mod_chill`: apply Chill slow for `2.5s` (also primes targets for `frost_shatter` icy death rings).
+  - `mod_leech`: heals `5.5%` of linked skill damage dealt per hit, capped at `8%` `max_hp` per hit.
 
-1. **Incoming Player Damage Mitigation:**
-   ```text
-   armor_mit = 100.0 / (100.0 + max(0.0, armor) * 1.6)
-   dr_mit    = 1.0 - clamp(dmg_reduction, 0.0, 65.0) * 0.01
-   final_dmg = max(1.0, raw_dmg * armor_mit * dr_mit)
-   ```
-   - Standard post-hit invulnerability window: `0.45s` (`1.6s` on Nine-Lives cheat-death save).
-   - Dash i-frame floor: `0.26s` (`dash_cd = max(0.65, 2.2 * dash_cd_mult)`, `0.65×` with *Paws of the Comet*).
-2. **Compiled Active Skill Damage:**
-   ```text
-   base_dmg  = def.base_damage + def.damage_per_lvl * (effective_level - 1)
-   final_dmg = (base_dmg + flat_damage * 0.85) * damage_mult * product(support_dmg_mult)
-   ```
-   - `effective_level = gem.level + global_gem_level_bonus (+1 from Prismwhisker Crown) + local_bonus (+1 from Prismatic Mastery in same item)`.
-3. **Cooldown & Trigger Rate:**
-   ```text
-   total_cast_mult = max(0.25, cast_speed_mult) * (1.0 + sum(support_cast_speed_pct) * 0.01)
-   final_cooldown  = max(0.14, base_cd / total_cast_mult)
-   ```
-   - Floor of `0.14s` (~`7.1` casts/sec) protects frame rate against hyper-scaled Speed builds.
-4. **Criticals & Elemental Rider Effects:**
-   - `crit_chance` clamped `[0%, 95%]`; base `crit_mult = 165%` (multiplicative `+sup_crit_chance` and `+sup_crit_mult`).
-   - Added Fire / Cold supports (`sup_ignite`, `sup_chill`) add bonus elemental multipliers and ignite/chill (`35%` slow) statuses.
-5. **Hero & Gem XP Scaling:**
-   - **Hero XP Curve:** `65.0 * pow(1.24, hero_level - 1)` · Each hero level grants `+5.0` base Max HP plus a 3-card Enchantment Draft.
-   - **Gem XP Share:** Every equipped Active, Support, and Passive gem receives `65%` (`0.65×`) of hero XP gained (adjusted by `xp_gain_mult`).
-   - **Gem XP Curve (Cap `Lv.10`):** `85.0 * pow(1.42, gem_level - 1)`.
-
-### Rework Ideas & Design Knobs — Combat & Camera
-- [ ] **Optional Twin-Stick / Cursor Aiming:** Auto-aim nearest foe works great casually, but adding an optional cursor-aim override (right-click or toggle `[Q]`) makes directional skills (*Boomerang Bone*, *Fireball Berry*, *Acorn Barrage*) much more expressive against elites & bosses.
-- [ ] **Dodge-Reward Loop:** Trigger a burst, speed buff, or instant cooldown reset (`Perfect Hop!`) when dashing right through an enemy projectile or boss telegraph.
-- [ ] **Status Ailment Depth:** Currently Fire burns and Cold chills (`35%` slow). Consider adding **Lightning Shock** (`+15–25%` damage taken debuff) and **Physical Bleed / Armor Break** so elemental/physical tags matter more in support linking.
-- [ ] **Hit-Stop & Micro Feedback:** Subtle 2–3 frame scale squash/stretch on crit hits and boss phase transitions for tactile punch without stalling simulation timers.
+### Rework Ideas — Combat & Camera
+- [ ] **Optional Cursor / Right-Stick Aiming:** Toggle between Auto-Aim Nearest and Cursor Aim (`[Q]`) for deliberate *Boomerang Bone* or *Sniper Focus* piercing shots.
+- [ ] **Perfect-Hop Dash Timing:** Reward dodging just before an enemy telegraph detonates with an instant cooldown refresh or bonus spark burst.
+- [ ] **Micro Impact Juice:** Subtle hit-stop freeze frames or squash/stretch pop on `cheat_death`, boss phase changes, and corpse explosions.
 
 ---
 
 ## 3. Playable Heroes (`scripts/data/hero_database.gd`)
 
-All 4 heroes start with a **Magic** 3-link Starter Weapon (containing 1 Active + 1 Support + 1 empty colored socket), **Common** Cozy Meadow Cap (`+14 Max HP`, `[G, B]` unlinked), **Common** Traveler's Paw Tunic (`+20 Max HP`, 2 linked sockets with starter Passive gem), and **Common** Soft Paw Slippers (`+6% Move Speed`, `[G]`).
+In a standard **20-Min Run**, each hero starts equipped with a **Magic 2-link Starter Weapon** (containing their Main Ability, 1 open linked Modifier socket, and 1 signature Global Effect) plus a **Common Meadow Cap** (`[G, B]` unlinked sockets, `0` effects). In **Tutorial Mode**, all heroes start completely bare (`init_bare_for_tutorial()`).
 
-| ID | Hero & Title | Base HP | Speed | Armor | Crit | Starter Weapon (3-Link) | Starter Active + Support | Starter Armor Links + Passive | Playstyle Identity |
-|---|---|---|---|---|---|---|---|---|---|
-| `shiba` | **Mochi the Shiba**<br>*Acorn Ranger* | `135` | `8.4` | `6` | `8%` | *Mochi's Acorn Wand* (`+4 Flat`, `+10% Dmg`, `G=G=B`) | *Acorn Barrage* + *Faster Casting* | `R=G` · *Vitality Meadow* (`+Max HP / Regen`) | Fast kiting ranged ranger with forgiving HP regen |
-| `bunny` | **Pip the Bunny**<br>*Starlight Mage* | `118` | `8.9` | `4` | `10%` | *Pip's Star Staff* (`B=B=G`) | *Starlight Orbs* + *Increased Area* | `G=B` · *Aura of Swiftness* (`+Move / Cast Spd`) | Swift AoE blender weaving inside packs with orbiting stars |
-| `bear` | **Bramble the Bear**<br>*Honey Paladin* | `175` | `7.6` | `14` | `6%` | *Bramble's Honey Hammer* (`R=R=B`) | *Honey Slam* + *Added Fire & Burn* | `R=R` · *Determination Shell* (`+Armor / DR`) | High-EHP melee bruiser slowing packs in sticky fire slams |
-| `cat` | **Nori the Cat**<br>*Storm Whisker* | `122` | `8.8` | `5` | `14%` | *Nori's Spark Claws* (`B=B=G`) | *Whisker Lightning* + *Precision Strikes* | `G=R` · *Precision Whiskers* (`+Crit / Pickup`) | High-crit chain caster scaling crits & magnet pickup |
+| ID | Hero & Title | HP | Speed | Starter Weapon (`Magic`, 2-Link) | Starter Main Ability | Signature Effect | Starter Hat | Tagline |
+|---|---|---|---|---|---|---|---|---|
+| `shiba` | **Mochi the Shiba**<br>*Acorn Ranger* | `135` | `8.6` | *Mochi's Acorn Wand* (`G=G`) | *Acorn Barrage* (`ACRN`) | `zoomies_on_kill` (*Kills -> Speed Burst*) | `ribbon_hood` | Fast pup bursting with speed after every kill |
+| `bunny` | **Pip the Bunny**<br>*Starlight Mage* | `120` | `9.0` | *Pip's Star Staff* (`B=G`) | *Starlight Orbs* (`STAR`) | `orbit_shield` (*Hit -> Star Shield*) | `wizard_hat` | Swift bunny summoning swirling star blades |
+| `bear` | **Bramble the Bear**<br>*Honey Paladin* | `155` | `8.0` | *Bramble's Honey Hammer* (`R=B`) | *Honey Slam* (`SLAM`) | `dash_honey_nova` (*Dash -> Honey Nova*) | `leaf_crown` | Sturdy bear smashing honey novas on Hop-Dash |
+| `cat` | **Nori the Cat**<br>*Storm Whisker* | `125` | `8.9` | *Nori's Spark Claws* (`B=G`) | *Whisker Lightning* (`ZAP`) | `static_sprint` (*Moving -> Zap Sparks*) | `knight_helm` | Zippy cat sparking lightning arcs on the run |
 
 ### Rework Ideas — Heroes
-- [ ] **Unique Passive Perks / Signature Traits:** Right now heroes differ only by base stats + starting loadout; once items/gems swap mid-run they converge. Give each hero an irreplaceable **Hero Trait** (e.g., *Mochi: every 4th projectile fires free*, *Pip: Hop-Dash leaves a Starlight Echo*, *Bramble: Armor also adds Flat Slam Damage*, *Nori: Crits bounce +1 chain*).
-- [ ] **Manual Hero Ultimate (`[R]` or `[Right-Click]`):** Charge a Prism Meter from kills/shards to unleash a 20s-cooldown signature burst matching the hero's identity.
-- [ ] **Unlockable Hero Roster Expansion Slot (Design Template):**
-  - [ ] **Hero #5 Concept — Oliver the Owl / Maple the Red Panda / Sprout the Frog:** E.g., Minion/Totem specialist starting with *Spirit Bees* + *Homing Guidance* + *Raccoon's Greed*.
-  - [ ] **Alternate Starter Skins / Loadouts:** Unlock Weapon B / Costume B per hero after beating Boss 3.
+- [ ] **Permanent Innate Traits:** Keep a hero's signature trait innate in addition to weapon swaps so *Bramble* always retains melee brawling flavor or *Pip* always hovers lightly over slows.
+- [ ] **5th Playable Hero:** Add *Maple the Red Panda* starting with *Spirit Bees* (`G=G`) + `short_barrage` or `ember_corpse`.
 
 ---
 
-## 4. Path of Exile Gem & Socket Buildcraft System
+## 4. Behavioral Items, Global Effects & Tradeoffs (`item_database.gd`, `item_instance.gd`)
 
-### Mechanics & Rules (`Current Implementation`)
-- **4 Socket Colors:** `Red` (Strength/Melee/Fire), `Green` (Dexterity/Projectile/Speed), `Blue` (Intelligence/Spell/Crit), `White` (Prismatic wildcard — accepts any gem color, and `White` Passive gems fit into *any* colored socket).
-- **Socket Budget per Slot (`GameEnums.slot_max_sockets`):**
-  - Weapon: `4` max · Armor: `4` max · Helmet: `3` max · Boots: `3` max · Amulet: `2` max · Ring: `2` max (**18 total sockets** max across full gear).
-- **Link Groups (`ItemInstance.get_link_groups()`):** Only **contiguously connected** sockets share Support Gems (`[0=1=2 | 3]` means socket `3` does *not* support or receive support from `0–2`). Multiple Actives inside one link group can share the same Supports cleanly.
-- **Tag Compatibility (`GemDatabase.does_support_apply`):** Supports with `required_tags = []` apply to any linked Active; otherwise the Active must share **at least one** tag in `required_tags`.
-- **Swap Protection (`HeroStats.equip_item_from_bag`):** Equipping new gear automatically extracts old gems, places them into matching empty sockets on the new item where possible, and returns the rest to `gem_pouch` (overflow-safe — leveled gems are never deleted).
-- **Level Multiplication:** Equipped gems level to `Lv.10` via `65%` shared run XP or instant **Prism Dust** upgrades (`14 + level * 10` dust per level). *Prismatic Mastery* grants `+1` level to all other gems inside its host item; *Prismwhisker Crown* grants `+1` globally across all 6 equipped items.
+Items NEVER roll plain numerical stats like `+12% Damage` or `item_level`. Instead, every dropped Relic carries **fixed sockets/links** plus **1–2 Global Behavioral Effects** (often pairing an upside with a meaningful constraint or tradeoff!).
 
-### Complete Gem Catalog (`32 Total` — `scripts/data/gem_database.gd`)
+### Gear Slots & Fixed Socket/Link Budget (`GameEnums.slot_max_sockets`)
 
-#### 4A. Active Skill Gems (`10`)
-
-| ID | Gem Name (Short) | Color | Tags | Base Dmg (+/Lv) | Base CD | Proj / Chain / Pierce / Area | Mechanic Summary |
-|---|---|---|---|---|---|---|---|
-| `acorn_barrage` | **Acorn Barrage** (`ACRN`) | Green | `Projectile`, `Physical` | `22` (`+5.5`) | `0.68s` | `1` proj, spd `22`, `0` pierce | Snappy auto-targeted acorns |
-| `starlight_orb` | **Starlight Orbs** (`STAR`) | Blue | `Spell`, `Orbit`, `AoE` | `19` (`+5.0`) | `0.45s` | `2` orbs, rad `3.4`, `99` pierce | Persistent orbiting stars around hero |
-| `honey_slam` | **Honey Slam** (`SLAM`) | Red | `Melee`, `AoE`, `Physical` | `34` (`+8.5`) | `1.35s` | rad `4.2`, `99` pierce | Golden melee shockwave slowing hit foes |
-| `whisker_lightning` | **Whisker Lightning** (`ZAP`) | Blue | `Spell`, `Chain`, `Lightning` | `26` (`+6.5`) | `0.92s` | `1` bolt, `2` base chains, spd `30` | Crisp static arcs jumping between foes |
-| `petal_cyclone` | **Petal Cyclone** (`PETL`) | Green | `AoE`, `Projectile`, `Physical` | `15` (`+4.2`) | `1.15s` | `6` petals, `1` pierce, spd `14.5` | Spiraling outward ring of sakura petals |
-| `fireball_berry` | **Fireball Berry** (`FIRE`) | Red | `Projectile`, `Spell`, `AoE`, `Fire` | `30` (`+7.5`) | `1.25s` | `1` berry, AoE `3.0`, spd `17.5` | Lobs ember-berry with AoE splash + burn |
-| `frost_nova` | **Frost Nova** (`FRST`) | Blue | `Spell`, `Projectile`, `AoE`, `Cold` | `20` (`+5.5`) | `1.55s` | `8` shards + rad `4.0` nova, `1` pierce | Radial frost ring + chill shards |
-| `boomerang_bone` | **Boomerang Bone** (`BONE`) | Red | `Projectile`, `Physical` | `25` (`+6.5`) | `1.15s` | `1` bone, `99` pierce, rad `0.75` | Piercing treat bone curving back to hero |
-| `meteor_pine` | **Meteor Pinecone** (`PINE`) | Red | `Spell`, `AoE`, `Fire` | `52` (`+13.0`) | `2.25s` | AoE `4.1`, `99` pierce | Drops heavy pinecone bomb on densest pack |
-| `spirit_bees` | **Spirit Bees** (`BEES`) | Green | `Minion`, `Projectile`, `Physical` | `17` (`+4.5`) | `1.05s` | `2` bees (auto-homing), spd `16` | Homing critter-bees stinging nearby foes |
-
-#### 4B. Support Gems (`12`)
-
-| ID | Support Name (Short) | Color | Required Tags | Level-1 Modifiers & Per-Level Scaling |
-|---|---|---|---|---|
-| `sup_gmp` | **Greater Multi-Proj** (`GMP`) | Green | `Projectile` | `+2` Projectiles (`+1` at Lv4/7/10), `0.86×` damage multiplier |
-| `sup_chain` | **Chain Support** (`CHN`) | Green | `Projectile` or `Chain` | `+2` Chains (`+1` every 2 levels) |
-| `sup_fork` | **Fork Support** (`FRK`) | Green | `Projectile` | Projectiles split into `2` angled projectiles on first hit, `1.10×` dmg |
-| `sup_aoe` | **Increased Area** (`AOE`) | Blue | `AoE` or `Orbit` | `+35%` Area (`+6%/lvl`), `1.10×` dmg |
-| `sup_faster_cast` | **Faster Casting** (`FST`) | Green | *Any Active* | `+28%` Cast Speed (`+5%/lvl`) |
-| `sup_pierce` | **Pierce Support** (`PRC`) | Green | `Projectile` | `+3` Pierce (`+1/lvl`), `1.12×` dmg |
-| `sup_ignite` | **Added Fire & Burn** (`IGN`) | Red | *Any Active* | `+30%` Added Fire (`+5%/lvl`) + Burn DoT |
-| `sup_chill` | **Frostbite Support** (`CHL`) | Blue | *Any Active* | `+22%` Added Cold (`+4%/lvl`) + `35%` slow chill |
-| `sup_crit` | **Precision Strikes** (`CRT`) | Blue | *Any Active* | `+14%` Crit Chance (`+2%/lvl`), `+45%` Crit Damage |
-| `sup_leech` | **Life Leech** (`LCH`) | Red | *Any Active* | Heals hero for `3.0%` (`+0.4%/lvl`) of linked skill's damage dealt |
-| `sup_echo` | **Spell Echo** (`ECH`) | Blue | *Any Active* | Triggers twice (`0.78×` dmg/trigger at Lv1, `+0.03×/lvl` = `1.56×` net Lv1!) |
-| `sup_homing` | **Homing Guidance** (`HOM`) | Green | `Projectile` | Projectiles home smoothly + `+20%` Projectile Speed |
-
-#### 4C. Passive Skill Gems (`10`)
-
-| ID | Passive Name (Short) | Color | Bonus @ Lv.1 | Per-Level Scaling | Special Effect |
+| Slot | Base Names | Max Sockets | Common Roll | Magic Roll | Rare Roll |
 |---|---|---|---|---|---|
-| `pas_swiftness` | **Aura of Swiftness** (`SWFT`) | Green | `+16%` Move Spd, `+12%` Cast Spd | `+2%` Move, `+2%` Cast | — |
-| `pas_vitality` | **Vitality Meadow** (`VIT`) | Red | `+45` Max HP, `+3.5` HP Regen/s | `+12` HP, `+0.7` Regen/s | — |
-| `pas_determination` | **Determination Shell** (`DET`) | Red | `+28` Armor, `+10%` Dmg Red | `+7` Armor, `+1.5%` DR | — |
-| `pas_wrath` | **Wrath of Storms** (`WRTH`) | Blue | `+8` Flat Dmg, `+18%` Dmg | `+2.5` Flat, `+4%` Dmg | — |
-| `pas_precision` | **Precision Whiskers** (`PRCS`) | Green | `+14%` Crit Chance, `+30%` Pickup | `+2.5%` Crit, `+6%` Pickup | — |
-| `pas_clarity` | **Clarity Prism** (`CLRY`) | Blue | `+18%` Cast Spd, `+22%` Area | `+3%` Cast, `+4%` Area | — |
-| `pas_greed` | **Raccoon's Greed** (`GRD`) | White | `+35%` Magic Find, `+18%` XP Gain | `+8%` MF, `+4%` XP | Fits any socket |
-| `pas_thorns` | **Bramble Thorns** (`THRN`) | Red | `+20` Armor, `+15%` Dmg | `+5` Armor, `+3.5%` Dmg | Triggers `4.2m` Bramble Nova (`22 + 0.8*Armor` dmg) on hit (`1.2s` CD) |
-| `pas_vampiric` | **Vampiric Fang** (`VAMP`) | Red | `+2.5` Life on Hit, `+25` Max HP | `+0.7` LoH, `+8` HP | — |
-| `pas_prism_mastery` | **Prismatic Mastery** (`PRSM`) | White | `+22%` Dmg | `+5%` Dmg | `+1 Level` to all other gems socketed in the same item! |
+| **Weapon** | Acorn Wand, Honey Hammer, Starlight Staff, Paw Claws | `4` | `1` eff, `1–2S` (`38%` link, `4%` W) | `2` eff, `2–3S` (`58%` link, `6%` W) | `2` eff, `3–4S` (`76%` link, `10%` W) |
+| **Helmet** | Sprout Hood, Wizard Hat, Knight Cap, Ribbon Hood | `3` | `1` eff, `1–2S` | `2` eff, `2–3S` | `2` eff, `3S` |
+| **Armor** | Cozy Tunic, Bark Vest, Velvet Cloak | `4` | `1` eff, `1–2S` | `2` eff, `2–3S` | `2` eff, `3–4S` |
+| **Boots** | Paw Slippers, Meadow Boots, Cloud Treads | `3` | `1` eff, `1–2S` | `2` eff, `2–3S` | `2` eff, `3S` |
+| **Amulet** | Acorn Charm, Bell Pendant, Prism Locket | `2` | `1` eff, `1–2S` | `2` eff, `2S` | `2` eff, `2S` |
+| **Ring** | Clover Ring, Amber Band, Dewdrop Signet | `2` | `1` eff, `1–2S` | `2` eff, `2S` | `2` eff, `2S` |
 
-### Rework Ideas & Design Knobs — Gem & Socket System
-- [ ] **Tradeoffs on Passive Gems (Reservation / Saturation):** Right now Passives have zero opportunity cost other than occupying a socket. Testing a *"Max Active Auras"* or link-synergy rule (e.g., *Passives gain +25% effect per linked Red/Blue/Green socket*) makes Passive placement inside links meaningfully strategic!
-- [ ] **Distinct Support Constraints & Visual Clarity:**
-  - [ ] Fix *Starlight Orbs* + *Greater Multi-Proj* vs *Chain* expectations clearly on gem tooltips (`uses_proj` currently enables `extra_projectiles` on both `Projectile` and `Orbit` skills; document or separate `Orbit` count supports cleanly).
-  - [ ] Add live **Skill DPS / Cooldown Preview** next to each linked group inside `InventoryPanel` so players immediately see `GMP` + `Echo` math update when socketing.
-- [ ] **Gem Fusion / Awakening:** Let players combine two `Lv.3+` duplicate gems or spend Boss Dust to unlock **Transfigured Variants** (e.g., *Acorn Barrage of Ricochet*, *Cold-Converted Honey Slam*).
-- [ ] **Ergonomic Improvements:** Add right-click quick-socket / quick-unsocket, plus drag-and-drop gem reordering between sockets in the same item.
+- **Drop Rarity Odds:** Standard: `5%` Unique / `22%` Rare / `43%` Magic / `30%` Common. With **`lucky_clover`**: `14%` Unique / `40%` Rare / `36%` Magic / `10%` Common (+`14%` link rate & +`5%` White socket rate).
+- **Smart Magic Bias:** Magic items explicitly pair a non-tradeoff effect with a tradeoff effect (or vice-versa) so even blue drops ask an immediate build question!
+- **No Crafting Clutter:** Prism Dust and manual socket/link rerolling are removed — socket layouts are fixed identity traits on each Relic, making a well-linked Rare a genuine find.
+
+### Complete Global Behavioral Effects Catalog (`18` Standard/Tradeoff + `5` Unique Keystones)
+
+#### Standard & Tradeoff Global Effects (`18`)
+
+| Effect ID | In-Game Tag | Tradeoff? | Exact Gameplay Behavior |
+|---|---|---|---|
+| `dash_honey_nova` | **Dash -> Honey Nova** | No | Hop-Dash unleashes a `4.4m` slowing Honey Nova (`26` dmg) at origin |
+| `dash_triggers_skills` | **Dash Fires Skills \| Slow Auto** | **Yes** | Hop-Dash casts all non-orbit Main Abilities at once, but automatic cooldowns slow `1.50×` (unless `comet_dash` is also active) |
+| `turret_stance` | **Stand Still -> 2x Cast** | **Yes** | Standing still ticks skill cooldowns `2.0×` faster; moving ticks at `0.75×` |
+| `zoomies_on_kill` | **Kills -> Speed Burst** | No | Every critter kill grants `2.0s` of Zoomies (`1.28×` move speed, `1.25×` cast rate) |
+| `edge_ricochet` | **Shots Bounce Back** | No | Non-boomerang projectiles bounce back toward nearest enemy once (`0.85×` lifetime) on timeout or arena wall |
+| `short_barrage` | **+2 Shots \| Short Range** | **Yes** | `+2` projectiles/orbiters globally, but projectile lifetime shrinks to `0.55×` |
+| `sniper_focus` | **Pierce +2 \| 1 Fast Shot** | **Yes** | Forces `1` projectile per cast, sets `pierce +2`, `1.55×` projectile speed, `1.45×` damage |
+| `giant_slow_aoe` | **Huge AoE \| Slower Cast** | **Yes** | `AoE` & `Orbit` skills gain `1.65×` radius, at `1.33×` longer cooldown |
+| `ember_corpse` | **Kills -> Fire Pop** | No | Defeated critters detonate in a `3.6m` fiery nova (`24` dmg + Burn) |
+| `frost_shatter` | **Chill Kills -> Ice Ring** | No | Defeating a chilled critter triggers a `4.4m` icy ring (`26` dmg + Chill slow) |
+| `static_sprint` | **Moving -> Zap Sparks** | No | Every `5.5m` traveled zaps up to `2` nearby foes (`20` dmg lightning arcs) |
+| `vamp_dash` | **Dash -> Siphon Heal** | No | Hop-Dash restores `+12 HP` |
+| `thorns_burst` | **Hit -> Bramble Nova** | No | Taking damage triggers a `4.4m` Bramble Nova (`26` dmg, `1.2s` CD) |
+| `gravity_slams` | **AoE Pulls Foes In** | No | Player novas, meteors & explosions yank hit critters inward instead of knocking away |
+| `glass_spark` | **Heavy Impact \| Fragile** | **Yes** | All compiled abilities deal `1.75×` damage, but hero takes `1.45×` incoming damage |
+| `double_dash` | **2x Dash Charges** | No | Grants `2` max Hop-Dash charges |
+| `orbit_shield` | **Hit -> Star Shield** | No | Taking damage activates `3` orbiting star shields (`2.6m`, `22` dmg) for `5.0s` (`6.0s` CD) |
+| `lucky_clover` | **Rarer Loot & Links** | No | Upgrades ground drop & chest rarity weights (`14%` Unique / `40%` Rare) and boosts socket link odds (`+14%`) |
+
+#### Unique Items & Exclusive Keystones (`6 Uniques`, `5 Unique Effects`)
+
+| Unique Item | Slot | Fixed Sockets | Global Effects | Signature Build Identity |
+|---|---|---|---|---|
+| **Grand Acorn Scepter** | Weapon | `G=G=B=R` (`4L`) | `nova_barrage` (*All Shots Fire 360 Ring*) + `short_barrage` | Turns projectile casts into short-range 360-degree bullet rings |
+| **Prismwhisker Crown** | Helmet | `W=W=W` (`3L`) | `prism_echo` (*Linked Mods Double-Proc*) + `lucky_clover` | Doubles linked Modifier counts (`+2 -> +4` etc.), triggers Double Echo on linked skills & boosts rarity |
+| **Honeycomb Aegis** | Armor | `R=R=B=G` (`4L`) | `aegis_freeze` (*Hit -> Freezing Honey Nova*) + `thorns_burst` | Retaliatory tank chest erupting `5.2m` freezing novas (`32` dmg) + bramble bursts when hit |
+| **Paws of the Comet** | Boots | `G=G=B` (`3L`) | `comet_dash` (*Dash Fires All Skills*) + `double_dash` | Grants `2` Dash charges and unleashes all Main Abilities on every Hop-Dash **without** slow auto penalty |
+| **Nine-Lives Bell** | Amulet | `W=B` (`2L`) | `cheat_death` (*Fatal Hit -> Burst Heal*) + `zoomies_on_kill` | Prevents fatal blow (`55%` heal + `1.6s` i-frames, `90s` CD) while chaining kill Zoomies |
+| **Starweaver Band** | Ring | `B=G` (`2L`) | `gravity_slams` (*AoE Pulls Foes In*) + `ember_corpse` | Clusters foes into AoEs and chain-detonates kills with Fire Pops |
+
+### Rework Ideas — Behavioral Items
+- [ ] **Cross-Slot Combo Sets / Synergy Icons:** Highlight active synergies inside the Tradeoff Inspector (e.g., show an amber combo indicator when `comet_dash` + `dash_honey_nova` or `gravity_slams` + `ember_corpse` are both active).
+- [ ] **Additional Uniques (`Target 12+`):** Add Unique armor/amulet built specifically around `edge_ricochet` + `sniper_focus` (super-pinball single-shot sniper) or minion/orbit loops.
 
 ---
 
-## 5. Diablo-Style Equipment, Loot Economy & Prism Forge
+## 5. Ability Linking System (`gem_database.gd`, `hero_stats.gd`)
 
-### Gear Slots & Base Item Families (`scripts/data/item_database.gd`)
+Only **Main Socket Abilities (`MAIN`)** and **Modifier Abilities (`MODIFIER`)** exist. Gems do not gain XP or have numeric levels — what matters is **which Main Abilities are socketed, which Modifiers share a contiguous link group with them, and how item Global Effects reshape them**.
 
-| Slot | Base Item Pool | Implicit Stat Families | Max Sockets |
-|---|---|---|---|
-| **Weapon** | Acorn Wand, Honey Hammer, Starlight Staff, Paw Claws | Flat Damage, % Damage, Cast Speed, Crit Chance | `4` |
-| **Helmet** | Sprout Hood, Wizard Hat, Knight Cap, Ribbon Hood | Max HP, Area Size, Armor, XP Gain | `3` |
-| **Armor** | Cozy Tunic, Bark Breastplate, Velvet Cloak | Max HP, Armor, Damage Reduction | `4` |
-| **Boots** | Soft Paw Slippers, Meadow Greaves, Cloud Treads | Move Speed, Pickup Radius | `3` |
-| **Amulet** | Acorn Pendant, Silver Bell Charm, Prism Locket | HP Regen, Crit Damage, Magic Find | `2` |
-| **Ring** | Clover Ring, Amber Band, Dewdrop Signet | Cast Speed, % Damage, Life on Hit | `2` |
+### Main Socket Abilities (`10`)
 
-### Rarity & Roll Rules (`Current Implementation`)
-- **Item Level (`iLv.1–25`):** `clamp(1 + floor(elapsed_sec / 60), 1, 20)` from waves (`+2` from bosses). Implicit base value scales by `1 + 0.14 * (ilvl - 1)`.
-- **Affix Counts:** `Common` = `0` bonus affixes · `Magic` = `1–2` · `Rare` = `3–4` · `Unique` = fixed template scaling by `1 + 0.035 * (ilvl - 1)`.
-- **Drop Rarity Odds:** Base `Unique 4%`, `Rare 22%`, `Magic 44%`, `Common 30%`. Magic Find multiplies Unique up to `22%` and Rare up to `45%`.
-- **Socket & Link Roll Rates:** `Magic` guarantees `min(2, max_s)` sockets; `Rare` guarantees `min(3, max_s)`. Link probability per gap scales as `0.42 + rarity * 0.14 + ilvl * 0.015` (clamped `35%–88%`), `5%` base chance per socket to roll **White**.
+| ID | Name (`Short`) | Color | Tags | Damage | Cooldown | Base Behavior |
+|---|---|---|---|---|---|---|
+| `acorn_barrage` | **Acorn Barrage** (`ACRN`) | Green | `Proj`, `Phys` | `24` | `0.65s` | Aimed fan of flying acorns (`1` base proj, spd `22`) |
+| `starlight_orb` | **Starlight Orbs** (`STAR`) | Blue | `Spell`, `Orbit`, `AoE` | `21` | `0.45s` | Persistent `2` orbiting star blades (`3.4m` radius, `99` pierce) |
+| `honey_slam` | **Honey Slam** (`SLAM`) | Red | `Melee`, `AoE`, `Phys` | `38` | `1.25s` | Slowing honey shockwave near nearest target (`4.3m` radius) |
+| `whisker_lightning` | **Whisker Lightning** (`ZAP`) | Blue | `Spell`, `Chain`, `Lightning` | `28` | `0.88s` | Instant static arc jumping across `2` base chains |
+| `petal_cyclone` | **Petal Cyclone** (`PETL`) | Green | `AoE`, `Proj`, `Phys` | `17` | `1.08s` | Rotating `6`-petal outward spiral (`1` pierce) |
+| `fireball_berry` | **Fireball Berry** (`FIRE`) | Red | `Proj`, `Spell`, `AoE`, `Fire` | `34` | `1.18s` | Explosive burning berry (`3.2m` splash + Burn DoT) |
+| `frost_nova` | **Frost Nova** (`FRST`) | Blue | `Spell`, `Proj`, `AoE`, `Cold` | `22` | `1.45s` | `4.2m` Chill ring (`0.7×` dmg) + `8` radial ice shards |
+| `boomerang_bone` | **Boomerang Bone** (`BONE`) | Red | `Proj`, `Phys` | `28` | `1.08s` | Heavy `99`-pierce bone flying outward and returning to hero |
+| `meteor_pine` | **Meteor Pinecone** (`PINE`) | Red | `Spell`, `AoE`, `Fire` | `58` | `2.05s` | Drops heavy burning pinecone slam (`4.2m`) on densest critter cluster |
+| `spirit_bees` | **Spirit Bees** (`BEES`) | Green | `Minion`, `Proj`, `Phys` | `20` | `0.98s` | Fires `2` naturally homing bees |
 
-### Complete Unique Item Catalog (`8 Uniques`)
+### Modifier Abilities (`10`)
 
-| Unique Name | Slot | Sockets & Links | Special Mechanic + Highlight Stats |
-|---|---|---|---|
-| **Grand Acorn Scepter** | Weapon | `G=G=B=R` (4L) | `+2 Extra Projectiles` globally + `+18 Flat`, `+36% Dmg`, `+18% Cast Spd` |
-| **Prismwhisker Crown** | Helmet | `W=W=W` (3L) | `+1 Level to ALL socketed gems globally`, `+65 HP`, `+24% Area`, `+35% MF` |
-| **Honeycomb Aegis** | Armor | `R=R=B=G` (4L) | Triggers a sticky `4.8m` Honey Nova (`28 × DmgMult`) when hit (`1.8s` CD), `+120 HP`, `+45 Armor`, `+14% DR` |
-| **Paws of the Comet** | Boots | `G=G=B` (3L) | `-35% Hop-Dash cooldown` (`0.65×`), `+32% Move Spd`, `+16% Cast Spd`, `+40% Pickup` |
-| **Nine-Lives Bell** | Amulet | `W=B` (2L) | Cheat death (`90s` CD): prevents lethal blow, heals `55%` Max HP, `+20% Crit`, `+55% Crit Dmg` |
-| **Starweaver Band** | Ring | `B=G` (2L) | Massive AoE caster ring: `+35% Area`, `+25% Cast Spd`, `+24% Dmg` |
-| **Brambleclaw Gauntlets** | Weapon | `R=R=G=W` (4L) | Brawling/sustain claws: `+24 Flat Dmg`, `+5.5 Life on Hit`, `+15% Crit`, `+28% Dmg` |
-| **Twilight Clover Loop** | Ring | `W=G` (2L) | Farming/scaling ring: `+60% Magic Find`, `+30% XP Gain`, `+50% Pickup Radius` |
-
-### Drop Sources & Prism Dust Economy (`loot_manager.gd`, `hero_stats.gd`, `item_instance.gd`)
-
-| Source | Drops & Guarantees | Inventory / Floor Limits |
-|---|---|---|
-| **Regular Critter** | Always `1` XP shard (`1.25×` on Web to offset `0.72×` active enemy cap); `3.2%` gear (scales w/ MF); `2.4%` gem; `3.5%` heart (`26 HP`); `4%` `4 Dust` | Floor XP shards merge into farthest shard at `140` shards |
-| **Elite Critter** *(purple ring, every ~52s)* | `1` Magic/Rare gear (`38%+` Rare), `72%` chance gem, `8 Dust`, `45%` heart (`32 HP`) | Unlooted ground labels projected onto HUD |
-| **Acorn Treasure Chest** *(every 50s)* | `1` Magic/Rare item (`55%` Rare), `1` random gem, `12 Dust`, `35 HP` heal | Spawned `16–26m` from hero with announcement banner |
-| **Boss (3 per Run)** | **Loot Fountain:** `1` Unique + `2` Rare items (`ilvl+2`), `3` gems (`1 Active + 1 Support + 1 Passive` @ Lv `min(4, 1+boss_idx)`), `25 + 15*boss_idx` Dust, `65 HP` heal | Bag cap: `24` items · Gem pouch cap: `24` gems |
-
-| Prism Dust Action | Amount / Cost | Formula / Rule |
-|---|---|---|
-| Salvage Item | `+Dust` | `Common 4 / Magic 8 / Rare 16 / Unique 35` + `2 × sockets` + `item_level` (auto-rescues gems first) |
-| Salvage Gem | `+Dust` | `6 + (level - 1) * 5` |
-| Bulk Salvage | `+Dust` | One-click salvages all `Common` & `Magic` items in `item_bag` |
-| **Recolor Sockets** | `-10 Dust` | Rerolls all socket colors (`8% White, 31% R/G/B`) keeping links & extracting nothing |
-| **Add Link** | `-15 Dust` | Connects one random unlinked socket gap on selected equipped item |
-| **Add Socket** | `-25 Dust` | Adds 1 socket up to slot max (`45%` chance auto-linked to neighbor) |
-| **Level Up Gem** | `-(14 + 10*lvl)` Dust | Instantly adds `xp_to_next` XP to selected pouch gem (up to `Lv.10`) |
-
-### Rework Ideas & Design Knobs — Gear & Crafting
-- [ ] **Affix Reroll / Chaos Craft:** Add a `Reroll Affixes (20 Dust)` or `Upgrade Rarity` craft in Prism Forge so high-link low-rarity bases can become chase endgame crafts (*PoE crafting bench feel*).
-- [ ] **Auto-Salvage Filter Toggle:** Add a toggle pill (`Ignore Common` / `Auto-Dust Common`) right inside Looted Gear or HUD so late-game runs stay snappy without filling the 24-slot bag every 20 seconds.
-- [ ] **Unique Build Diversity (Target `16+` Uniques):** Expand Uniques for Boots/Amulets/Helmets that warp mechanics (e.g., *Echoing Bell: Skills cast twice on Hop-Dash*, *Mushroom Crown: Enemies explode in toxic spore clouds*).
-- [ ] **Ground Hover Previews:** Display compact rarity + slot + socket preview tags cleanly without clutter when multiple drops stack near boss deaths.
+| ID | Name (`Short`) | Color | Required Tags | Linked Mutation |
+|---|---|---|---|---|
+| `mod_multishot` | **Multi-Shot** (`MULT`) | Green | `Proj` or `Orbit` | `+2` projectiles/orbiters (`0.85×` dmg per hit) |
+| `mod_chain` | **Chain Bounce** (`CHN`) | Green | `Proj` or `Chain` | Bounces `+2` additional targets |
+| `mod_fork` | **Twin Fork** (`FORK`) | Green | `Proj` | Projectiles split into `2` angled projectiles on first hit |
+| `mod_pierce` | **Deep Pierce** (`PRCE`) | Green | `Proj` | Pierces `+3` targets |
+| `mod_homing` | **Homing Seekers** (`HOME`) | Green | `Proj` | Smooth steering toward nearest enemies + `1.15×` projectile speed |
+| `mod_echo` | **Double Echo** (`ECHO`) | Blue | *Any Main* | Triggers a delayed echo cast (`0.16s` later) / `+1` orbiter (`0.78×` dmg/hit) |
+| `mod_nova_area` | **Giant Blast** (`WIDE`) | Blue | `AoE` or `Orbit` | Expands AoE/Orbit radius (`1.55×`) |
+| `mod_ignite` | **Blazing Burn** (`BURN`) | Red | *Any Main* | Hits ignite critters (`25–28%` DPS Burn for `3.0s`) |
+| `mod_chill` | **Frost Chill** (`CHIL`) | Blue | *Any Main* | Hits apply `2.5s` Chill slow (combos with *Frost Shatter*) |
+| `mod_leech` | **Life Siphon** (`HEAL`) | Red | *Any Main* | Heals hero for `5.5%` of linked skill damage dealt |
 
 ---
 
-## 6. Level-Up Enchantment Draft System (`scripts/ui/level_up_modal.gd`)
+## 6. Playable PoE-Style Tutorial (`scripts/systems/tutorial_director.gd`)
 
-Each hero level pauses combat and deals **3 randomized Enchantment Cards** (full card clickable or `[1]`/`[2]`/`[3]` hotkeys) with live `Before -> After` stat previews:
+Launchable directly via **`TUTORIAL`** on the Title Screen. The player starts completely **bare-pawed** (`0` equipped items, `0` abilities) and learns the entire core loop through 3 short interactive beats:
 
-| Category Ribbon | Card Title | Effect | Preview Calculation |
-|---|---|---|---|
-| `OFFENSE` | **Ferocious Paws** | `+14% All Damage` | `Damage: X% -> (X+14)%` |
-| `TEMPO` | **Swift Whiskers** | `+12% Attack & Cast Speed` | `Cast Speed: X% -> (X+12)%` |
-| `VITALITY` | **Fluffy Heartiness** | `+32 Max HP` & heals `32 HP` | `Max HP: X -> X+32` |
-| `ARCANE` | **Blooming Aura** | `+16% Area Size` | `Area Size: X% -> (X+16)%` |
-| `PRECISION` | **Sharp Claws** | `+7% Crit Chance` | `Crit Chance: X% -> min(95, X+7)%` |
-| `AGILITY` | **Zoomies Boost** | `+10% Move Speed` | `Move Speed: X -> X*1.10` |
-| `DEFENSE` | **Acorn Plating** | `+12 Armor` | `Armor: X -> X+12` |
-| `TREASURE` | **Lucky Tail** | `+20% Magic Find` | `Magic Find: +X% -> +(X+20)%` |
-| `PRISM SURGE` | **Prismatic Surge** | `+140 XP` to all socketed gems | `Equipped Gems: +140 XP` |
-| `CRAFTING` | **Prism Dust Pouch** | `+25 Prism Dust` | `Prism Dust: X -> X+25` |
-| `SKILL GEM` | **Mystery Skill Gem** | Adds `1` random gem (only if pouch `< 24`) | `Gem Pouch: X -> X+1` |
-
-### Rework Ideas — Level-Up Draft
-- [ ] **Card Rarities (Common / Rare / Mythic):** Let luck / Magic Find or every 5th level (`Lv.5, 10, 15, 20`) roll upgraded **Golden Capstone** drafts (e.g., `+1 Extra Projectile`, `+10% Damage Reduction`, `+1 White Socket to Weapon`).
-- [ ] **Reroll / Banish Meta Charges:** Give 2–3 Rerolls per run (plus Boss bonus charges) to sharpen targeted buildcraft.
-- [ ] **Smart Tag Weighting:** Gently weight drafts toward tags currently equipped in Active Gems (e.g., slightly higher chance of `Blooming Aura` when running `AoE` skills).
+| Beat | Step Sequence | Ground Spawn / Trigger | Top HUD Plaque | Satchel Banner Guidance |
+|---|---|---|---|---|
+| **1/3 — First Item** | `LOOT_ITEM` -> `EQUIP_ITEM` | Drops **`Meadow Acorn Wand`** (`Magic`, `G=G` 2-link, `dash_honey_nova`) `4.2m` north | `1/3  Walk to Wand` -> `1/3  Equip Wand [Tab]` (pulses Satchel button gold) | `Items tab -> Select Meadow Acorn Wand -> Equip` |
+| **2/3 — Main Ability** | `LOOT_MAIN` -> `SOCKET_MAIN` -> `KILL_WAVE_1` | Equipping wand drops **`Acorn Barrage`**; socketing spawns `3` `slime_frog` critters (`0.55×` HP) | `2/3  Pick up Acorn Barrage` -> `2/3  Socket Ability [Tab]` -> `2/3  Defeat Critters (0/3)` | `Main tab -> Select Acorn Barrage -> Click Green Socket` |
+| **3/3 — Linked Modifier** | `LOOT_MOD` -> `SOCKET_MOD` -> `KILL_WAVE_2` | 3 kills drops **`Multi-Shot`**; linking spawns `5` `slime_frog` critters (`0.60×` HP) -> `EndScreen.show_tutorial_complete()` | `3/3  Pick up Multi-Shot` -> `3/3  Link Modifier [Tab]` -> `3/3  Test Multi-Shot (0/5)` | `Mods tab -> Select Multi-Shot -> Click Linked Socket` |
 
 ---
 
-## 7. 20-Minute Run Pacing, Waves, Enemies & 3 Bosses
+## 7. 20-Minute Run Pacing, Drop Economy & Bosses
 
-### Wave Pacing & Biome Progression (`enemy_database.gd`, `wave_director.gd`)
+### Loot Drop Economy (`loot_manager.gd`)
+Only **3 collectible types** + **Acorn Treasure Chests** spawn on the meadow floor (`2.6m` pickup radius for Items/Main/Mod, `2.8m` for Chests; no XP shards, hearts, or dust pickups):
+- **Regular Critter:** `8.5%` Item (`11.0%` Lucky) · `7.5%` Ability gem (`9.5%` Lucky, `45%` Main / `55%` Modifier).
+- **Elite Critter** *(every ~52s)*: `1` Rare (`42%` / `60%` Lucky) or Magic Item · `80%` chance `1` Ability gem · Instant `+18 HP` heal.
+- **Acorn Treasure Chest** *(every ~50s, `16–26m` away)*: `1` Rare (`52%` / `72%` Lucky) or Magic Item · `1` Ability gem · Instant `+35 HP` heal + announcement banner.
+- **Boss (3 per Run):** `1` Unique Item + `2` Rare Items + `1` Main Ability + `2` Modifier Abilities + Instant `+50 HP` heal.
 
-- **Total Gauntlet Duration:** `1200.0s` (`20:00`), ending on Victory upon defeating Boss 3 (even slightly before `20:00` if spawned at `19:30` and melted fast!).
-- **Periodic Events:** Elites spawn every `52s` (first at `45s`), Acorn Treasure Chests every `50s` (first at `32s`), Critter Swarm Surges (`12` Web / `14` Desktop enemies) at **`04:00`**, **`09:30`**, **`15:30`**, and **`18:00`**.
-- **Web Performance Scaling:** Web builds cap active regular enemy density to `0.72×` Desktop and award `1.25×` XP per shard for identical leveling pace.
+### Wave Pacing (`enemy_database.gd`, `wave_director.gd`)
+Rebalanced `hp_scale` (`1.00× -> 3.60×`) and boss HP (`1250`, `2800`, `5400`) to fit pure behavioral item/link scaling without infinite numerical stat-stick inflation:
 
 | Time Window | Biome Phase | Enemy Pool | Spawn Int | Batch | HP Scale | Dmg Scale | Max Active (Desk / Web) |
 |---|---|---|---|---|---|---|---|
-| `00:00–02:00` | Sunny Meadow | Frog, Hedgehog | `0.95s` | `2` | `1.00–1.24×` | `1.00×` | `42` / `30` |
-| `02:00–04:20` | Sunny Meadow | Frog, Hedgehog, Owl-Bat | `0.78s` | `3` | `1.25–1.67×` | `1.12×` | `62` / `44` |
-| `04:20–07:00` | Sunny Meadow | Hedgehog, Owl-Bat, Boar, Frog | `0.65s` | `3` | `1.70–2.34×` | `1.28×` | `80` / `57` |
-| `07:00–10:40` | Golden Sunset | Owl-Bat, Boar, Gloom Fox, Hedgehog | `0.56s` | `4` | `2.40–3.72×` | `1.55×` | `96` / `69` |
-| `10:40–14:00` | Golden Sunset | Boar, Gloom Fox, Bandit, Shroom-Toad | `0.50s` | `4` | `3.80–5.40×` | `1.85×` | `112` / `80` |
-| `14:00–17:30` | Twilight Grove | Fox, Bandit, Toad, Boar, Owl-Bat | `0.44s` | `5` | `5.50–7.81×` | `2.20×` | `124` / `89` |
-| `17:30–20:00` | Twilight Finale | Bandit, Toad, Gloom Fox, Boar | `0.40s` | `5` | `7.80–10.05×` | `2.65×` | `135` / `97` |
+| `00:00–02:00` | Sunny Meadow | Frog, Hedgehog | `0.95s` | `2` | `1.00×` | `1.00×` | `42` / `30` |
+| `02:00–04:20` | Sunny Meadow | Frog, Hedgehog, Owl-Bat | `0.78s` | `3` | `1.20×` | `1.10×` | `62` / `44` |
+| `04:20–07:00` | Sunny Meadow | Hedgehog, Owl-Bat, Boar, Frog | `0.65s` | `3` | `1.45×` | `1.22×` | `80` / `57` |
+| `07:00–10:40` | Golden Sunset | Owl-Bat, Boar, Gloom Fox, Hedgehog | `0.56s` | `4` | `1.85×` | `1.42×` | `96` / `69` |
+| `10:40–14:00` | Golden Sunset | Boar, Gloom Fox, Bandit, Shroom-Toad | `0.50s` | `4` | `2.35×` | `1.65×` | `112` / `80` |
+| `14:00–17:30` | Twilight Grove | Fox, Bandit, Toad, Boar, Owl-Bat | `0.44s` | `5` | `2.95×` | `1.90×` | `124` / `89` |
+| `17:30–20:00` | Twilight Finale | Bandit, Toad, Gloom Fox, Boar | `0.40s` | `5` | `3.60×` | `2.20×` | `135` / `97` |
 
-### Enemy Roster (`7 Regular Critters` — Single Merged Mesh, Shadows Off)
-
-| ID | Display Name | Base HP | Speed | Contact Dmg | Radius | Base XP | Combat Behavior |
-|---|---|---|---|---|---|---|---|
-| `slime_frog` | **Dewdrop Frog** | `26` | `3.4` | `7` | `0.65` | `10` | Gentle swarming hopper |
-| `hedgehog` | **Spiky Hedgehog** | `36` | `4.6` | `9` | `0.65` | `14` | Fast early rusher |
-| `bat_owl` | **Flap Owl-Bat** | `32` | `5.2` | `10` | `0.68` | `15` | Rapid flanking flyer |
-| `acorn_boar` | **Tusk Piglet** | `78` | `3.3` | `15` | `0.85` | `24` | Heavy early-mid bruiser |
-| `gloom_fox` | **Gloom Fox** | `54` | `4.0` | `13` | `0.72` | `26` | Ranged caster (`10.5` spd purple orbs) |
-| `raccoon_bandit` | **Bandit Raccoon** | `96` | `4.4` | `17` | `0.80` | `38` | Tough high-XP late-game raider |
-| `shroom_toad` | **Puff Shroom-Toad** | `68` | `3.1` | `14` | `0.78` | `28` | Spawns `3.2m` delayed spore explosion (`0.65s`) on death |
-
-### 3 Scripted Boss Encounters (`enemy_entity.gd`)
-
-| Spawn Time | Boss Name | Base HP | Speed | Dmg | XP | Attack Cycle | `<= 50%` HP Enrage (`1.32×` Attack Rate) |
-|---|---|---|---|---|---|---|---|
-| **06:30** (`390s`) | **Sir Grizzle, Honey-Armored King** | `2,400` | `4.0` | `26` | `320` | Alternates `5.4m` Honey Slam (`1.05s` windup) & telegraphed Dash Charge (`0.85s` windup, `3.4×` spd burst) | *"Summoning Honey Guard!"* — spawns 4x `acorn_boar` |
-| **13:00** (`780s`) | **Lady Whiskers, Arcane Owl-Empress** | `6,200` | `4.3` | `34` | `540` | 3-step cycle: `7`-way (`9` enraged) fan volley, `5x` delayed meteor rings (`2.6m`), `12`-orb radial ring | *"Arcane Tempest Unleashed!"* — upgrades fan volleys & faster casting |
-| **19:30** (`1170s`) | **King Bramblehorn, Prism Stag-Dragon** | `13,500` | `4.6` | `44` | `1,000` | 3-step cycle: `12`-way (`16` enraged) spinning spiral volley, `4x` staggered meteor slams (`2.9m`), cross nova (`6.2m` center + 4 cardinal `3.0m` zones) | *"Prism Overdrive! Gloom Foxes Join!"* — spawns 3x `gloom_fox` |
-
-### Rework Ideas & Design Knobs — Waves & Bosses
-- [ ] **Selectable Maps / Biomes:** Keep *Sunny Meadow* as Stage 1 and design Stage 2 (*Honeycomb Hollow* — tight lanes, sticky honey slow pools) and Stage 3 (*Starlit Observatory* — low-gravity meteors & prism crystals).
-- [ ] **Boss Identity & Arena Lockdown:** When a boss spawns, optionally draw a subtle luminous `28m` ritual perimeter or clear weak trash stragglers into an honor duel feeling, and display a dedicated **Boss Health + Phase Bar** below the clock plaque.
-- [ ] **Fast / Turbo Mode Preset (`10-Min Blitz`):** Players often want both the full `20:00` classic gauntlet (`06:30 / 13:00 / 19:30`) and a selectable `10:00` turbo pacing preset (`03:15 / 06:30 / 09:45`, `2×` XP & drop rates).
+- **Swarm Surges:** `04:00`, `09:30`, `15:30`, and `18:00` (`12` Web / `14` Desktop critters).
+- **Scripted Bosses (`enemy_entity.gd`):**
+  - `06:30` (**Sir Grizzle**, `1,250 HP`, `24 dmg`) — Honey Slam (`5.4m`) & Dash Charge (`3.4×` spd); spawns `4x` `acorn_boar` <= `50%` HP.
+  - `13:00` (**Lady Whiskers**, `2,800 HP`, `30 dmg`) — `7`-way (`9` enraged) projectile fans, `5x` meteor rings, `12`-orb radial volley.
+  - `19:30` (**King Bramblehorn**, `5,400 HP`, `38 dmg`) — `12`-way (`16` enraged) spiral volley, `4x` meteors, cross nova, spawns `3x` `gloom_fox` <= `50%` HP.
 
 ---
 
-## 8. Art Direction, UI Design System & Audio
+## 8. Art Direction, Icon-First UI & Mobile Support
 
-### Storybook UI System (`ui_helper.gd`, `ui_icons.gd`, `poe_socket_widget.gd`)
+### Low-Text Storybook Design System (`ui_helper.gd`, `ui_icons.gd`, `poe_socket_widget.gd`)
+- **Theme:** 3-tier warm timber (`BG_WOOD_DEEP #1C1412`, `BG_WALNUT #30241C`, `BG_OAK_CARD #3D2E24`, `BG_WELL #17120F`), Enchanted Gold (`#F5C957`), Antiqued Brass (`#947342`), Fredoka 700 headers & Nunito 600/800 body/labels.
+- **Title Screen (`title_screen.gd`):** Concise subtitle pill, 4 visual hero cards (`Portrait + Hero Name + Role + Starter Main Ability + Starter Effect chip`), single-line hero tagline + control hint, and dual **`TUTORIAL`** + **`PLAY RUN`** CTAs (auto-collapses to `2×2` grid in portrait).
+- **Gameplay HUD (`hud_controller.gd`):** Top XP bar and `Lv.` / `Dust` / passive rows removed. Displays Hero Portrait + Kills + Bosses counter, Center Clock/Biome plaque (swaps cleanly to a gold Tutorial Objective plaque during Tutorial), bottom-left `HP` / `Dash [Charges]` / `Satchel [Tab]` dock, and bottom-center Active Ability bar (icon + short code + colored Modifier pips + cooldown bar).
+- **Hero Satchel & Visual Tradeoff Inspector (`inventory_panel.gd`):**
+  - **Left (`Active Build`):** Compact vitals (`HP`, `Spd`, `Dash xN`), Active Ability cards with colored Modifier badges, and Global Effect chips (`UiHelper.make_effect_chip`).
+  - **Center (`Equipped Gear`):** 6 equipment cards with rarity border, inline Global Effect chips, and interactive `PoESocketWidget` (**Pentagon** = Main Ability, **Round Orb** = Modifier Ability, short badge labels with zero gem-level clutter).
+  - **Right (`Items` | `Main` | `Mods` + Portrait `Build`):** Selecting a bag Item shows a **Visual Tradeoff Comparison Card** contrasting `NEW (sockets)` vs `vs EQUIPPED (sockets)` using `+` emerald (gained), `-` crimson (lost), and `=` brass (kept) effect chips alongside `Equip` and `Drop`.
 
-1. **3-Tier Warm Timber & Enchanted Gold Palette:**
-   - Outer Frame (`BG_WOOD_DEEP`): `#1C1412` (`Color(0.11, 0.08, 0.07, 0.97)`)
-   - Column / Panel (`BG_WALNUT`): `#30241C` (`Color(0.19, 0.14, 0.11, 0.98)`)
-   - Raised Interactive Card (`BG_OAK_CARD`): `#3D2E24` (`Color(0.24, 0.18, 0.14, 0.98)`)
-   - Recessed Well / Socket Slot (`BG_WELL`): `#17120F` (`Color(0.09, 0.07, 0.06, 0.96)`)
-   - Trim & Text: Enchanted Gold `#F5C957`, Antiqued Brass `#947342`, Muted Pewter (Common) `#7A6E61`, Cream `#FCF5E6`, Parchment `#E0D1B3`.
-   - Tactile CTAs: Emerald (`#309454`), Ruby (`#8F303B`), Sapphire (`#335E94`) with darkened pressed & disabled bevels.
-2. **Typography & WebGL OpenType Gotchas:**
-   - Bundled SIL OFL variable fonts: `assets/fonts/Fredoka.ttf` (`wght 300–700`) and `assets/fonts/Nunito.ttf` (`wght 200–1000`).
-   - **Important Engine Rule:** Godot 4 `FontVariation.variation_opentype` requires the **integer FourCC tag** (`TextServer.name_to_tag("wght")` = `2003265652`), *never* the string `"wght"`. Weights pinned: Fredoka `700`, Nunito body `600`, Nunito bold `800`.
-   - **Glyph Safety Rule:** Do **not** use arrows or triangles (`←`, `▲`, `▼`) — `Nunito.ttf` lacks them and WebGL renders tofu `□` boxes. Stick strictly to ASCII (`->`, `(+4.0)`) and verified symbols (`·`, `•`, `—`).
-3. **Iconography & PoE Socket Grammar:**
-   - Custom runtime SVGs (`UiIcons`) cover 4 hero portraits, 6 gear slots, all 10 active skills, faceted gem silhouettes, and UI/crafting glyphs.
-   - **Socket Silhouettes (`PoESocketWidget`):** Active = **Pentagon**, Support = **Round Orb**, Passive = **Hexagon**, with `2px` outlines, forged golden link bars, pulsing gold drop-target halos when a compatible gem is selected, and unclipped dark pill badges (`ACR 1`, `FST 1`) anchored underneath. Always initialize default `custom_minimum_size` inside `_init()`, *never* `_ready()`, so `configure_mini()` isn't overwritten on `add_child()`.
-
-### 3D Visuals & Audio (`chibi_mesh_factory.gd`, `arena_builder.gd`, `sfx_manager.gd`)
-- **Materials:** Chibi meshes use `DIFFUSE_LAMBERT` (`roughness 0.78`, `rim 0.10`) paired with `TONE_MAPPER_FILMIC` (`exposure 0.90`) and `fog_density 0.0055` to eliminate harsh white specular blowout.
-- **Arena & Landmarks:** `136×136m` meadow (`±68m`), procedural weathered radial cobblestone center plaza texture, `2`-tier pine trees (`cast_shadow = OFF`), `36` midground shrubs (`MultiMesh`), multi-color wildflowers (excluded from plaza `r < 8m`), and mossy boundary pillars topped with warm amber lanterns. Hero has a dark contact shadow (`alpha 0.50`) + golden locator ring (`HeroLocatorRing`).
-- **Procedural Audio:** `SfxManager` synthesizes 15 mono WAV streams (`22050 Hz`, 12-voice pool, `35ms` rate-limit debounce): `xp_plink`, `hit_pop`, `crit_sparkle`, `player_hurt`, `dash_whoosh`, `loot_common`, `loot_rare`, `loot_unique`, `gem_drop`, `level_up`, `boss_horn`, `ui_click`, `equip_snap`, `socket_chime`, `victory_fanfare`.
-
-### Responsive Mobile Support (`touch_controls.gd`, `main_game.gd`, `export_presets.cfg`)
-- **Adaptive Portrait Scaling:** `MainGame._update_responsive_scale()` increases `root.content_scale_factor` up to `1.72` on tall portrait screens so typography and touch targets remain crisp without overflowing narrow phone viewports.
-- **Screen Adaptation (`vp.x < 960` / `< 900`):** `TitleScreen` switches to a 2×2 grid + stacked start button; `HudController` compacts top bar pills, raises the skill bar above bottom touch zones, and enables multi-touch `TouchControls`; `InventoryPanel` stacks Equipped/Sockets over a 3-tab right pane (`Looted Gear`, `Skill Gems`, `Hero Stats`); `LevelUpModal` stacks 3 vertical cards; `EndScreen` clamps horizontally.
-- **Mobile Browser Shell (`export_presets.cfg`):** Web export enables `for_mobile=true` texture compression and injects `apple-mobile-web-app-capable`, `mobile-web-app-capable`, `overscroll-behavior: none`, `touch-action: none`, and anti-callout CSS.
-
-### Rework Ideas & Remaining Art Polish
-- [ ] **Art Design Reviewer Non-Blocking Micro-Polish:**
-  - [x] Toast pills (`hud_controller.gd`): set `SIZE_SHRINK_END` on toast `PanelContainer`s so short notices (`+25 Prism Dust!`) hug text width cleanly.
-  - [ ] Ground Locator Ring smoothness (`chibi_mesh_factory.gd`): bump torus radial ring count (`14 -> 24`) for a silky circle up close on Title Screen.
-- [ ] **True 3D Assets & Animations:** Swap procedural primitive heroes/bosses for exported stylized `.glb` meshes + skeletal idle/walk/attack clips (`AnimationTree`) while preserving the `WeaponMount` / `HatMount` bone attachments.
-- [ ] **Dynamic Music Track:** Layer a gentle acoustic woodland loop (morning) → warm folk rhythm (sunset) → synth-strings boss theme (twilight/bosses) via Godot WebAudio.
+### Engine & Performance Guardrails
+- Keep regular enemies as a single merged `ArrayMesh` (`cast_shadow = OFF`).
+- Keep Web Retina `scaling_3d_scale` (`0.78` desktop / `0.72` mobile), `MSAA_DISABLED`, `max_active * 0.72` web enemy cap, throttled biome sky updates (`2.5s`), 10 Hz HUD refresh throttle, and `PoESocketWidget._init()` sizing.
+- **Glyph Safety:** `Nunito.ttf` lacks Unicode arrows/triangles (`←`, `▲`, `▼`) — use ASCII (`->`, `|`, `+`, `-`) and verified `·`, `•`, `—`.
+- **Module Ownership Note:** `scripts/ui/level_up_modal.gd` was removed in `v2.0`; `scripts/systems/tutorial_director.gd` was added.
 
 ---
 
-## 9. Technical Architecture, Codebase Map & Performance Guardrails
+## 9. Development, Verification & Working Notes
 
-### Complete File & Module Map
+### Verification & Build Commands
+```bash
+"/Applications/Godot 2.app/Contents/MacOS/Godot" --headless --path /Users/normanmahendra/Documents/CardThrone --import
+"/Applications/Godot 2.app/Contents/MacOS/Godot" --headless --path /Users/normanmahendra/Documents/CardThrone --script res://tests/verify_game.gd
+./scripts/build_all.sh
+```
 
-| Layer | Files (`res://scripts/...`) | Responsibility |
-|---|---|---|
-| **Orchestration** | `main_game.gd`, `scenes/main.tscn` | GameState machine (`TITLE`, `PLAYING`, `INVENTORY`, `LEVEL_UP`, `PAUSED`, `ENDED`), responsive scaling, touch detection, `?review=1` / `?mobile=1` hooks, Web Retina scale |
-| **Static Databases** | `data/game_enums.gd`, `hero_database.gd`, `enemy_database.gd`, `gem_database.gd`, `item_database.gd` | Enums, 4 heroes, 7 critters + 3 bosses + 7 wave stages, 32 gems, 6 gear slots & 8 Uniques |
-| **Runtime Models** | `models/hero_stats.gd`, `item_instance.gd`, `gem_instance.gd` | Gear equip/salvage, contiguous socket link compiler, XP math, full stat aggregation |
-| **3D Entities** | `entities/player_controller.gd`, `enemy_entity.gd`, `projectile_entity.gd`, `area_effect_entity.gd`, `world_pickup.gd` | Hero keyboard + touch movement/dash/reactive novas, enemy/boss AI & enrages, pierce/chain/fork/homing projectiles, AoE telegraphs, loot drops & beams |
-| **Systems** | `systems/skill_executor.gd`, `wave_director.gd`, `loot_manager.gd`, `spatial_grid.gd`, `sfx_manager.gd` | Auto-cast triggers/echoes/orbits, timed waves/surges/chests/bosses, loot fountains, spatial hash & zero-alloc separation, WAV synth |
-| **Visuals** | `visuals/chibi_mesh_factory.gd`, `arena_builder.gd` | Cached merged enemy `ArrayMesh`es, dynamic hero hats/weapons, lighting/sky/fog, radial cobblestone plaza, instanced nature props |
-| **UI Screens** | `ui/ui_helper.gd`, `ui_icons.gd`, `poe_socket_widget.gd`, `touch_controls.gd`, `title_screen.gd`, `hud_controller.gd`, `inventory_panel.gd`, `level_up_modal.gd`, `end_screen.gd` | Storybook theme/fonts, runtime SVG art, full & mini PoE socket diagrams, multi-touch joystick & Dash pad, Title dock, 10 Hz HUD + 60 Hz popups, Satchel, Draft cards, Pause/Victory summary |
-| **QA & Builds** | `tests/verify_game.gd`, `scripts/build_all.sh`, `export_presets.cfg` | Headless end-to-end verification suite & 4-platform export pipeline (`Web`, `macOS`, `Windows`, `Linux`) |
-
-### Non-Negotiable WebGL / M1 Performance Guardrails
-
-When reworking systems or adding new content, preserve these hard-won frame-rate protections (`57 FPS` verified at `1280×800` WebGL):
-1. **No Unmerged Multi-Part Regular Enemies:** Always keep regular enemies as a single cached multi-surface `ArrayMesh` (`cast_shadow = OFF`) and unshaded ground shadow disc.
-2. **No Per-Frame `ProceduralSkyMaterial` Edits:** Biome sky updates are throttled (`2.5s` + color delta threshold) because changing `ProceduralSkyMaterial` forces WebGL cubemap baking stalls.
-3. **Keep `scaling_3d_scale = 0.78` + `MSAA_DISABLED` on Web Retina** (`CanvasLayer` 2D UI stays native crisp!) and **`SHADOW_ORTHOGONAL` (`1024px`, `32m`)** with reflections disabled.
-4. **Never Rebuild Heavy UI Widgets Every XP Shard:** Keep `hud_controller.gd` labels/projections throttled (`10 Hz`) and only call `rebuild_skill_bar()` on level-up or gear/gem change.
-5. **Single-Cell Staggered Separation:** `SpatialGrid.compute_separation()` checks at most 5 neighbors in the enemy's own cell every 2nd frame — keep crowd physics $O(N)$ without per-frame array allocations.
-
-### Dev, Verification & Deployment Workflow
-- **Headless Test Suite (run after any gameplay/data/UI change):**
-  ```bash
-  "/Applications/Godot 2.app/Contents/MacOS/Godot" --headless --path /Users/normanmahendra/Documents/CardThrone --import
-  "/Applications/Godot 2.app/Contents/MacOS/Godot" --headless --path /Users/normanmahendra/Documents/CardThrone --script res://tests/verify_game.gd
-  ```
-- **Build All 4 Exports (note: `builds/` is gitignored; `builds/web/.import` must stay absent):**
-  ```bash
-  ./scripts/build_all.sh
-  ```
-- **Visual Debug Flags:** Append `?review=1` in WebGL (or `--review` on Desktop) to unlock `F3` (FPS toggle), `F7` (Level-Up modal), `F8` (Seed sample Unique/Rare gear & gems), and `F9` (Victory screen). Append `?mobile=1` (or `--mobile`) on desktop to enable `TouchControls` mouse drag emulation for testing mobile play in a browser.
-
----
-
-## 10. Prioritized Rework Backlog (Editable Roadmap)
-
-### Track A — Combat Feel & Game Juice *(Highest Impact Next)*
-- [ ] Add optional **Aim Mode Toggle (`Auto / Cursor`)** so projectiles and *Honey Slam* can be aimed tactically around elites/bosses.
-- [ ] Add **Lightning Shock** & **Physical Bleed / Crush** status ailments alongside Fire Burn and Cold Chill.
-- [ ] Add **Boss Health Bar** + phase indicator banner directly under the top-center timer plaque during boss fights.
-- [ ] Add **Hit-stop / Impact Particles** on crit kills, Honey Slam impact, and boss defeats.
-
-### Track B — Meta-Progression & Replayability
-- [ ] Add `SaveSystem` (`user://save.json`, IndexedDB-backed in Godot Web!) tracking unlocked heroes, total runs, best survival times, defeated boss badges, and discovered **Unique Codex / Gemopedia**.
-- [ ] Add permanent **Prism Sanctuary Upgrades** bought with earned Victory Shards (`+Starting Dust`, `+1 Reroll Token`, `+Starter Socket Link`).
-- [ ] Add **Run Presets:** `20-Min Classic`, `10-Min Blitz`, and `Endless Twilight` toggle after Boss 3.
-
-### Track C — Buildcraft, Crafting & UI QoL
-- [ ] Add **Hero-Specific Innate Passives** so hero choice shapes end-game builds beyond minute 5.
-- [ ] Add **Live Linked DPS Tooltip** inside `InventoryPanel` showing computed DPS + cooldown + extra proj/chain stats per Active Skill group.
-- [ ] Add **Auto-Salvage Filter** (`Auto-Dust Common`) + **Affix Reforge (`20 Dust`)** in Prism Forge.
-- [ ] Add **Level-Up Reroll / Banish** tokens + Lv.5/10/15/20 **Golden Capstone** enchantment drafts.
-
-### Track D — World, Enemies & Presentation
-- [ ] Build **Stage 2 (*Honeycomb Hollow*)** & **Stage 3 (*Starlit Observatory*)** with distinct arena landmarks and hazards.
-- [ ] Add **Random Map Shrines** (Healing Spring, Frenzy Totem, Prism Anvil for free link/recolor, Challenge Bell for bonus elite loot).
-- [ ] Add **Adaptive Background Music** + minor UI micro-polish (shrunk toast pill width + smoother hero locator ring).
-
----
-
-### Working Design Notes & Change Log
-
-> *Use this scratchpad for playtest observations, balance tweaks, or upcoming rework specs.*
-
-- **Playtest Note (`2026-11-24`):**
-  - WebGL M1 performance & Storybook UI v2 shipped live (`57 FPS` at `1280×800`, Art Design Reviewer approved).
-  - Mobile support shipped (`TouchControls` multi-touch floating joystick + circular `DASH` pad, responsive portrait/landscape UI across all 5 screens, mobile web CSS/compression — verified live at `390×844` @ `51 FPS` and `844×390` @ `66 FPS` with zero desktop regression). Next focus candidates: `[your notes here]`.
+### Change Log
+- **`2026-11-24 (v2.0 Revamp):** Replaced XP/leveling, `LevelUpModal`, Passive gems, Heart/Dust ground drops, and Prism Forge crafting with pure behavioral Item Effects & Tradeoffs, strictly 3 ground loot types (`Items`, `Main Abilities`, `Modifier Abilities`) with fixed sockets/links, a 3-beat PoE-style playable Tutorial (`TutorialDirector`), and streamlined icon-first HUD/Title/Satchel (`Tradeoff Comparison Card`). Verified all checks green via headless `tests/verify_game.gd` and rebuilt Web/macOS/Windows/Linux targets.

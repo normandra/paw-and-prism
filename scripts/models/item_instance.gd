@@ -6,11 +6,9 @@ var uid: int = 0
 var item_name: String = "Starter Gear"
 var equip_slot: int = GameEnums.EquipSlot.WEAPON
 var rarity: int = GameEnums.Rarity.COMMON
-var item_level: int = 1
 var visual_style: String = "acorn_wand"
-var affixes: Array[Dictionary] = [] # Each: {"stat": int, "value": float}
+var effects: Array[String] = [] # Behavioral global effect IDs
 var unique_id: String = ""
-var unique_effect_desc: String = ""
 
 var socket_colors: Array[int] = []
 var links: Array[bool] = [] # size = max(0, socket_colors.size() - 1)
@@ -97,76 +95,12 @@ func get_link_groups() -> Array:
 		groups.append(g)
 	return groups
 
-func recolor_sockets(rng: RandomNumberGenerator) -> void:
-	for i in range(socket_colors.size()):
-		var roll: float = rng.randf()
-		if roll < 0.08:
-			socket_colors[i] = GameEnums.GemColor.WHITE
-		elif roll < 0.39:
-			socket_colors[i] = GameEnums.GemColor.RED
-		elif roll < 0.70:
-			socket_colors[i] = GameEnums.GemColor.GREEN
-		else:
-			socket_colors[i] = GameEnums.GemColor.BLUE
-
-func add_link(rng: RandomNumberGenerator) -> bool:
-	var unlinked: Array[int] = []
-	for i in range(links.size()):
-		if not links[i]:
-			unlinked.append(i)
-	if unlinked.is_empty():
-		return false
-	var chosen: int = unlinked[rng.randi() % unlinked.size()]
-	links[chosen] = true
-	return true
-
-func are_all_linked() -> bool:
-	if socket_colors.size() <= 1:
-		return true
-	for l in links:
-		if not l:
-			return false
-	return true
-
-func add_socket(rng: RandomNumberGenerator) -> bool:
-	if socket_colors.size() >= get_max_sockets():
-		return false
-	var c_roll: float = rng.randf()
-	var new_color: int = GameEnums.GemColor.RED
-	if c_roll < 0.07:
-		new_color = GameEnums.GemColor.WHITE
-	elif c_roll < 0.38:
-		new_color = GameEnums.GemColor.RED
-	elif c_roll < 0.69:
-		new_color = GameEnums.GemColor.GREEN
-	else:
-		new_color = GameEnums.GemColor.BLUE
-	socket_colors.append(new_color)
-	socketed_gems.append(null)
-	if socket_colors.size() > 1:
-		links.append(rng.randf() < 0.45)
-	return true
-
-func get_stat_totals() -> Dictionary:
-	var totals: Dictionary = {}
-	for aff in affixes:
-		var st: int = int(aff.get("stat", 0))
-		var val: float = float(aff.get("value", 0.0))
-		totals[st] = float(totals.get(st, 0.0)) + val
-	return totals
-
-func get_salvage_dust() -> int:
-	var base: int = 4
-	match rarity:
-		GameEnums.Rarity.COMMON:
-			base = 4
-		GameEnums.Rarity.MAGIC:
-			base = 8
-		GameEnums.Rarity.RARE:
-			base = 16
-		GameEnums.Rarity.UNIQUE:
-			base = 35
-	return base + socket_colors.size() * 2 + item_level
+func get_effect_tags() -> Array[String]:
+	var out: Array[String] = []
+	for eid in effects:
+		var edef: Dictionary = ItemDatabase.get_effect_def(eid)
+		out.append(String(edef.get("tag", eid)))
+	return out
 
 func get_socket_summary_text() -> String:
 	var s: String = ""
@@ -180,10 +114,8 @@ func get_socket_summary_text() -> String:
 
 func get_tooltip_lines() -> Array[String]:
 	var lines: Array[String] = []
-	lines.append("%s [iLv.%d %s]" % [item_name, item_level, GameEnums.slot_label(equip_slot)])
-	lines.append("Rarity: %s | Sockets: %s" % [GameEnums.rarity_label(rarity), get_socket_summary_text()])
-	for aff in affixes:
-		lines.append("  " + GameEnums.format_stat(int(aff["stat"]), float(aff["value"])))
-	if not unique_effect_desc.is_empty():
-		lines.append("Unique: " + unique_effect_desc)
+	lines.append("%s [%s]" % [item_name, GameEnums.slot_label(equip_slot)])
+	lines.append("%s | %s" % [GameEnums.rarity_label(rarity), get_socket_summary_text()])
+	for tag in get_effect_tags():
+		lines.append("• " + tag)
 	return lines

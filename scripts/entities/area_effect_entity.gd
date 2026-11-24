@@ -21,6 +21,7 @@ var is_cold: bool = false
 var leech_pct: float = 0.0
 var apply_slow: bool = false
 var apply_burn: bool = false
+var pull_inward: bool = false
 
 var _timer: float = 0.0
 var _duration: float = 0.4
@@ -177,16 +178,24 @@ func step(delta: float, grid: SpatialGrid, player_pos: Vector3) -> bool:
 	return true
 
 func _apply_player_aoe(grid: SpatialGrid, player_pos: Vector3) -> void:
-	var targets: Array = grid.query_radius(global_position, radius)
+	var center_pos: Vector3 = global_position if is_inside_tree() else position
+	var targets: Array = grid.query_radius(center_pos, radius)
 	for e in targets:
 		if not is_instance_valid(e) or e.get("is_dead") == true:
 			continue
 		var is_crit: bool = randf() * 100.0 < crit_chance
 		var dmg: float = damage * (crit_mult * 0.01 if is_crit else 1.0)
-		var kb: Vector3 = e.global_position - player_pos
-		kb.y = 0.0
-		kb = kb.normalized() * 3.8 if kb.length_squared() > 0.01 else Vector3.ZERO
-		if is_fire and e.has_method("apply_burn"):
+		var kb: Vector3 = Vector3.ZERO
+		if pull_inward:
+			var pull: Vector3 = center_pos - e.global_position
+			pull.y = 0.0
+			if pull.length_squared() > 0.04:
+				kb = pull.normalized() * minf(5.0, pull.length() * 1.4)
+		else:
+			kb = e.global_position - player_pos
+			kb.y = 0.0
+			kb = kb.normalized() * 3.8 if kb.length_squared() > 0.01 else Vector3.ZERO
+		if (is_fire or apply_burn) and e.has_method("apply_burn"):
 			e.apply_burn(dmg * 0.28, 3.0)
 		if (is_cold or apply_slow) and e.has_method("apply_chill"):
 			e.apply_chill(2.5)

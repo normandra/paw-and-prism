@@ -315,12 +315,14 @@ static func update_hero_visual_gear(rig: Node3D, weapon_style: String, helmet_st
 	var weapon_mount: Node3D = rig.get_node_or_null("BodyPivot/WeaponMount")
 	if weapon_mount != null:
 		for ch in weapon_mount.get_children():
+			weapon_mount.remove_child(ch)
 			ch.queue_free()
 		_build_chibi_weapon(weapon_mount, weapon_style)
 
 	var hat_mount: Node3D = rig.get_node_or_null("BodyPivot/HeadPivot/HatMount")
 	if hat_mount != null:
 		for ch in hat_mount.get_children():
+			hat_mount.remove_child(ch)
 			ch.queue_free()
 		_build_chibi_hat(hat_mount, helmet_style)
 
@@ -517,28 +519,24 @@ static func build_loot_mesh(kind: String, color: Color, rarity: int = 0) -> Node
 	root.add_child(spin_pivot)
 
 	match kind:
-		"xp":
-			var m: MeshInstance3D = _make_part(_get_prism(Vector3(0.28, 0.40, 0.28)), get_unshaded_mat(color), Vector3(0.0, 0.28, 0.0), Vector3.ZERO, Vector3.ONE, false)
-			spin_pivot.add_child(m)
-		"heart":
-			var mat_h: StandardMaterial3D = get_toon_mat(Color(1.0, 0.28, 0.46), 0.7, 0.3)
-			spin_pivot.add_child(_make_part(_get_sphere(0.26, 10, 5), mat_h, Vector3(0.0, 0.32, 0.0), Vector3.ZERO, Vector3(1.15, 0.95, 0.8), false))
-		"dust":
-			var mat_d: StandardMaterial3D = get_unshaded_mat(Color(0.55, 0.94, 1.0))
-			spin_pivot.add_child(_make_part(_get_prism(Vector3(0.32, 0.42, 0.32)), mat_d, Vector3(0.0, 0.32, 0.0), Vector3(22.0, 0.0, 18.0), Vector3.ONE, false))
-		"gem":
-			var mat_g: StandardMaterial3D = get_toon_mat(color, 1.05, 0.15)
-			spin_pivot.add_child(_make_part(_get_prism(Vector3(0.46, 0.56, 0.46)), mat_g, Vector3(0.0, 0.48, 0.0), Vector3.ZERO, Vector3.ONE, false))
-			spin_pivot.add_child(_make_part(_get_prism(Vector3(0.46, 0.56, 0.46)), mat_g, Vector3(0.0, 0.16, 0.0), Vector3(180.0, 0.0, 0.0), Vector3.ONE, false))
-			_add_loot_beam(root, color, 4.8)
+		"main_gem":
+			var mat_m: StandardMaterial3D = get_toon_mat(color, 1.15, 0.15)
+			spin_pivot.add_child(_make_part(_get_prism(Vector3(0.48, 0.58, 0.48)), mat_m, Vector3(0.0, 0.50, 0.0), Vector3.ZERO, Vector3.ONE, false))
+			spin_pivot.add_child(_make_part(_get_prism(Vector3(0.48, 0.58, 0.48)), mat_m, Vector3(0.0, 0.16, 0.0), Vector3(180.0, 0.0, 0.0), Vector3.ONE, false))
+			_add_loot_beam(root, color, 5.2)
+		"mod_gem":
+			var mat_mod: StandardMaterial3D = get_toon_mat(color, 0.95, 0.2)
+			var mat_rim: StandardMaterial3D = get_toon_mat(Color(1.0, 0.85, 0.32), 0.7)
+			spin_pivot.add_child(_make_part(_get_sphere(0.32), mat_mod, Vector3(0.0, 0.44, 0.0), Vector3.ZERO, Vector3.ONE, false))
+			spin_pivot.add_child(_make_part(_get_torus(0.34, 0.42), mat_rim, Vector3(0.0, 0.44, 0.0), Vector3(28.0, 0.0, 14.0), Vector3.ONE, false))
+			_add_loot_beam(root, color, 4.4)
 		"item":
 			var r_col: Color = GameEnums.rarity_color(rarity)
-			var mat_i: StandardMaterial3D = get_toon_mat(r_col, 0.75 if rarity >= GameEnums.Rarity.RARE else 0.35, 0.3)
-			spin_pivot.add_child(_make_part(_get_box(Vector3(0.46, 0.34, 0.34)), mat_i, Vector3(0.0, 0.36, 0.0), Vector3(10.0, 20.0, 0.0), Vector3.ONE, false))
-			spin_pivot.add_child(_make_part(_get_box(Vector3(0.50, 0.10, 0.38)), get_toon_mat(Color(1.0, 0.86, 0.35), 0.5), Vector3(0.0, 0.48, 0.0), Vector3(10.0, 20.0, 0.0), Vector3.ONE, false))
-			if rarity >= GameEnums.Rarity.MAGIC:
-				var beam_h: float = 3.5 + float(rarity) * 2.4
-				_add_loot_beam(root, r_col, beam_h)
+			var mat_i: StandardMaterial3D = get_toon_mat(r_col, 0.75 if rarity >= GameEnums.Rarity.RARE else 0.40, 0.3)
+			spin_pivot.add_child(_make_part(_get_box(Vector3(0.48, 0.34, 0.34)), mat_i, Vector3(0.0, 0.36, 0.0), Vector3(10.0, 20.0, 0.0), Vector3.ONE, false))
+			spin_pivot.add_child(_make_part(_get_box(Vector3(0.52, 0.10, 0.38)), get_toon_mat(Color(1.0, 0.86, 0.35), 0.5), Vector3(0.0, 0.48, 0.0), Vector3(10.0, 20.0, 0.0), Vector3.ONE, false))
+			var beam_h: float = 2.8 if rarity == GameEnums.Rarity.COMMON else (3.6 + float(rarity) * 2.2)
+			_add_loot_beam(root, r_col, beam_h)
 		"chest":
 			var chest_mat: StandardMaterial3D = get_toon_mat(Color(0.68, 0.40, 0.18))
 			var gold_mat: StandardMaterial3D = get_toon_mat(Color(1.0, 0.82, 0.24), 0.75)

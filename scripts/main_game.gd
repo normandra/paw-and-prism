@@ -5,7 +5,6 @@ enum GameState {
 	TITLE,
 	PLAYING,
 	INVENTORY,
-	LEVEL_UP,
 	PAUSED,
 	ENDED,
 }
@@ -21,19 +20,19 @@ var player: PlayerController = null
 var skill_executor: SkillExecutor = null
 var wave_director: WaveDirector = null
 var loot_manager: LootManager = null
+var tutorial_director: TutorialDirector = null
 var sfx: SfxManager = null
 
 var ui_layer: CanvasLayer = null
 var title_screen: TitleScreen = null
 var hud: HudController = null
 var inventory_panel: InventoryPanel = null
-var level_up_modal: LevelUpModal = null
 var end_screen: EndScreen = null
 
 var _showcase_rig: Node3D = null
 var _showcase_time: float = 0.0
 var _selected_hero_id: String = "shiba"
-var _pending_level_ups: int = 0
+var _is_tutorial: bool = false
 var _shake_trauma: float = 0.0
 var _rng: RandomNumberGenerator = RandomNumberGenerator.new()
 var _review_mode: bool = false
@@ -100,7 +99,19 @@ func _ready() -> void:
 		if skill_executor != null:
 			skill_executor.trigger_reactive_nova(kind, pos, dmg, radius)
 	)
-	player.dashed.connect(func() -> void: sfx.play("dash_whoosh"))
+	player.dashed.connect(func() -> void:
+		sfx.play("dash_whoosh")
+		if skill_executor != null and player != null:
+			skill_executor.trigger_all_skills_from_dash(player.global_position)
+	)
+	player.static_spark_requested.connect(func(pos: Vector3) -> void:
+		if skill_executor != null:
+			skill_executor.trigger_static_spark(pos)
+	)
+	player.orbit_shield_requested.connect(func() -> void:
+		if skill_executor != null:
+			skill_executor.activate_orbit_shield()
+	)
 	world_root.add_child(player)
 
 	skill_executor = SkillExecutor.new()
@@ -111,15 +122,10 @@ func _ready() -> void:
 
 	loot_manager = LootManager.new()
 	loot_manager.name = "LootManager"
-	loot_manager.xp_collected.connect(_on_xp_collected)
-	loot_manager.heart_collected.connect(func(amt: float) -> void:
+	loot_manager.hero_heal_requested.connect(func(amt: float) -> void:
 		player.heal(amt)
 		hud.spawn_damage_popup(player.global_position, amt, false, false, false, true)
 		sfx.play("loot_common")
-	)
-	loot_manager.dust_collected.connect(func(amt: int) -> void:
-		hud.push_toast("+%d Prism Dust" % amt, Color(0.55, 0.92, 1.0))
-		sfx.play("xp_plink")
 	)
 	loot_manager.item_looted.connect(_on_item_looted)
 	loot_manager.gem_looted.connect(_on_gem_looted)
@@ -135,7 +141,7 @@ func _ready() -> void:
 	wave_director.boss_spawned.connect(func(b: EnemyEntity) -> void:
 		sfx.play("boss_horn")
 		_shake_trauma = 0.55
-		hud.push_toast("BOSS APPROACHES: %s!" % b.enemy_name, Color(1.0, 0.36, 0.32))
+		hud.push_toast("BOSS: %s" % b.enemy_name, Color(1.0, 0.36, 0.32))
 	)
 	wave_director.boss_defeated.connect(func(b_idx: int, b_name: String) -> void:
 		sfx.play("loot_unique")
@@ -146,6 +152,23 @@ func _ready() -> void:
 	wave_director.wave_banner.connect(func(t: String, c: Color) -> void: hud.show_banner(t, c))
 	wave_director.all_bosses_cleared.connect(_on_victory)
 	world_root.add_child(wave_director)
+
+	tutorial_director = TutorialDirector.new()
+	tutorial_director.name = "TutorialDirector"
+	tutorial_director.objective_changed.connect(func(_step_i: int, _tot: int, txt: String, hl_bag: bool) -> void:
+		if hud != null:
+			hud.set_tutorial_objective(true, txt, hl_bag)
+	)
+	tutorial_director.satchel_hint_changed.connect(func(hint: String) -> void:
+		if inventory_panel != null:
+			inventory_panel.set_tutorial_hint(hint)
+	)
+	tutorial_director.banner_requested.connect(func(t: String, c: Color) -> void:
+		if hud != null:
+			hud.show_banner(t, c)
+	)
+	tutorial_director.tutorial_completed.connect(_on_tutorial_completed)
+	add_child(tutorial_director)
 
 	_build_ui()
 	get_viewport().size_changed.connect(_update_responsive_scale)
@@ -179,6 +202,7 @@ func _build_ui() -> void:
 	title_screen = TitleScreen.new()
 	title_screen.hero_selected.connect(_on_title_hero_selected)
 	title_screen.start_requested.connect(start_new_run)
+	title_screen.tutorial_requested.connect(start_tutorial)
 	ui_layer.add_child(title_screen)
 	title_screen.set_mobile_mode(_is_mobile_touch)
 
@@ -200,21 +224,25 @@ func _build_ui() -> void:
 	inventory_panel.sfx_requested.connect(func(sname: String) -> void: sfx.play(sname))
 	ui_layer.add_child(inventory_panel)
 
-	level_up_modal = LevelUpModal.new()
-	level_up_modal.option_chosen.connect(_on_level_up_chosen)
-	ui_layer.add_child(level_up_modal)
-	level_up_modal.set_mobile_mode(_is_mobile_touch)
-
 	end_screen = EndScreen.new()
 	end_screen.resume_requested.connect(_resume_from_pause)
-	end_screen.play_again_requested.connect(func() -> void: start_new_run(_selected_hero_id))
+	end_screen.play_again_requested.connect(func() -> void:
+		if _is_tutorial:
+			start_tutorial(_selected_hero_id)
+		else:
+			start_new_run(_selected_hero_id)
+	)
+	end_screen.tutorial_start_run_requested.connect(func() -> void: start_new_run(_selected_hero_id))
 	end_screen.title_menu_requested.connect(_enter_title_state)
 	ui_layer.add_child(end_screen)
 
 func _enter_title_state() -> void:
 	state = GameState.TITLE
+	_is_tutorial = false
 	get_tree().paused = false
 	_clear_touch_controls()
+	if tutorial_director != null:
+		tutorial_director.reset()
 	if wave_director != null:
 		wave_director.reset()
 	if skill_executor != null:
@@ -224,8 +252,9 @@ func _enter_title_state() -> void:
 	player.visible = false
 	title_screen.visible = true
 	hud.visible = false
+	hud.set_tutorial_objective(false)
 	inventory_panel.visible = false
-	level_up_modal.visible = false
+	inventory_panel.set_tutorial_hint("")
 	end_screen.visible = false
 	arena_builder.update_biome_lighting(0.0, 10.0)
 	_on_title_hero_selected(_selected_hero_id)
@@ -244,15 +273,16 @@ func _on_title_hero_selected(hero_id: String) -> void:
 
 func start_new_run(hero_id: String) -> void:
 	_selected_hero_id = hero_id
+	_is_tutorial = false
 	if _showcase_rig != null:
 		_showcase_rig.queue_free()
 		_showcase_rig = null
 
 	get_tree().paused = false
 	state = GameState.PLAYING
-	_pending_level_ups = 0
 	_shake_trauma = 0.0
 
+	tutorial_director.reset()
 	stats = HeroStats.new(hero_id)
 	player.visible = true
 	player.global_position = Vector3.ZERO
@@ -262,7 +292,12 @@ func start_new_run(hero_id: String) -> void:
 	loot_manager.setup(world_root, stats)
 	wave_director.setup(
 		world_root,
-		func(e: EnemyEntity) -> void: loot_manager.drop_for_enemy(e, wave_director.elapsed_time),
+		func(e: EnemyEntity) -> void:
+			if player != null:
+				player.notify_kill()
+			if skill_executor != null:
+				skill_executor.trigger_kill_effects(e.global_position, e.was_chilled())
+			loot_manager.drop_for_enemy(e, wave_director.elapsed_time),
 		func(pos: Vector3, dir: Vector3, spd: float, dmg: float, r: float, col: Color) -> void:
 			skill_executor.spawn_enemy_projectile(pos, dir, spd, dmg, r, col, player),
 		func(pos: Vector3, r: float, windup: float, dmg: float, col: Color, _is_ring: bool) -> void:
@@ -272,7 +307,55 @@ func start_new_run(hero_id: String) -> void:
 
 	title_screen.visible = false
 	inventory_panel.visible = false
-	level_up_modal.visible = false
+	inventory_panel.set_tutorial_hint("")
+	end_screen.visible = false
+	hud.visible = true
+	hud.reset_hud(_selected_hero_id)
+	hud.set_tutorial_objective(false)
+	hud.set_fps_visible(_review_mode)
+	hud.set_mobile_mode(_is_mobile_touch, _allow_mouse_touch)
+	hud.reset_touch_input()
+	hud.rebuild_skill_bar(stats)
+	hud.show_banner("Survive 20 Minutes & Defeat All 3 Bosses!", Color(1.0, 0.90, 0.42))
+	sfx.play("socket_chime")
+
+func start_tutorial(hero_id: String) -> void:
+	_selected_hero_id = hero_id
+	_is_tutorial = true
+	if _showcase_rig != null:
+		_showcase_rig.queue_free()
+		_showcase_rig = null
+
+	get_tree().paused = false
+	state = GameState.PLAYING
+	_shake_trauma = 0.0
+
+	stats = HeroStats.new(hero_id)
+	stats.init_bare_for_tutorial(hero_id)
+	player.visible = true
+	player.global_position = Vector3.ZERO
+	player.setup(stats)
+
+	skill_executor.setup(world_root, spatial_grid, stats)
+	loot_manager.setup(world_root, stats)
+	wave_director.setup(
+		world_root,
+		func(e: EnemyEntity) -> void:
+			if player != null:
+				player.notify_kill()
+			if skill_executor != null:
+				skill_executor.trigger_kill_effects(e.global_position, e.was_chilled())
+			if tutorial_director != null:
+				tutorial_director.notify_enemy_killed(e),
+		func(pos: Vector3, dir: Vector3, spd: float, dmg: float, r: float, col: Color) -> void:
+			skill_executor.spawn_enemy_projectile(pos, dir, spd, dmg, r, col, player),
+		func(pos: Vector3, r: float, windup: float, dmg: float, col: Color, _is_ring: bool) -> void:
+			skill_executor.spawn_enemy_telegraph(pos, r, windup, dmg, col, player)
+	)
+	spatial_grid.rebuild([])
+
+	title_screen.visible = false
+	inventory_panel.visible = false
 	end_screen.visible = false
 	hud.visible = true
 	hud.reset_hud(_selected_hero_id)
@@ -280,8 +363,8 @@ func start_new_run(hero_id: String) -> void:
 	hud.set_mobile_mode(_is_mobile_touch, _allow_mouse_touch)
 	hud.reset_touch_input()
 	hud.rebuild_skill_bar(stats)
-	hud.show_banner("Survive 20 Minutes & Defeat All 3 Bosses!", Color(1.0, 0.90, 0.42))
-	sfx.play("level_up")
+	tutorial_director.start(stats, loot_manager, wave_director, player)
+	sfx.play("socket_chime")
 
 func _input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed and not event.echo:
@@ -294,11 +377,6 @@ func _input(event: InputEvent) -> void:
 		if _review_mode and stats != null:
 			if kc == KEY_F8:
 				_seed_review_loot()
-				get_viewport().set_input_as_handled()
-				return
-			elif kc == KEY_F7 and state == GameState.PLAYING:
-				_pending_level_ups += 1
-				_try_show_next_level_up()
 				get_viewport().set_input_as_handled()
 				return
 			elif kc == KEY_F9:
@@ -372,12 +450,13 @@ func _on_gear_or_gems_changed() -> void:
 		player.refresh_equipment_visuals()
 	if hud != null and stats != null:
 		hud.rebuild_skill_bar(stats)
+	if _is_tutorial and tutorial_director != null:
+		tutorial_director.notify_gear_changed()
 
 func _process(delta: float) -> void:
 	if state == GameState.TITLE:
 		_showcase_time += delta
 		if _showcase_rig != null:
-			# Always face toward the camera with a cheerful gentle sway
 			_showcase_rig.rotation.y = sin(_showcase_time * 0.9) * 0.48
 			_showcase_rig.position.y = absf(sin(_showcase_time * 3.0)) * 0.12
 		if camera != null:
@@ -391,20 +470,20 @@ func _process(delta: float) -> void:
 	if state != GameState.PLAYING or get_tree().paused:
 		return
 
-	# Step simulation
 	player.set_touch_move(hud.get_touch_move_vector())
 	player.step(delta)
-	wave_director.step(delta, player.global_position, spatial_grid, loot_manager)
+	if _is_tutorial:
+		wave_director.step_enemies_only(delta, player.global_position, spatial_grid)
+	else:
+		wave_director.step(delta, player.global_position, spatial_grid, loot_manager)
 	skill_executor.step(delta, player.global_position, player)
 	loot_manager.step(delta, player.global_position, wave_director.elapsed_time)
 
-	# Enemy contact damage check via SpatialGrid
 	var touching: Array = spatial_grid.query_radius(player.global_position, 0.55)
 	if not touching.is_empty():
 		var e: EnemyEntity = touching[0]
 		player.take_damage(e.contact_damage)
 
-	# Lighting & Camera follow
 	arena_builder.update_biome_lighting(wave_director.elapsed_time, delta)
 	_update_camera(delta)
 	hud.update_hud(delta, stats, player, wave_director, skill_executor, loot_manager, camera)
@@ -437,98 +516,52 @@ func _on_player_hurt(dmg: float, _hp_after: float) -> void:
 	if hud != null:
 		hud.spawn_damage_popup(player.global_position, dmg, false, false, false, false)
 
-func _on_xp_collected(amount: float) -> void:
-	sfx.play("xp_plink", 0.14, 55)
-	var res: Dictionary = stats.add_hero_xp(amount)
-	var gained: int = int(res.get("levels", 0))
-	var gems_leveled: Array = res.get("gems_leveled", [])
-	for gl in gems_leveled:
-		var g_inst: GemInstance = gl
-		hud.push_toast(
-			"%s Lv.%d!" % [g_inst.get_gem_name(), g_inst.level],
-			GameEnums.gem_color_value(g_inst.get_gem_color()),
-			UiIcons.get_gem_icon(g_inst.get_gem_type(), g_inst.get_gem_color())
-		)
-	if gained > 0 or not gems_leveled.is_empty():
-		hud.rebuild_skill_bar(stats)
-	if gained > 0:
-		_pending_level_ups += gained
-		_try_show_next_level_up()
-
-func _try_show_next_level_up() -> void:
-	if _pending_level_ups <= 0 or state != GameState.PLAYING:
-		return
-	_clear_touch_controls()
-	_pending_level_ups -= 1
-	state = GameState.LEVEL_UP
-	get_tree().paused = true
-	sfx.play("level_up")
-	level_up_modal.open_for_level(stats.hero_level, stats)
-
-func _on_level_up_chosen(opt: Dictionary) -> void:
-	var kind: String = String(opt.get("kind", "stat"))
-	match kind:
-		"stat":
-			var st: int = int(opt["stat"])
-			var val: float = float(opt["val"])
-			stats.add_level_bonus(st, val)
-			if st == GameEnums.StatType.MAX_HP:
-				player.heal(val)
-		"gem_xp":
-			stats.grant_xp_to_equipped_gems(float(opt["val"]))
-			hud.push_toast("All Equipped Gems +140 XP!", Color(0.75, 0.65, 1.0))
-		"dust_pack":
-			stats.prism_dust += int(opt["val"])
-			hud.push_toast("+%d Prism Dust!" % int(opt["val"]), Color(0.45, 0.94, 1.0))
-		"free_gem":
-			var g: GemInstance = GemInstance.new(GemDatabase.roll_random_gem_id(_rng), 1)
-			if stats.can_add_gem_to_pouch():
-				stats.gem_pouch.append(g)
-				_on_gem_looted(g)
-
-	hud.rebuild_skill_bar(stats)
-	sfx.play("socket_chime")
-
-	if _pending_level_ups > 0:
-		state = GameState.PLAYING
-		_try_show_next_level_up()
-	else:
-		state = GameState.PLAYING
-		get_tree().paused = false
-
 func _on_item_looted(item: ItemInstance) -> void:
 	hud.add_unread_loot()
 	var col: Color = GameEnums.rarity_color(item.rarity)
 	hud.push_toast("[%s] %s (%s)" % [GameEnums.rarity_label(item.rarity), item.item_name, item.get_socket_summary_text()], col, UiIcons.get_slot_icon(item.equip_slot))
 	if item.rarity >= GameEnums.Rarity.UNIQUE:
 		sfx.play("loot_unique")
-		hud.show_banner("UNIQUE DROP: %s!" % item.item_name, col)
+		hud.show_banner("UNIQUE: %s!" % item.item_name, col)
 	elif item.rarity >= GameEnums.Rarity.RARE:
 		sfx.play("loot_rare")
 	else:
 		sfx.play("loot_common")
+	if _is_tutorial and tutorial_director != null:
+		tutorial_director.notify_item_looted(item)
 
 func _on_gem_looted(gem: GemInstance) -> void:
 	hud.add_unread_loot()
 	var col: Color = GameEnums.gem_color_value(gem.get_gem_color())
-	var gtex: Texture2D = UiIcons.get_skill_icon(gem.gem_id) if gem.get_gem_type() == GameEnums.GemType.ACTIVE else UiIcons.get_gem_icon(gem.get_gem_type(), gem.get_gem_color())
-	hud.push_toast("[%s GEM] %s Lv.%d" % [GameEnums.gem_type_label(gem.get_gem_type()), gem.get_gem_name(), gem.level], col, gtex)
+	var gtype: int = gem.get_gem_type()
+	var gtex: Texture2D = UiIcons.get_skill_icon(gem.gem_id) if gtype == GameEnums.GemType.MAIN else UiIcons.get_gem_icon(GameEnums.GemType.MODIFIER, gem.get_gem_color())
+	hud.push_toast("[%s] %s" % [GameEnums.gem_type_label(gtype), gem.get_gem_name()], col, gtex)
 	sfx.play("gem_drop")
+	if _is_tutorial and tutorial_director != null:
+		tutorial_director.notify_gem_looted(gem)
 
 func _seed_review_loot() -> void:
 	if stats == null:
 		return
 	if stats.item_bag.is_empty():
-		stats.item_bag.append(ItemDatabase.create_unique_item("unique_acorn_scepter", 10))
-		stats.item_bag.append(ItemDatabase.generate_item(8, GameEnums.Rarity.RARE, 0.0, GameEnums.EquipSlot.HELMET, _rng))
-		stats.item_bag.append(ItemDatabase.generate_item(6, GameEnums.Rarity.MAGIC, 0.0, GameEnums.EquipSlot.RING, _rng))
+		stats.item_bag.append(ItemDatabase.create_unique_item("unique_acorn_scepter"))
+		stats.item_bag.append(ItemDatabase.generate_item(GameEnums.Rarity.RARE, false, GameEnums.EquipSlot.HELMET, _rng))
+		stats.item_bag.append(ItemDatabase.generate_item(GameEnums.Rarity.MAGIC, false, GameEnums.EquipSlot.RING, _rng))
 	if stats.gem_pouch.is_empty():
-		stats.gem_pouch.append(GemInstance.new("petal_cyclone", 2))
-		stats.gem_pouch.append(GemInstance.new("sup_gmp", 2))
-		stats.gem_pouch.append(GemInstance.new("pas_prism_mastery", 1))
-	stats.prism_dust = maxi(stats.prism_dust, 65)
+		stats.gem_pouch.append(GemInstance.new("petal_cyclone"))
+		stats.gem_pouch.append(GemInstance.new("mod_multishot"))
+		stats.gem_pouch.append(GemInstance.new("mod_chain"))
 	if inventory_panel != null and inventory_panel.visible:
 		inventory_panel.refresh()
+
+func _on_tutorial_completed() -> void:
+	if state == GameState.ENDED:
+		return
+	_clear_touch_controls()
+	state = GameState.ENDED
+	get_tree().paused = true
+	sfx.play("victory_fanfare")
+	end_screen.show_tutorial_complete(stats, wave_director)
 
 func _on_player_died() -> void:
 	if state == GameState.ENDED:

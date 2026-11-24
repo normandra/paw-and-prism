@@ -17,9 +17,8 @@ enum EquipSlot {
 }
 
 enum GemType {
-	ACTIVE,
-	SUPPORT,
-	PASSIVE,
+	MAIN,
+	MODIFIER,
 }
 
 enum GemColor {
@@ -41,27 +40,6 @@ enum SkillTag {
 	LIGHTNING,
 	PHYSICAL,
 	MINION,
-	AURA,
-}
-
-enum StatType {
-	MAX_HP,
-	ARMOR,
-	HP_REGEN,
-	MOVE_SPEED_PCT,
-	PICKUP_RADIUS_PCT,
-	DAMAGE_PCT,
-	FLAT_DAMAGE,
-	CAST_SPEED_PCT,
-	CRIT_CHANCE,
-	CRIT_MULT,
-	AREA_PCT,
-	PROJ_SPEED_PCT,
-	EXTRA_PROJ,
-	LIFE_ON_HIT,
-	XP_GAIN_PCT,
-	MAGIC_FIND_PCT,
-	DMG_REDUCTION_PCT,
 }
 
 static func rarity_color(rarity: int) -> Color:
@@ -126,13 +104,11 @@ static func gem_color_letter(gcolor: int) -> String:
 
 static func gem_type_label(gtype: int) -> String:
 	match gtype:
-		GemType.ACTIVE:
-			return "ACTIVE"
-		GemType.SUPPORT:
-			return "SUPPORT"
-		GemType.PASSIVE:
-			return "PASSIVE"
-	return "GEM"
+		GemType.MAIN:
+			return "MAIN"
+		GemType.MODIFIER:
+			return "MOD"
+	return "ABILITY"
 
 static func slot_label(slot: int) -> String:
 	match slot:
@@ -163,7 +139,7 @@ static func slot_max_sockets(slot: int) -> int:
 static func skill_tag_label(tag: int) -> String:
 	match tag:
 		SkillTag.PROJECTILE:
-			return "Projectile"
+			return "Proj"
 		SkillTag.AOE:
 			return "AoE"
 		SkillTag.MELEE:
@@ -184,61 +160,4 @@ static func skill_tag_label(tag: int) -> String:
 			return "Physical"
 		SkillTag.MINION:
 			return "Minion"
-		SkillTag.AURA:
-			return "Aura"
 	return "Skill"
-
-static func stat_label(stat: int) -> String:
-	match stat:
-		StatType.MAX_HP:
-			return "Max HP"
-		StatType.ARMOR:
-			return "Armor"
-		StatType.HP_REGEN:
-			return "HP Regen/s"
-		StatType.MOVE_SPEED_PCT:
-			return "Move Speed"
-		StatType.PICKUP_RADIUS_PCT:
-			return "Pickup Radius"
-		StatType.DAMAGE_PCT:
-			return "Damage"
-		StatType.FLAT_DAMAGE:
-			return "Flat Damage"
-		StatType.CAST_SPEED_PCT:
-			return "Attack/Cast Speed"
-		StatType.CRIT_CHANCE:
-			return "Crit Chance"
-		StatType.CRIT_MULT:
-			return "Crit Damage"
-		StatType.AREA_PCT:
-			return "Area Size"
-		StatType.PROJ_SPEED_PCT:
-			return "Projectile Speed"
-		StatType.EXTRA_PROJ:
-			return "Extra Projectiles"
-		StatType.LIFE_ON_HIT:
-			return "Life on Hit"
-		StatType.XP_GAIN_PCT:
-			return "XP Gain"
-		StatType.MAGIC_FIND_PCT:
-			return "Magic Find"
-		StatType.DMG_REDUCTION_PCT:
-			return "Damage Reduction"
-	return "Stat"
-
-static func is_percent_stat(stat: int) -> bool:
-	match stat:
-		StatType.MOVE_SPEED_PCT, StatType.PICKUP_RADIUS_PCT, StatType.DAMAGE_PCT, \
-		StatType.CAST_SPEED_PCT, StatType.CRIT_CHANCE, StatType.CRIT_MULT, \
-		StatType.AREA_PCT, StatType.PROJ_SPEED_PCT, StatType.XP_GAIN_PCT, \
-		StatType.MAGIC_FIND_PCT, StatType.DMG_REDUCTION_PCT:
-			return true
-	return false
-
-static func format_stat(stat: int, value: float) -> String:
-	var sign_prefix: String = "+" if value >= 0.0 else ""
-	if is_percent_stat(stat):
-		return "%s%d%% %s" % [sign_prefix, int(round(value)), stat_label(stat)]
-	if stat == StatType.HP_REGEN or stat == StatType.LIFE_ON_HIT:
-		return "%s%.1f %s" % [sign_prefix, value, stat_label(stat)]
-	return "%s%d %s" % [sign_prefix, int(round(value)), stat_label(stat)]

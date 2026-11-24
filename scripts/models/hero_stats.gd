@@ -1,13 +1,6 @@
 class_name HeroStats
 
 var hero_id: String = "shiba"
-var hero_level: int = 1
-var hero_xp: float = 0.0
-var hero_xp_to_next: float = 65.0
-var prism_dust: int = 20
-
-# Level-up bonus stat accumulators
-var level_bonuses: Dictionary = {}
 
 # Equipped slots: EquipSlot -> ItemInstance or null
 var equipped: Dictionary = {}
@@ -16,50 +9,44 @@ var gem_pouch: Array[GemInstance] = []
 const MAX_BAG_SIZE: int = 24
 const MAX_POUCH_SIZE: int = 24
 
-# Computed combat stats
+# Baseline Hero Vitals (zero stat-stick scaling)
 var max_hp: float = 135.0
-var armor: float = 6.0
-var hp_regen: float = 0.5
-var move_speed: float = 8.4
-var pickup_radius: float = 4.2
-var damage_mult: float = 1.0
-var flat_damage: float = 0.0
-var cast_speed_mult: float = 1.0
+var hp_regen: float = 0.6
+var move_speed: float = 8.6
 var crit_chance: float = 8.0
 var crit_mult: float = 165.0
-var area_mult: float = 1.0
-var proj_speed_mult: float = 1.0
-var extra_projectiles: int = 0
-var life_on_hit: float = 0.0
-var xp_gain_mult: float = 1.0
-var magic_find: float = 0.0
-var dmg_reduction: float = 0.0
-var dash_cd_mult: float = 1.0
 
-# Unique & Passive flags
+# Behavioral Flags Derived From Equipped Global Item Effects
+var active_effects: Dictionary = {}
+var active_effect_list: Array[String] = []
+var dash_max_charges: int = 1
+var incoming_dmg_mult: float = 1.0
+var has_lucky_clover: bool = false
+var has_turret_stance: bool = false
+var has_dash_honey_nova: bool = false
+var has_dash_triggers_skills: bool = false
+var has_vamp_dash: bool = false
+var has_zoomies_on_kill: bool = false
+var has_ember_corpse: bool = false
+var has_frost_shatter: bool = false
+var has_static_sprint: bool = false
+var has_thorns_burst: bool = false
+var has_aegis_freeze: bool = false
+var has_orbit_shield: bool = false
 var has_cheat_death: bool = false
-var has_honey_aegis: bool = false
-var has_thorns: bool = false
-var global_gem_level_bonus: int = 0
+var has_comet_dash: bool = false
 
-# Compiled PoE Skill & Passive lists
+# Compiled PoE Active Skill List
 var active_skill_configs: Array[Dictionary] = []
-var active_passives: Array[Dictionary] = []
 
 func _init(p_hero_id: String = "shiba") -> void:
 	init_for_hero(p_hero_id)
 
-func init_for_hero(p_hero_id: String) -> void:
+func _reset_empty_slots(p_hero_id: String) -> void:
 	hero_id = p_hero_id
-	hero_level = 1
-	hero_xp = 0.0
-	hero_xp_to_next = 65.0
-	prism_dust = 25
-	level_bonuses.clear()
 	equipped.clear()
 	item_bag.clear()
 	gem_pouch.clear()
-
 	for slot in [
 		GameEnums.EquipSlot.WEAPON,
 		GameEnums.EquipSlot.HELMET,
@@ -70,19 +57,21 @@ func init_for_hero(p_hero_id: String) -> void:
 	]:
 		equipped[slot] = null
 
+func init_bare_for_tutorial(p_hero_id: String) -> void:
+	_reset_empty_slots(p_hero_id)
+	recompute()
+
+func init_for_hero(p_hero_id: String) -> void:
+	_reset_empty_slots(p_hero_id)
 	var hdef: Dictionary = HeroDatabase.get_hero(hero_id)
 
-	# Build starter weapon with 3-link (Active + Support + empty)
+	# Starter Weapon: 2-Link containing Hero's Main Ability + open linked Modifier socket + signature Effect
 	var weapon: ItemInstance = ItemInstance.new()
 	weapon.item_name = String(hdef["starter_weapon_name"])
 	weapon.equip_slot = GameEnums.EquipSlot.WEAPON
 	weapon.rarity = GameEnums.Rarity.MAGIC
-	weapon.item_level = 1
 	weapon.visual_style = String(hdef["starter_weapon_style"])
-	weapon.affixes = [
-		{"stat": GameEnums.StatType.FLAT_DAMAGE, "value": 4.0},
-		{"stat": GameEnums.StatType.DAMAGE_PCT, "value": 10.0},
-	]
+	weapon.effects = [String(hdef["starter_effect_id"])]
 	var w_cols: Array[int] = []
 	for c in hdef["starter_weapon_sockets"]:
 		w_cols.append(int(c))
@@ -90,89 +79,36 @@ func init_for_hero(p_hero_id: String) -> void:
 	for l in hdef["starter_weapon_links"]:
 		w_lnks.append(bool(l))
 	weapon.setup_sockets(w_cols, w_lnks)
-	weapon.insert_gem(0, GemInstance.new(String(hdef["starter_active_gem"]), 1))
-	weapon.insert_gem(1, GemInstance.new(String(hdef["starter_support_gem"]), 1))
+	weapon.insert_gem(0, GemInstance.new(String(hdef["starter_main_gem"])))
 	equipped[GameEnums.EquipSlot.WEAPON] = weapon
 
-	# Starter Helmet (so hero wears a cute hat immediately)
+	# Starter Cosmetic Hat with 1 open socket (no starter effect so first looted Helmet is always exciting)
 	var helmet: ItemInstance = ItemInstance.new()
-	helmet.item_name = "Cozy Meadow Cap"
+	helmet.item_name = "Meadow Cap"
 	helmet.equip_slot = GameEnums.EquipSlot.HELMET
 	helmet.rarity = GameEnums.Rarity.COMMON
-	helmet.item_level = 1
 	helmet.visual_style = String(hdef["starter_helmet_style"])
-	helmet.affixes = [{"stat": GameEnums.StatType.MAX_HP, "value": 14.0}]
+	helmet.effects = []
 	helmet.setup_sockets([GameEnums.GemColor.GREEN, GameEnums.GemColor.BLUE], [false])
 	equipped[GameEnums.EquipSlot.HELMET] = helmet
 
-	# Starter Armor holding starter Passive Gem
-	var armor_item: ItemInstance = ItemInstance.new()
-	armor_item.item_name = "Traveler's Paw Tunic"
-	armor_item.equip_slot = GameEnums.EquipSlot.ARMOR
-	armor_item.rarity = GameEnums.Rarity.COMMON
-	armor_item.item_level = 1
-	armor_item.visual_style = "tunic"
-	armor_item.affixes = [{"stat": GameEnums.StatType.MAX_HP, "value": 20.0}]
-	var a_cols: Array[int] = []
-	for c in hdef["starter_armor_sockets"]:
-		a_cols.append(int(c))
-	var a_lnks: Array[bool] = []
-	for l in hdef["starter_armor_links"]:
-		a_lnks.append(bool(l))
-	armor_item.setup_sockets(a_cols, a_lnks)
-	armor_item.insert_gem(0, GemInstance.new(String(hdef["starter_passive_gem"]), 1))
-	equipped[GameEnums.EquipSlot.ARMOR] = armor_item
-
-	# Starter Boots
-	var boots: ItemInstance = ItemInstance.new()
-	boots.item_name = "Soft Paw Slippers"
-	boots.equip_slot = GameEnums.EquipSlot.BOOTS
-	boots.rarity = GameEnums.Rarity.COMMON
-	boots.item_level = 1
-	boots.visual_style = "boots"
-	boots.affixes = [{"stat": GameEnums.StatType.MOVE_SPEED_PCT, "value": 6.0}]
-	boots.setup_sockets([GameEnums.GemColor.GREEN], [])
-	equipped[GameEnums.EquipSlot.BOOTS] = boots
-
 	recompute()
 
-func add_hero_xp(amount: float) -> Dictionary:
-	var gained_levels: int = 0
-	var adjusted: float = amount * xp_gain_mult
-	hero_xp += adjusted
-	while hero_xp >= hero_xp_to_next:
-		hero_xp -= hero_xp_to_next
-		hero_level += 1
-		gained_levels += 1
-		hero_xp_to_next = 65.0 * pow(1.24, float(hero_level - 1))
-	# Also share XP with every currently socketed gem!
-	var gems_leveled: Array[GemInstance] = grant_xp_to_equipped_gems(adjusted * 0.65)
-	return {"levels": gained_levels, "gems_leveled": gems_leveled}
-
-func grant_xp_to_equipped_gems(amount: float) -> Array[GemInstance]:
-	var leveled: Array[GemInstance] = []
-	for slot in equipped.keys():
-		var item: ItemInstance = equipped[slot]
-		if item == null:
-			continue
-		for g in item.socketed_gems:
-			if g != null:
-				var gem: GemInstance = g
-				if gem.add_xp(amount):
-					leveled.append(gem)
-	if not leveled.is_empty():
-		recompute()
-	return leveled
-
-func add_level_bonus(stat: int, value: float) -> void:
-	level_bonuses[stat] = float(level_bonuses.get(stat, 0.0)) + value
-	recompute()
+func has_effect(effect_id: String) -> bool:
+	return active_effects.has(effect_id)
 
 func can_add_item_to_bag() -> bool:
 	return item_bag.size() < MAX_BAG_SIZE
 
 func can_add_gem_to_pouch() -> bool:
 	return gem_pouch.size() < MAX_POUCH_SIZE
+
+func get_pouch_gems(filter_type: int = -1) -> Array[GemInstance]:
+	var out: Array[GemInstance] = []
+	for g in gem_pouch:
+		if filter_type == -1 or g.get_gem_type() == filter_type:
+			out.append(g)
+	return out
 
 func equip_item_from_bag(bag_idx: int) -> Dictionary:
 	if bag_idx < 0 or bag_idx >= item_bag.size():
@@ -184,7 +120,6 @@ func equip_item_from_bag(bag_idx: int) -> Dictionary:
 	var overflow_gems: Array[GemInstance] = []
 	if old_item != null:
 		var old_gems: Array[GemInstance] = old_item.extract_all_gems()
-		# Preserve gems by moving into compatible sockets on new_item, else return to gem_pouch
 		for g in old_gems:
 			var placed: bool = false
 			for s_idx in range(new_item.get_socket_count()):
@@ -197,43 +132,27 @@ func equip_item_from_bag(bag_idx: int) -> Dictionary:
 					gem_pouch.append(g)
 				else:
 					overflow_gems.append(g)
-					gem_pouch.append(g) # Never destroy player's leveled gems
+					gem_pouch.append(g) # Preserve player abilities safely
 		item_bag.insert(mini(bag_idx, item_bag.size()), old_item)
 
 	equipped[new_item.equip_slot] = new_item
 	recompute()
 	return {"ok": true, "overflow_gems": overflow_gems, "equipped_item": new_item}
 
-func salvage_bag_item(bag_idx: int) -> int:
+func discard_bag_item(bag_idx: int) -> bool:
 	if bag_idx < 0 or bag_idx >= item_bag.size():
-		return 0
+		return false
 	var item: ItemInstance = item_bag[bag_idx]
 	item_bag.remove_at(bag_idx)
-	# Rescue any gems inside before salvaging
 	for g in item.extract_all_gems():
 		gem_pouch.append(g)
-	var dust: int = item.get_salvage_dust()
-	prism_dust += dust
-	return dust
+	return true
 
-func salvage_common_and_magic() -> Dictionary:
-	var count: int = 0
-	var dust: int = 0
-	for i in range(item_bag.size() - 1, -1, -1):
-		var it: ItemInstance = item_bag[i]
-		if it.rarity == GameEnums.Rarity.COMMON or it.rarity == GameEnums.Rarity.MAGIC:
-			dust += salvage_bag_item(i)
-			count += 1
-	return {"count": count, "dust": dust}
-
-func salvage_gem_from_pouch(pouch_idx: int) -> int:
+func discard_gem_from_pouch(pouch_idx: int) -> bool:
 	if pouch_idx < 0 or pouch_idx >= gem_pouch.size():
-		return 0
-	var g: GemInstance = gem_pouch[pouch_idx]
+		return false
 	gem_pouch.remove_at(pouch_idx)
-	var dust: int = g.get_salvage_dust()
-	prism_dust += dust
-	return dust
+	return true
 
 func socket_gem_into_equipped(slot: int, socket_idx: int, pouch_idx: int) -> bool:
 	var item: ItemInstance = equipped.get(slot, null)
@@ -261,99 +180,49 @@ func unsocket_gem_from_equipped(slot: int, socket_idx: int) -> GemInstance:
 
 func recompute() -> void:
 	var hdef: Dictionary = HeroDatabase.get_hero(hero_id)
-	var stat_sum: Dictionary = {}
+	max_hp = float(hdef["base_hp"])
+	hp_regen = 0.8
+	move_speed = float(hdef["base_speed"])
+	crit_chance = 8.0
+	crit_mult = 165.0
 
-	# Hero base + per-hero-level tiny scaling
-	var base_hp: float = float(hdef["base_hp"]) + float(hero_level - 1) * 5.0
-	var base_spd: float = float(hdef["base_speed"])
-	var base_armor: float = float(hdef["base_armor"])
-	var base_crit: float = float(hdef["base_crit"])
-
-	# Level-up choices
-	for st in level_bonuses.keys():
-		stat_sum[int(st)] = float(stat_sum.get(int(st), 0.0)) + float(level_bonuses[st])
-
-	has_cheat_death = false
-	has_honey_aegis = false
-	has_thorns = false
-	global_gem_level_bonus = 0
-
-	# Equipped gear affixes + unique effects
-	for slot in equipped.keys():
-		var item: ItemInstance = equipped[slot]
+	# Collect active Global Item Effects
+	active_effects.clear()
+	active_effect_list.clear()
+	for slot in [
+		GameEnums.EquipSlot.WEAPON,
+		GameEnums.EquipSlot.HELMET,
+		GameEnums.EquipSlot.ARMOR,
+		GameEnums.EquipSlot.BOOTS,
+		GameEnums.EquipSlot.AMULET,
+		GameEnums.EquipSlot.RING,
+	]:
+		var item: ItemInstance = equipped.get(slot, null)
 		if item == null:
 			continue
-		for aff in item.affixes:
-			var st: int = int(aff["stat"])
-			stat_sum[st] = float(stat_sum.get(st, 0.0)) + float(aff["value"])
-		match item.unique_id:
-			"unique_prism_crown":
-				global_gem_level_bonus += 1
-			"unique_nine_lives":
-				has_cheat_death = true
-			"unique_honey_aegis":
-				has_honey_aegis = true
+		for eid in item.effects:
+			if not active_effects.has(eid):
+				active_effects[eid] = true
+				active_effect_list.append(eid)
 
-	# Pass 1: Passive Skill Gems across all equipped items
-	active_passives.clear()
-	for slot in equipped.keys():
-		var item: ItemInstance = equipped[slot]
-		if item == null:
-			continue
-		var item_has_prism_mastery: bool = false
-		var prism_uid: int = -1
-		for g in item.socketed_gems:
-			if g != null and g.gem_id == "pas_prism_mastery":
-				item_has_prism_mastery = true
-				prism_uid = g.uid
-				break
-		for g in item.socketed_gems:
-			if g == null:
-				continue
-			var gem: GemInstance = g
-			if gem.get_gem_type() != GameEnums.GemType.PASSIVE:
-				continue
-			var bonus: int = global_gem_level_bonus
-			if item_has_prism_mastery and gem.uid != prism_uid:
-				bonus += 1
-			var eff_lvl: int = gem.level + bonus
-			var pstats: Dictionary = gem.get_passive_stats(eff_lvl)
-			for st in pstats.keys():
-				stat_sum[int(st)] = float(stat_sum.get(int(st), 0.0)) + float(pstats[st])
-			var def: Dictionary = gem.get_def()
-			if String(def.get("special", "")) == "thorns":
-				has_thorns = true
-			active_passives.append({
-				"gem": gem,
-				"effective_level": eff_lvl,
-				"aura_color": def.get("aura_color", Color(1.0, 1.0, 1.0, 0.3)),
-			})
+	has_lucky_clover = has_effect("lucky_clover")
+	has_turret_stance = has_effect("turret_stance")
+	has_dash_honey_nova = has_effect("dash_honey_nova")
+	has_comet_dash = has_effect("comet_dash")
+	has_dash_triggers_skills = has_effect("dash_triggers_skills") or has_comet_dash
+	has_vamp_dash = has_effect("vamp_dash")
+	has_zoomies_on_kill = has_effect("zoomies_on_kill")
+	has_ember_corpse = has_effect("ember_corpse")
+	has_frost_shatter = has_effect("frost_shatter")
+	has_static_sprint = has_effect("static_sprint")
+	has_thorns_burst = has_effect("thorns_burst")
+	has_aegis_freeze = has_effect("aegis_freeze")
+	has_orbit_shield = has_effect("orbit_shield")
+	has_cheat_death = has_effect("cheat_death")
+	dash_max_charges = 2 if (has_effect("double_dash") or has_comet_dash) else 1
+	incoming_dmg_mult = 1.45 if has_effect("glass_spark") else 1.0
 
-	# Finalize core scalar stats
-	max_hp = base_hp + float(stat_sum.get(GameEnums.StatType.MAX_HP, 0.0))
-	armor = base_armor + float(stat_sum.get(GameEnums.StatType.ARMOR, 0.0))
-	hp_regen = 0.6 + float(stat_sum.get(GameEnums.StatType.HP_REGEN, 0.0))
-	move_speed = base_spd * (1.0 + float(stat_sum.get(GameEnums.StatType.MOVE_SPEED_PCT, 0.0)) * 0.01)
-	pickup_radius = 4.2 * (1.0 + float(stat_sum.get(GameEnums.StatType.PICKUP_RADIUS_PCT, 0.0)) * 0.01)
-	damage_mult = 1.0 + float(stat_sum.get(GameEnums.StatType.DAMAGE_PCT, 0.0)) * 0.01
-	flat_damage = float(stat_sum.get(GameEnums.StatType.FLAT_DAMAGE, 0.0))
-	cast_speed_mult = maxf(0.25, 1.0 + float(stat_sum.get(GameEnums.StatType.CAST_SPEED_PCT, 0.0)) * 0.01)
-	crit_chance = clampf(base_crit + float(stat_sum.get(GameEnums.StatType.CRIT_CHANCE, 0.0)), 0.0, 95.0)
-	crit_mult = 165.0 + float(stat_sum.get(GameEnums.StatType.CRIT_MULT, 0.0))
-	area_mult = 1.0 + float(stat_sum.get(GameEnums.StatType.AREA_PCT, 0.0)) * 0.01
-	proj_speed_mult = 1.0 + float(stat_sum.get(GameEnums.StatType.PROJ_SPEED_PCT, 0.0)) * 0.01
-	extra_projectiles = int(round(float(stat_sum.get(GameEnums.StatType.EXTRA_PROJ, 0.0))))
-	life_on_hit = float(stat_sum.get(GameEnums.StatType.LIFE_ON_HIT, 0.0))
-	xp_gain_mult = 1.0 + float(stat_sum.get(GameEnums.StatType.XP_GAIN_PCT, 0.0)) * 0.01
-	magic_find = float(stat_sum.get(GameEnums.StatType.MAGIC_FIND_PCT, 0.0))
-	dmg_reduction = clampf(float(stat_sum.get(GameEnums.StatType.DMG_REDUCTION_PCT, 0.0)), 0.0, 65.0)
-
-	dash_cd_mult = 1.0
-	var boots_item: ItemInstance = equipped.get(GameEnums.EquipSlot.BOOTS, null)
-	if boots_item != null and boots_item.unique_id == "unique_comet_paws":
-		dash_cd_mult = 0.65
-
-	# Pass 2: Compile PoE Active Skill Gems + Linked Support Gems
+	# Compile PoE Main Socket Abilities + Linked Modifier Abilities
 	active_skill_configs.clear()
 	for slot in [
 		GameEnums.EquipSlot.WEAPON,
@@ -366,139 +235,136 @@ func recompute() -> void:
 		var item: ItemInstance = equipped.get(slot, null)
 		if item == null:
 			continue
-		var item_has_prism_mastery: bool = false
-		for g in item.socketed_gems:
-			if g != null and g.gem_id == "pas_prism_mastery":
-				item_has_prism_mastery = true
-				break
-		var bonus_lvl: int = global_gem_level_bonus + (1 if item_has_prism_mastery else 0)
-
-		var groups: Array = item.get_link_groups()
-		for grp in groups:
+		for grp in item.get_link_groups():
 			var group_indices: Array[int] = grp
-			# Collect active & support gems inside this link group
-			var actives_in_group: Array[GemInstance] = []
-			var supports_in_group: Array[GemInstance] = []
+			var mains_in_group: Array[GemInstance] = []
+			var mods_in_group: Array[GemInstance] = []
 			for s_idx in group_indices:
 				var g: GemInstance = item.socketed_gems[s_idx]
 				if g == null:
 					continue
-				if g.get_gem_type() == GameEnums.GemType.ACTIVE:
-					actives_in_group.append(g)
-				elif g.get_gem_type() == GameEnums.GemType.SUPPORT:
-					supports_in_group.append(g)
+				if g.get_gem_type() == GameEnums.GemType.MAIN:
+					mains_in_group.append(g)
+				elif g.get_gem_type() == GameEnums.GemType.MODIFIER:
+					mods_in_group.append(g)
 
-			for act_gem in actives_in_group:
-				var cfg: Dictionary = _compile_active_skill(act_gem, supports_in_group, bonus_lvl, slot)
-				active_skill_configs.append(cfg)
+			for main_gem in mains_in_group:
+				active_skill_configs.append(_compile_main_skill(main_gem, mods_in_group, slot))
 
-func _compile_active_skill(act_gem: GemInstance, supports: Array[GemInstance], bonus_lvl: int, equip_slot: int) -> Dictionary:
-	var def: Dictionary = act_gem.get_def()
-	var eff_lvl: int = act_gem.level + bonus_lvl
-	var base_dmg: float = float(def.get("base_damage", 15.0)) + float(def.get("damage_per_lvl", 4.0)) * float(eff_lvl - 1)
-	var base_cd: float = float(def.get("cooldown", 1.0))
+func _compile_main_skill(main_gem: GemInstance, mods_list: Array[GemInstance], equip_slot: int) -> Dictionary:
+	var def: Dictionary = main_gem.get_def()
+	var final_dmg: float = float(def.get("base_damage", 20.0))
+	var final_cd: float = float(def.get("cooldown", 1.0))
 	var base_proj: int = int(def.get("base_projectiles", 1))
 	var base_chains: int = int(def.get("base_chains", 0))
 	var base_pierce: int = int(def.get("pierce", 0))
 	var base_area: float = float(def.get("area_radius", 1.0))
-	var base_speed: float = float(def.get("proj_speed", 16.0))
+	var final_speed: float = float(def.get("proj_speed", 16.0))
 
-	var sup_dmg_mult: float = 1.0
-	var sup_cast_pct: float = 0.0
-	var sup_area_pct: float = 0.0
-	var sup_proj_speed_pct: float = 0.0
-	var sup_extra_proj: int = 0
-	var sup_extra_chains: int = 0
-	var sup_extra_pierce: int = 0
-	var sup_fork: int = 0
-	var sup_homing: bool = false
-	var sup_echo: bool = false
-	var sup_crit_chance: float = 0.0
-	var sup_crit_mult: float = 0.0
-	var sup_added_fire: float = 0.0
-	var sup_added_cold: float = 0.0
-	var sup_leech_pct: float = 0.0
+	var mod_factor: int = 2 if has_effect("prism_echo") else 1
+	var extra_proj: int = 0
+	var extra_chains: int = 0
+	var extra_pierce: int = 0
+	var forks: int = 0
+	var homing: bool = false
+	var echo: bool = false
+	var area_mult: float = 1.0
+	var ignite: bool = false
+	var chill: bool = false
+	var leech_pct: float = 0.0
 	var linked_names: Array[String] = []
 	var linked_colors: Array[int] = []
 
-	for sup in supports:
-		if not GemDatabase.does_support_apply(sup.gem_id, act_gem.gem_id):
+	for mod_gem in mods_list:
+		if not GemDatabase.does_modifier_apply(mod_gem.gem_id, main_gem.gem_id):
 			continue
-		var sdef: Dictionary = sup.get_def()
-		var mods: Dictionary = sdef.get("mods", {})
-		var s_eff_lvl: int = sup.level + bonus_lvl
-		var lvl_minus_one: float = float(maxi(0, s_eff_lvl - 1))
-
-		linked_names.append("%s Lv.%d" % [sup.get_short_label(), s_eff_lvl])
-		linked_colors.append(sup.get_gem_color())
+		var mdef: Dictionary = mod_gem.get_def()
+		var mods: Dictionary = mdef.get("mods", {})
+		linked_names.append(mod_gem.get_short_label())
+		linked_colors.append(mod_gem.get_gem_color())
 
 		if mods.has("dmg_mult"):
-			var dm: float = float(mods["dmg_mult"]) + float(mods.get("dmg_per_lvl", 0.0)) * lvl_minus_one
-			sup_dmg_mult *= dm
+			final_dmg *= float(mods["dmg_mult"])
 		if mods.has("extra_proj"):
-			sup_extra_proj += int(mods["extra_proj"]) + int(floor(lvl_minus_one / 3.0)) * int(mods.get("proj_per_3lvl", 0))
+			extra_proj += int(mods["extra_proj"]) * mod_factor
 		if mods.has("extra_chains"):
-			sup_extra_chains += int(mods["extra_chains"]) + int(floor(lvl_minus_one / 2.0)) * int(mods.get("chains_per_2lvl", 0))
+			extra_chains += int(mods["extra_chains"]) * mod_factor
 		if mods.has("extra_pierce"):
-			sup_extra_pierce += int(mods["extra_pierce"]) + int(lvl_minus_one) * int(mods.get("pierce_per_lvl", 0))
+			extra_pierce += int(mods["extra_pierce"]) * mod_factor
 		if mods.has("fork"):
-			sup_fork += int(mods["fork"])
+			forks += int(mods["fork"]) * mod_factor
 		if mods.has("homing"):
-			sup_homing = true
+			homing = true
 		if mods.has("echo"):
-			sup_echo = true
-		if mods.has("cast_speed_pct"):
-			sup_cast_pct += float(mods["cast_speed_pct"]) + float(mods.get("cast_per_lvl", 0.0)) * lvl_minus_one
-		if mods.has("area_pct"):
-			sup_area_pct += float(mods["area_pct"]) + float(mods.get("area_per_lvl", 0.0)) * lvl_minus_one
-		if mods.has("proj_speed_pct"):
-			sup_proj_speed_pct += float(mods["proj_speed_pct"])
-		if mods.has("crit_chance"):
-			sup_crit_chance += float(mods["crit_chance"]) + float(mods.get("crit_per_lvl", 0.0)) * lvl_minus_one
-		if mods.has("crit_mult"):
-			sup_crit_mult += float(mods["crit_mult"])
-		if mods.has("added_fire_pct"):
-			sup_added_fire += float(mods["added_fire_pct"]) + float(mods.get("fire_per_lvl", 0.0)) * lvl_minus_one
-		if mods.has("added_cold_pct"):
-			sup_added_cold += float(mods["added_cold_pct"]) + float(mods.get("cold_per_lvl", 0.0)) * lvl_minus_one
+			echo = true
+		if mods.has("area_mult"):
+			area_mult *= (1.0 + (float(mods["area_mult"]) - 1.0) * float(mod_factor))
+		if mods.has("proj_speed_mult"):
+			final_speed *= float(mods["proj_speed_mult"])
+		if mods.has("ignite"):
+			ignite = true
+		if mods.has("chill"):
+			chill = true
 		if mods.has("leech_pct"):
-			sup_leech_pct += float(mods["leech_pct"]) + float(mods.get("leech_per_lvl", 0.0)) * lvl_minus_one
+			leech_pct += float(mods["leech_pct"]) * float(mod_factor)
 
-	var total_cast_mult: float = cast_speed_mult * (1.0 + sup_cast_pct * 0.01)
-	var final_cd: float = maxf(0.14, base_cd / total_cast_mult)
-	var total_area_mult: float = area_mult * (1.0 + sup_area_pct * 0.01)
-	var final_dmg: float = (base_dmg + flat_damage * 0.85) * damage_mult * sup_dmg_mult
+	if has_effect("prism_echo") and not linked_names.is_empty():
+		echo = true
 
-	var tags: Array = act_gem.get_tags()
+	var tags: Array = main_gem.get_tags()
 	var uses_proj: bool = tags.has(GameEnums.SkillTag.PROJECTILE) or tags.has(GameEnums.SkillTag.ORBIT)
-	var final_proj: int = base_proj + sup_extra_proj + (extra_projectiles if uses_proj else 0)
+	var final_proj: int = base_proj + (extra_proj if uses_proj else 0)
+	var final_pierce: int = base_pierce + extra_pierce
+	var lifetime_mult: float = 1.0
+
+	# Global Behavioral Item Tradeoffs
+	if has_effect("short_barrage") and uses_proj:
+		final_proj += 2
+		lifetime_mult *= 0.55
+	if has_effect("sniper_focus") and tags.has(GameEnums.SkillTag.PROJECTILE):
+		final_proj = 1
+		final_pierce += 2
+		final_speed *= 1.55
+		final_dmg *= 1.45
+	if has_effect("giant_slow_aoe") and (tags.has(GameEnums.SkillTag.AOE) or tags.has(GameEnums.SkillTag.ORBIT)):
+		area_mult *= 1.65
+		final_cd *= 1.33
+	if has_effect("glass_spark"):
+		final_dmg *= 1.75
+	if has_effect("dash_triggers_skills") and not has_comet_dash:
+		final_cd *= 1.50
+
+	final_cd = maxf(0.18, final_cd)
 
 	return {
-		"uid": act_gem.uid,
-		"gem_id": act_gem.gem_id,
-		"gem": act_gem,
+		"uid": main_gem.uid,
+		"gem_id": main_gem.gem_id,
+		"gem": main_gem,
 		"equip_slot": equip_slot,
-		"effective_level": eff_lvl,
-		"gem_name": act_gem.get_gem_name(),
-		"short": act_gem.get_short_label(),
-		"color": act_gem.get_gem_color(),
+		"gem_name": main_gem.get_gem_name(),
+		"short": main_gem.get_short_label(),
+		"color": main_gem.get_gem_color(),
 		"tags": tags,
 		"damage": final_dmg,
 		"cooldown": final_cd,
 		"projectiles": maxi(1, final_proj),
-		"chains": base_chains + sup_extra_chains,
-		"pierce": base_pierce + sup_extra_pierce,
-		"forks": sup_fork,
-		"homing": sup_homing or act_gem.gem_id == "spirit_bees",
-		"echo": sup_echo,
-		"area_radius": base_area * total_area_mult,
-		"area_mult": total_area_mult,
-		"proj_speed": base_speed * proj_speed_mult * (1.0 + sup_proj_speed_pct * 0.01),
-		"crit_chance": clampf(crit_chance + sup_crit_chance, 0.0, 95.0),
-		"crit_mult": crit_mult + sup_crit_mult,
-		"added_fire_pct": sup_added_fire,
-		"added_cold_pct": sup_added_cold,
-		"leech_pct": sup_leech_pct,
-		"linked_support_names": linked_names,
-		"linked_support_colors": linked_colors,
+		"chains": base_chains + extra_chains,
+		"pierce": final_pierce,
+		"forks": forks,
+		"homing": homing or main_gem.gem_id == "spirit_bees",
+		"echo": echo,
+		"area_radius": base_area * area_mult,
+		"area_mult": area_mult,
+		"proj_speed": final_speed,
+		"lifetime_mult": lifetime_mult,
+		"ricochet": has_effect("edge_ricochet"),
+		"nova_360": has_effect("nova_barrage"),
+		"pull_inward": has_effect("gravity_slams"),
+		"crit_chance": crit_chance,
+		"crit_mult": crit_mult,
+		"ignite": ignite or tags.has(GameEnums.SkillTag.FIRE),
+		"chill": chill or tags.has(GameEnums.SkillTag.COLD),
+		"leech_pct": leech_pct,
+		"linked_mod_names": linked_names,
+		"linked_mod_colors": linked_colors,
 	}

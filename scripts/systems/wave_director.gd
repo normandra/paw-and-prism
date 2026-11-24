@@ -130,6 +130,9 @@ func step(delta: float, player_pos: Vector3, grid: SpatialGrid, loot_mgr: LootMa
 		wave_banner.emit("Acorn Loot Chest Spawned!", Color(1.0, 0.88, 0.30))
 
 	# Step all active enemies & rebuild SpatialGrid
+	step_enemies_only(delta, player_pos, grid)
+
+func step_enemies_only(delta: float, player_pos: Vector3, grid: SpatialGrid) -> void:
 	for i in range(enemies.size() - 1, -1, -1):
 		var e: EnemyEntity = enemies[i]
 		if not is_instance_valid(e) or e.is_dead:
@@ -138,6 +141,9 @@ func step(delta: float, player_pos: Vector3, grid: SpatialGrid, loot_mgr: LootMa
 		e.step(delta, player_pos, grid)
 
 	grid.rebuild(enemies)
+
+func spawn_custom_enemy(enemy_id: String, exact_pos: Vector3, hp_scale: float = 0.6, dmg_scale: float = 0.4) -> EnemyEntity:
+	return _spawn_enemy(enemy_id, exact_pos, hp_scale, dmg_scale, false, exact_pos)
 
 func _spawn_boss(boss_num: int, player_pos: Vector3) -> void:
 	var boss_ids: Array[String] = ["boss_grizzle", "boss_whiskers", "boss_bramblehorn"]

@@ -156,25 +156,24 @@ static func get_gem_icon(gem_type: int, gem_color: int) -> Texture2D:
 	var light_hex: String = "#" + GameEnums.gem_color_value(gem_color).lightened(0.45).to_html(false)
 	var svg: String = ""
 	match gem_type:
-		GameEnums.GemType.ACTIVE:
+		GameEnums.GemType.MAIN:
 			svg = """<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 48 48">
 			<polygon points="24,4 42,20 34,42 14,42 6,20" fill="%s" stroke="%s" stroke-width="2.5" stroke-linejoin="round"/>
 			<polygon points="24,9 35,21 29,37 19,37 13,21" fill="%s" fill-opacity="0.45"/>
 			<circle cx="18" cy="17" r="3" fill="#ffffff" fill-opacity="0.85"/>
 			</svg>""" % [fill_hex, dark_hex, light_hex]
-		GameEnums.GemType.SUPPORT:
+		_:
 			svg = """<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 48 48">
 			<circle cx="24" cy="24" r="18" fill="%s" stroke="%s" stroke-width="2.5"/>
 			<circle cx="24" cy="24" r="11" fill="%s" fill-opacity="0.45"/>
 			<circle cx="17" cy="17" r="3.2" fill="#ffffff" fill-opacity="0.85"/>
 			</svg>""" % [fill_hex, dark_hex, light_hex]
-		_:
-			svg = """<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 48 48">
-			<polygon points="24,5 40,14 40,34 24,43 8,34 8,14" fill="%s" stroke="%s" stroke-width="2.5" stroke-linejoin="round"/>
-			<polygon points="24,11 33,24 24,37 15,24" fill="%s" fill-opacity="0.5"/>
-			<circle cx="19" cy="16" r="2.8" fill="#ffffff" fill-opacity="0.9"/>
-			</svg>""" % [fill_hex, dark_hex, light_hex]
 	return _from_svg(key, svg, 1.5)
+
+static func get_icon(icon_name: String) -> Texture2D:
+	if icon_name in ["acorn_barrage", "fireball_berry", "frost_nova", "honey_slam", "whisker_lightning", "petal_cyclone", "starlight_orb", "boomerang_bone", "meteor_pine", "spirit_bees"]:
+		return get_skill_icon(icon_name)
+	return get_ui_icon(icon_name)
 
 static func get_ui_icon(icon_name: String) -> Texture2D:
 	var key: String = "ui_" + icon_name

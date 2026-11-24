@@ -6,6 +6,8 @@ signal player_died()
 signal cheat_death_triggered()
 signal reactive_nova_requested(kind: String, pos: Vector3, dmg: float, radius: float)
 signal dashed()
+signal static_spark_requested(pos: Vector3)
+signal orbit_shield_requested()
 
 var stats: HeroStats = null
 var current_hp: float = 135.0
@@ -22,17 +24,22 @@ var _aura_ring_holder: Node3D = null
 var _facing_dir: Vector3 = Vector3(0.0, 0.0, 1.0)
 var external_move_vec: Vector2 = Vector2.ZERO
 var _external_dash_queued: bool = false
+var is_moving: bool = false
 var _walk_phase: float = 0.0
 var _invuln_timer: float = 0.0
 var _dash_timer: float = 0.0
 var _dash_cooldown: float = 0.0
+var dash_charges: int = 1
 var _dash_dir: Vector3 = Vector3.ZERO
 var _cheat_death_cd: float = 0.0
 var _honey_aegis_cd: float = 0.0
 var _thorns_cd: float = 0.0
+var _orbit_shield_cd: float = 0.0
+var _zoomies_timer: float = 0.0
+var _static_dist_accum: float = 0.0
 
-var _last_weapon_style: String = ""
-var _last_helmet_style: String = ""
+var _last_weapon_style: String = "__init__"
+var _last_helmet_style: String = "__init__"
 
 func setup(p_stats: HeroStats) -> void:
 	stats = p_stats
@@ -41,7 +48,15 @@ func setup(p_stats: HeroStats) -> void:
 	_invuln_timer = 0.0
 	_dash_timer = 0.0
 	_dash_cooldown = 0.0
+	dash_charges = stats.dash_max_charges
 	_cheat_death_cd = 0.0
+	_honey_aegis_cd = 0.0
+	_thorns_cd = 0.0
+	_orbit_shield_cd = 0.0
+	_zoomies_timer = 0.0
+	_static_dist_accum = 0.0
+	_last_weapon_style = "__init__"
+	_last_helmet_style = "__init__"
 	external_move_vec = Vector2.ZERO
 	_external_dash_queued = false
 
@@ -66,24 +81,27 @@ func refresh_equipment_visuals() -> void:
 	if stats == null or _rig == null:
 		return
 	current_hp = minf(current_hp, stats.max_hp)
+	dash_charges = clampi(dash_charges, 0, stats.dash_max_charges)
 	var w_item: ItemInstance = stats.equipped.get(GameEnums.EquipSlot.WEAPON, null)
 	var h_item: ItemInstance = stats.equipped.get(GameEnums.EquipSlot.HELMET, null)
-	var w_style: String = w_item.visual_style if w_item != null else "acorn_wand"
-	var h_style: String = h_item.visual_style if h_item != null else "ribbon_hood"
+	var w_style: String = w_item.visual_style if w_item != null else ""
+	var h_style: String = h_item.visual_style if h_item != null else ""
 	if w_style != _last_weapon_style or h_style != _last_helmet_style:
 		_last_weapon_style = w_style
 		_last_helmet_style = h_style
 		ChibiMeshFactory.update_hero_visual_gear(_rig, w_style, h_style)
 
-	# Rebuild subtle passive aura rings under hero
+	# Rebuild subtle global effect aura rings under hero
 	if _aura_ring_holder != null:
 		for ch in _aura_ring_holder.get_children():
 			ch.queue_free()
 		var idx: int = 0
-		for p_info in stats.active_passives:
+		for eff_id in stats.active_effect_list:
 			if idx >= 4:
 				break
-			var col: Color = p_info.get("aura_color", Color(1.0, 1.0, 1.0, 0.3))
+			var edef: Dictionary = ItemDatabase.get_effect_def(eff_id)
+			var col: Color = Color(edef.get("color", Color.WHITE))
+			col.a = 0.32
 			var ring_r: float = 0.78 + float(idx) * 0.22
 			var ring: MeshInstance3D = MeshInstance3D.new()
 			ring.mesh = ChibiMeshFactory._get_torus(ring_r, ring_r + 0.05)
@@ -102,14 +120,23 @@ func trigger_touch_dash() -> void:
 
 func get_dash_cooldown_max() -> float:
 	if stats == null:
-		return 2.2
-	return maxf(0.65, 2.2 * stats.dash_cd_mult)
+		return 2.0
+	return 1.85
 
 func get_dash_ready_fraction() -> float:
-	var cd_max: float = get_dash_cooldown_max()
-	if _dash_cooldown <= 0.0:
+	if stats == null:
 		return 1.0
+	if dash_charges > 0:
+		return 1.0
+	var cd_max: float = get_dash_cooldown_max()
 	return clampf(1.0 - _dash_cooldown / cd_max, 0.0, 1.0)
+
+func has_zoomies_active() -> bool:
+	return _zoomies_timer > 0.0
+
+func notify_kill() -> void:
+	if stats != null and stats.has_zoomies_on_kill:
+		_zoomies_timer = 2.0
 
 func step(delta: float) -> void:
 	if is_dead or stats == null:
@@ -118,14 +145,25 @@ func step(delta: float) -> void:
 	# Cooldowns & Regen
 	if _invuln_timer > 0.0:
 		_invuln_timer -= delta
-	if _dash_cooldown > 0.0:
-		_dash_cooldown -= delta
+	if dash_charges < stats.dash_max_charges:
+		if _dash_cooldown > 0.0:
+			_dash_cooldown -= delta
+		if _dash_cooldown <= 0.0:
+			dash_charges += 1
+			if dash_charges < stats.dash_max_charges:
+				_dash_cooldown = get_dash_cooldown_max()
+	else:
+		_dash_cooldown = 0.0
 	if _cheat_death_cd > 0.0:
 		_cheat_death_cd -= delta
 	if _honey_aegis_cd > 0.0:
 		_honey_aegis_cd -= delta
 	if _thorns_cd > 0.0:
 		_thorns_cd -= delta
+	if _orbit_shield_cd > 0.0:
+		_orbit_shield_cd -= delta
+	if _zoomies_timer > 0.0:
+		_zoomies_timer -= delta
 
 	if current_hp < stats.max_hp and stats.hp_regen > 0.0:
 		current_hp = minf(stats.max_hp, current_hp + stats.hp_regen * delta)
@@ -153,15 +191,21 @@ func step(delta: float) -> void:
 	# Trigger Hop-Dash
 	var want_dash: bool = Input.is_action_just_pressed("dash") or Input.is_key_pressed(KEY_SPACE) or _external_dash_queued
 	_external_dash_queued = false
-	if want_dash and _dash_cooldown <= 0.0 and _dash_timer <= 0.0:
+	if want_dash and dash_charges > 0 and _dash_timer <= 0.0:
 		_dash_timer = 0.22
-		_dash_cooldown = get_dash_cooldown_max()
+		dash_charges -= 1
+		if _dash_cooldown <= 0.0:
+			_dash_cooldown = get_dash_cooldown_max()
 		_invuln_timer = maxf(_invuln_timer, 0.26)
 		_dash_dir = input_dir if input_dir.length_squared() > 0.01 else _facing_dir
+		if stats.has_dash_honey_nova:
+			reactive_nova_requested.emit("dash_honey_nova", global_position, 26.0, 4.4)
+		if stats.has_vamp_dash:
+			heal(12.0)
 		dashed.emit()
 
 	# Apply movement
-	var speed: float = stats.move_speed
+	var speed: float = stats.move_speed * (1.28 if _zoomies_timer > 0.0 else 1.0)
 	var move_delta: Vector3 = Vector3.ZERO
 	if _dash_timer > 0.0:
 		_dash_timer -= delta
@@ -174,9 +218,17 @@ func step(delta: float) -> void:
 	global_position.x = clampf(global_position.x, -bound, bound)
 	global_position.z = clampf(global_position.z, -bound, bound)
 
-	_animate_chibi(delta, move_delta.length_squared() > 0.00001)
+	var step_dist: float = Vector2(move_delta.x, move_delta.z).length()
+	is_moving = step_dist > 0.002
+	if is_moving and stats.has_static_sprint:
+		_static_dist_accum += step_dist
+		if _static_dist_accum >= 5.5:
+			_static_dist_accum -= 5.5
+			static_spark_requested.emit(global_position)
 
-func _animate_chibi(delta: float, is_moving: bool) -> void:
+	_animate_chibi(delta, is_moving)
+
+func _animate_chibi(delta: float, moving_now: bool) -> void:
 	if _rig == null or _body_pivot == null:
 		return
 
@@ -191,7 +243,7 @@ func _animate_chibi(delta: float, is_moving: bool) -> void:
 		_body_pivot.position.y = sin(hop_t * PI) * 0.95
 		_body_pivot.rotation.x = 0.25
 		_body_pivot.scale = Vector3(0.92, 1.12, 0.92)
-	elif is_moving:
+	elif moving_now:
 		_walk_phase += delta * 15.0
 		var hop: float = absf(sin(_walk_phase)) * 0.14
 		_body_pivot.position.y = hop
@@ -228,20 +280,21 @@ func take_damage(raw_dmg: float, bypass_invuln: bool = false) -> float:
 	if _invuln_timer > 0.0 and not bypass_invuln:
 		return 0.0
 
-	var armor_mit: float = 100.0 / (100.0 + maxf(0.0, stats.armor) * 1.6)
-	var dr_mit: float = 1.0 - (stats.dmg_reduction * 0.01)
-	var final_dmg: float = maxf(1.0, raw_dmg * armor_mit * dr_mit)
+	var final_dmg: float = maxf(1.0, raw_dmg * stats.incoming_dmg_mult)
 
 	_invuln_timer = 0.45
 	current_hp -= final_dmg
 
-	# Reactive Unique/Passive triggers
-	if stats.has_honey_aegis and _honey_aegis_cd <= 0.0:
+	# Reactive Behavioral Item Triggers
+	if stats.has_aegis_freeze and _honey_aegis_cd <= 0.0:
 		_honey_aegis_cd = 1.8
-		reactive_nova_requested.emit("honey_aegis", global_position, 28.0 * stats.damage_mult, 4.8 * stats.area_mult)
-	if stats.has_thorns and _thorns_cd <= 0.0:
+		reactive_nova_requested.emit("aegis_freeze", global_position, 32.0, 5.2)
+	if stats.has_thorns_burst and _thorns_cd <= 0.0:
 		_thorns_cd = 1.2
-		reactive_nova_requested.emit("thorns", global_position, (22.0 + stats.armor * 0.8) * stats.damage_mult, 4.2 * stats.area_mult)
+		reactive_nova_requested.emit("thorns_burst", global_position, 26.0, 4.4)
+	if stats.has_orbit_shield and _orbit_shield_cd <= 0.0:
+		_orbit_shield_cd = 6.0
+		orbit_shield_requested.emit()
 
 	if current_hp <= 0.0:
 		if stats.has_cheat_death and _cheat_death_cd <= 0.0:

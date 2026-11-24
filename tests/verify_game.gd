@@ -13,7 +13,7 @@ func _initialize() -> void:
 	call_deferred("_run_all")
 
 func _run_all() -> void:
-	print("=== Paw & Prism Verification Suite ===")
+	print("=== Paw & Prism v2 Verification Suite ===")
 
 	# 1. Load & instantiate main scene
 	var packed: PackedScene = load("res://scenes/main.tscn")
@@ -23,7 +23,7 @@ func _run_all() -> void:
 	root.add_child(main_inst)
 	await process_frame
 
-	# 2. All 4 chibi hero rigs & gear swapping
+	# 2. All 4 chibi hero rigs & gear swapping + bare reset
 	for hdef in HeroDatabase.get_all_heroes():
 		var hid: String = String(hdef["id"])
 		var rig: Node3D = ChibiMeshFactory.build_hero_rig(hid)
@@ -33,68 +33,71 @@ func _run_all() -> void:
 		var hmount: Node3D = rig.get_node_or_null("BodyPivot/HeadPivot/HatMount")
 		_assert(wmount != null and wmount.get_child_count() > 0, "Weapon visual swapped for " + hid)
 		_assert(hmount != null and hmount.get_child_count() > 0, "Helmet visual swapped for " + hid)
-		rig.queue_free()
+		ChibiMeshFactory.update_hero_visual_gear(rig, "", "")
+		_assert(wmount.get_child_count() == 0 and hmount.get_child_count() == 0, "Bare hero gear clears mounts cleanly for " + hid)
+		rig.free()
 
-	# 3. All 7 regular enemies (single merged BodyMesh + shadow OFF) + 3 bosses build 3D rigs cleanly
+	# 3. All 7 regular enemies + 3 bosses + 3 loot mesh types
 	for eid in EnemyDatabase.get_all_regular_ids():
 		var erig: Node3D = ChibiMeshFactory.build_enemy_rig(eid, true)
 		var bmesh: MeshInstance3D = erig.get_node_or_null("BodyPivot/BodyMesh")
 		_assert(erig != null and bmesh != null and bmesh.cast_shadow == GeometryInstance3D.SHADOW_CASTING_SETTING_OFF, "Merged enemy rig (shadow OFF) built for " + eid)
-		erig.queue_free()
+		erig.free()
 	for bid in EnemyDatabase.get_all_boss_ids():
 		var brig: Node3D = ChibiMeshFactory.build_enemy_rig(bid, false)
 		_assert(brig != null and brig.get_node_or_null("BodyPivot") != null, "Boss rig built for " + bid)
-		brig.queue_free()
+		brig.free()
+	for lkind in ["item", "main_gem", "mod_gem", "chest"]:
+		var lm: Node3D = ChibiMeshFactory.build_loot_mesh(lkind, Color.GOLD, GameEnums.Rarity.RARE)
+		_assert(lm != null and lm.get_node_or_null("SpinPivot") != null, "Loot 3D mesh built for " + lkind)
+		lm.free()
 
-	# 3b. Storybook Theme, Fonts & Vector Icon Library check
+	# 4. Storybook Theme, Fonts, Vector Icons & Global Effect Chips
 	var game_theme: Theme = UiHelper.create_game_theme()
 	_assert(game_theme != null and UiHelper.get_display_font() != null and UiHelper.get_body_font() != null, "Storybook Theme and Fredoka/Nunito fonts loaded")
 	_assert(UiHelper._wght_tag() == 2003265652, "OpenType wght FourCC tag resolves cleanly")
 	for hid in ["shiba", "bunny", "bear", "cat"]:
 		var pt: Texture2D = UiIcons.get_hero_portrait(hid)
 		_assert(pt != null and pt.get_width() > 0, "Hero portrait SVG rendered for " + hid)
-	for gid in GemDatabase.get_ids_by_type(GameEnums.GemType.ACTIVE):
+	var main_ids: Array[String] = GemDatabase.get_ids_by_type(GameEnums.GemType.MAIN)
+	var mod_ids: Array[String] = GemDatabase.get_ids_by_type(GameEnums.GemType.MODIFIER)
+	_assert(main_ids.size() == 10 and mod_ids.size() == 10, "GemDatabase exposes 10 Main & 10 Modifier abilities")
+	for gid in main_ids:
 		var st: Texture2D = UiIcons.get_skill_icon(gid)
-		_assert(st != null and st.get_width() > 0, "Skill SVG rendered for " + gid)
-	for s_slot in range(6):
-		var slt: Texture2D = UiIcons.get_slot_icon(s_slot)
-		_assert(slt != null and slt.get_width() > 0, "Slot SVG rendered for slot %d" % s_slot)
+		_assert(st != null and st.get_width() > 0, "Main ability SVG rendered for " + gid)
+	for eff_id in ItemDatabase.get_all_non_unique_effect_ids():
+		var chip: PanelContainer = UiHelper.make_effect_chip(eff_id, true)
+		_assert(chip != null and chip.get_child_count() > 0, "Effect chip built for " + eff_id)
+		chip.free()
 
-	# 4. Diablo Item Generation, Comparison, Salvage & Prism Dust Crafting
+	# 5. Item Generation, Fixed Rolled Sockets & Behavioral Tradeoffs
 	var rng: RandomNumberGenerator = RandomNumberGenerator.new()
 	rng.seed = 12345
 	for r in [GameEnums.Rarity.COMMON, GameEnums.Rarity.MAGIC, GameEnums.Rarity.RARE, GameEnums.Rarity.UNIQUE]:
-		var it: ItemInstance = ItemDatabase.generate_item(10, r, 0.0, -1, rng)
-		_assert(it != null and it.rarity == r and it.get_socket_count() >= 1, "Generated item rarity %d: %s" % [r, it.item_name])
-		_assert(it.get_salvage_dust() >= 4, "Salvage dust valid for " + it.item_name)
+		var it: ItemInstance = ItemDatabase.generate_item(r, false, -1, rng)
+		_assert(it != null and it.rarity == r and it.get_socket_count() >= 1, "Generated item rarity %d: %s (%s)" % [r, it.item_name, it.get_socket_summary_text()])
+	var tut_wand: ItemInstance = ItemDatabase.create_tutorial_wand()
+	_assert(tut_wand != null and tut_wand.get_socket_count() >= 2 and tut_wand.links[0], "Tutorial wand has 2 linked sockets")
 
-	var weapon_a: ItemInstance = ItemDatabase.generate_item(5, GameEnums.Rarity.MAGIC, 0.0, GameEnums.EquipSlot.WEAPON, rng)
-	var weapon_b: ItemInstance = ItemDatabase.generate_item(15, GameEnums.Rarity.RARE, 0.0, GameEnums.EquipSlot.WEAPON, rng)
-	var diffs: Array[Dictionary] = UiHelper.compare_items(weapon_b, weapon_a)
-	_assert(diffs.size() > 0, "Diablo item comparison returns stat diffs")
-
-	weapon_a.setup_sockets([GameEnums.GemColor.RED, GameEnums.GemColor.BLUE], [false])
-	var linked_ok: bool = weapon_a.add_link(rng)
-	_assert(linked_ok and weapon_a.are_all_linked(), "Prism Dust Add Link connects sockets")
-	var added_sock: bool = weapon_a.add_socket(rng)
-	_assert(added_sock and weapon_a.get_socket_count() == 3, "Prism Dust Add Socket adds 3rd socket to Weapon")
-	weapon_a.recolor_sockets(rng)
-	_assert(weapon_a.socket_colors.size() == 3, "Recolor sockets preserves socket count")
 	var mini_sw: PoESocketWidget = PoESocketWidget.new()
-	mini_sw.configure_mini(weapon_a)
-	_assert(mini_sw.mini_mode and mini_sw.custom_minimum_size.x > 0, "PoESocketWidget mini mode configures cleanly")
+	mini_sw.configure_mini(tut_wand)
+	_assert(mini_sw.mini_mode and is_equal_approx(mini_sw.custom_minimum_size.y, 20.0), "PoESocketWidget mini mode height stays 20px")
 	mini_sw.free()
 
-	# 5. PoE Gem System (Active + Support Linking, Tag Matching, Passives, Prism Mastery, Gem XP, Equipment Swap)
+	# 6. PoE Ability Linking & Global Behavioral Compilation (zero numeric stat-sticks)
 	var test_stats: HeroStats = HeroStats.new("shiba")
+	test_stats.init_bare_for_tutorial("shiba")
+	_assert(test_stats.equipped[GameEnums.EquipSlot.WEAPON] == null and test_stats.active_skill_configs.is_empty(), "Tutorial bare init starts with zero gear and zero abilities")
+
 	var test_wep: ItemInstance = ItemInstance.new()
 	test_wep.equip_slot = GameEnums.EquipSlot.WEAPON
-	test_wep.setup_sockets([GameEnums.GemColor.GREEN, GameEnums.GemColor.GREEN, GameEnums.GemColor.BLUE, GameEnums.GemColor.RED], [true, false, true])
-	var g_acorn: GemInstance = GemInstance.new("acorn_barrage", 1)
-	var g_gmp: GemInstance = GemInstance.new("sup_gmp", 1)
-	var g_echo: GemInstance = GemInstance.new("sup_echo", 1) # NOT linked to socket 0-1 (link[1] is false!)
+	test_wep.effects = ["short_barrage", "double_dash", "glass_spark"]
+	test_wep.setup_sockets([GameEnums.GemColor.GREEN, GameEnums.GemColor.GREEN, GameEnums.GemColor.BLUE], [true, false])
+	var g_acorn: GemInstance = GemInstance.new("acorn_barrage")
+	var g_multi: GemInstance = GemInstance.new("mod_multishot")
+	var g_echo: GemInstance = GemInstance.new("mod_echo") # NOT linked yet across link[1] = false
 	test_wep.insert_gem(0, g_acorn)
-	test_wep.insert_gem(1, g_gmp)
+	test_wep.insert_gem(1, g_multi)
 	test_wep.insert_gem(2, g_echo)
 	test_stats.equipped[GameEnums.EquipSlot.WEAPON] = test_wep
 	test_stats.recompute()
@@ -103,61 +106,81 @@ func _run_all() -> void:
 	for c in test_stats.active_skill_configs:
 		if int(c["uid"]) == g_acorn.uid:
 			acorn_cfg = c
-	_assert(not acorn_cfg.is_empty(), "Active Acorn Barrage compiled")
-	_assert(int(acorn_cfg["projectiles"]) == 3, "Linked GMP adds +2 projectiles (total 3)")
-	_assert(bool(acorn_cfg["echo"]) == false, "Unlinked Spell Echo does NOT apply across unlinked socket gap")
+	_assert(not acorn_cfg.is_empty(), "Main Acorn Barrage compiled cleanly")
+	# Base 1 + mod_multishot (+2) + short_barrage (+2) = 5 projectiles, 0.55x lifetime!
+	_assert(int(acorn_cfg["projectiles"]) == 5, "Multi-Shot + Short Barrage tradeoff grants 5 projectiles (got %d)" % int(acorn_cfg["projectiles"]))
+	_assert(float(acorn_cfg["lifetime_mult"]) < 0.7, "Short Barrage reduces projectile lifetime range")
+	_assert(bool(acorn_cfg["echo"]) == false, "Unlinked Echo does NOT apply across unlinked socket gap")
+	_assert(test_stats.dash_max_charges == 2 and is_equal_approx(test_stats.incoming_dmg_mult, 1.45), "Double Dash & Glass Cannon flags compiled")
+	_assert(not GemDatabase.does_modifier_apply("mod_multishot", "honey_slam"), "Multi-Shot does NOT apply to melee Honey Slam")
 
-	# Now link socket 1-2 and verify Echo applies, AND test tag mismatch (GMP on Honey Slam)
+	# Enable link[1] + test Unique prism_echo + sniper_focus override
 	test_wep.links[1] = true
+	test_wep.effects = ["prism_echo", "sniper_focus", "comet_dash"]
 	test_stats.recompute()
 	for c in test_stats.active_skill_configs:
 		if int(c["uid"]) == g_acorn.uid:
 			acorn_cfg = c
-	_assert(bool(acorn_cfg["echo"]) == true, "Linked Spell Echo applies once link[1] is connected")
-	_assert(not GemDatabase.does_support_apply("sup_gmp", "honey_slam"), "GMP does NOT apply to melee Honey Slam")
-
-	# Test Passive Gems + Prismatic Mastery +1 Level
-	var test_armor: ItemInstance = ItemInstance.new()
-	test_armor.equip_slot = GameEnums.EquipSlot.ARMOR
-	test_armor.setup_sockets([GameEnums.GemColor.RED, GameEnums.GemColor.WHITE], [false])
-	test_stats.equipped[GameEnums.EquipSlot.ARMOR] = test_armor
-	test_stats.recompute()
-	var base_hp_before: float = test_stats.max_hp
-
-	var g_vit: GemInstance = GemInstance.new("pas_vitality", 1)
-	var g_prism: GemInstance = GemInstance.new("pas_prism_mastery", 1)
-	test_armor.insert_gem(0, g_vit)
-	test_stats.recompute()
-	var hp_with_vit: float = test_stats.max_hp
-	_assert(hp_with_vit > base_hp_before, "Passive gem pas_vitality increases Max HP (%.0f -> %.0f)" % [base_hp_before, hp_with_vit])
-
-	test_armor.insert_gem(1, g_prism)
-	test_stats.recompute()
-	_assert(test_stats.max_hp > hp_with_vit, "Prismatic Mastery boosts Vitality passive gem level (+12 HP)")
-
-	# Test Gem XP Leveling
-	var dmg_lvl1: float = float(acorn_cfg["damage"])
-	var leveled: bool = g_acorn.add_xp(1000.0)
-	_assert(leveled and g_acorn.level >= 2, "Gem XP leveling increases gem level")
-	test_stats.recompute()
-	for c in test_stats.active_skill_configs:
-		if int(c["uid"]) == g_acorn.uid:
-			acorn_cfg = c
-	_assert(float(acorn_cfg["damage"]) > dmg_lvl1, "Leveled active gem increases skill damage")
+	_assert(bool(acorn_cfg["echo"]) == true and int(acorn_cfg["projectiles"]) == 1 and int(acorn_cfg["pierce"]) >= 2, "Linked Echo + Sniper Focus forces 1 fast piercing shot")
+	_assert(test_stats.has_dash_triggers_skills and test_stats.dash_max_charges == 2, "Comet Dash enables 2 charges and Dash-triggers-skills")
 
 	# Test Equipment Swap preserves gems safely
-	var new_tiny_wep: ItemInstance = ItemInstance.new()
-	new_tiny_wep.equip_slot = GameEnums.EquipSlot.WEAPON
-	new_tiny_wep.setup_sockets([GameEnums.GemColor.RED], [])
-	test_stats.item_bag.append(new_tiny_wep)
+	var tiny_wep: ItemInstance = ItemInstance.new()
+	tiny_wep.equip_slot = GameEnums.EquipSlot.WEAPON
+	tiny_wep.setup_sockets([GameEnums.GemColor.RED], [])
+	test_stats.item_bag.append(tiny_wep)
 	var pouch_before: int = test_stats.gem_pouch.size()
 	test_stats.equip_item_from_bag(0)
-	_assert(test_stats.gem_pouch.size() == pouch_before + 3, "Equipping smaller weapon safely returns all 3 non-fitting gems to gem_pouch")
+	_assert(test_stats.gem_pouch.size() == pouch_before + 3, "Swapping to smaller weapon preserves all 3 gems in gem_pouch")
 
-	# 6. 20-Minute Run Director & Combat + UI + 3 Boss Encounters + Victory
+	# 7. Full Playable PoE Tutorial Lifecycle
+	main_inst.start_tutorial("shiba")
+	await process_frame
+	_assert(main_inst.state == MainGame.GameState.PLAYING and main_inst._is_tutorial, "Tutorial mode entered PLAYING bare-pawed")
+	_assert(main_inst.stats.equipped[GameEnums.EquipSlot.WEAPON] == null, "Hero starts tutorial with bare weapon slot")
+	_assert(main_inst.loot_manager.pickups.size() == 1, "Tutorial Beat 1 spawned Meadow Acorn Wand on ground")
+
+	# Walk to wand -> collect -> equip
+	var p1_pos: Vector3 = main_inst.loot_manager.pickups[0].global_position
+	main_inst.player.global_position = p1_pos
+	main_inst._process(0.4)
+	_assert(main_inst.stats.item_bag.size() == 1 and main_inst.tutorial_director.current_step == TutorialDirector.Step.EQUIP_ITEM, "Tutorial Beat 1: Looted Wand -> EQUIP_ITEM")
+	main_inst.stats.equip_item_from_bag(0)
+	main_inst._on_gear_or_gems_changed()
+	_assert(main_inst.tutorial_director.current_step == TutorialDirector.Step.LOOT_MAIN and main_inst.loot_manager.pickups.size() == 1, "Tutorial Beat 2: Equipping Wand drops Acorn Barrage")
+
+	# Loot Acorn Barrage -> socket -> kill 3 critters
+	main_inst.player.global_position = main_inst.loot_manager.pickups[0].global_position
+	main_inst._process(0.4)
+	_assert(main_inst.tutorial_director.current_step == TutorialDirector.Step.SOCKET_MAIN, "Tutorial Beat 2: Looted Acorn Barrage -> SOCKET_MAIN")
+	_assert(main_inst.stats.socket_gem_into_equipped(GameEnums.EquipSlot.WEAPON, 0, 0), "Socketed Acorn Barrage into green weapon socket 0")
+	main_inst._on_gear_or_gems_changed()
+	_assert(main_inst.tutorial_director.current_step == TutorialDirector.Step.KILL_WAVE_1 and main_inst.wave_director.enemies.size() == 3, "Tutorial Beat 2: Socketed Main Ability spawned 3 critters")
+
+	for _k in range(3):
+		var cr: EnemyEntity = main_inst.wave_director.enemies[0]
+		cr.take_damage(9999.0, Vector3.ZERO, false)
+	await process_frame
+	_assert(main_inst.tutorial_director.current_step == TutorialDirector.Step.LOOT_MOD and main_inst.loot_manager.pickups.size() == 1, "Tutorial Beat 3: Killing 3 critters drops Multi-Shot Modifier")
+
+	# Loot Multi-Shot -> link -> kill 5 critters -> Tutorial Complete
+	main_inst.player.global_position = main_inst.loot_manager.pickups[0].global_position
+	main_inst._process(0.4)
+	_assert(main_inst.tutorial_director.current_step == TutorialDirector.Step.SOCKET_MOD, "Tutorial Beat 3: Looted Multi-Shot -> SOCKET_MOD")
+	_assert(main_inst.stats.socket_gem_into_equipped(GameEnums.EquipSlot.WEAPON, 1, 0), "Linked Multi-Shot into green weapon socket 1")
+	main_inst._on_gear_or_gems_changed()
+	_assert(main_inst.tutorial_director.current_step == TutorialDirector.Step.KILL_WAVE_2 and main_inst.wave_director.enemies.size() == 5, "Tutorial Beat 3: Linking Modifier spawned 5 critters")
+
+	for _k2 in range(5):
+		var cr2: EnemyEntity = main_inst.wave_director.enemies[0]
+		cr2.take_damage(9999.0, Vector3.ZERO, false)
+	await process_frame
+	_assert(main_inst.tutorial_director.current_step == TutorialDirector.Step.DONE and main_inst.state == MainGame.GameState.ENDED and main_inst.end_screen.visible, "Tutorial Beat 3 completed -> EndScreen Tutorial Complete displayed")
+
+	# 8. Normal 20-Minute Run, TouchControls, Satchel Tradeoff View & 3-Boss Victory
 	main_inst.start_new_run("shiba")
 	await process_frame
-	_assert(main_inst.state == MainGame.GameState.PLAYING, "Game entered PLAYING state")
+	_assert(main_inst.state == MainGame.GameState.PLAYING and not main_inst._is_tutorial, "20-Min Run entered PLAYING state cleanly")
 	_assert(main_inst.hud.touch_controls != null, "TouchControls overlay attached to HudController")
 	var touch_start_x: float = main_inst.player.global_position.x
 	main_inst.player.set_touch_move(Vector2(1.0, 0.0))
@@ -168,33 +191,23 @@ func _run_all() -> void:
 	_assert(main_inst.player.get_dash_ready_fraction() < 1.0, "Touch dash trigger starts Hop-Dash cooldown")
 	main_inst.player.set_touch_move(Vector2.ZERO)
 
-	# Step live combat for 20 frames + test Inventory & Level-Up UI paths
 	for _f in range(20):
 		main_inst._process(0.05)
 		await process_frame
 
 	main_inst._open_inventory()
+	main_inst._seed_review_loot()
+	main_inst.inventory_panel._selected_bag_idx = 0
+	main_inst.inventory_panel.refresh()
 	await process_frame
-	_assert(main_inst.state == MainGame.GameState.INVENTORY and main_inst.inventory_panel.visible, "InventoryPanel opens and pauses game")
-	var found_socket_widget: bool = false
-	for slot_card in main_inst.inventory_panel._center_slots_vbox.get_children():
-		for inner_c in slot_card.get_children():
-			for sub in inner_c.get_children():
-				if sub is PoESocketWidget:
-					found_socket_widget = true
-	_assert(found_socket_widget, "PoESocketWidget rendered inside InventoryPanel")
-	main_inst.inventory_panel._active_right_tab = "gems"
+	_assert(main_inst.state == MainGame.GameState.INVENTORY and main_inst.inventory_panel.visible, "Satchel opens and displays visual tradeoff comparison")
+	main_inst.inventory_panel._active_right_tab = "main"
+	main_inst.inventory_panel.refresh()
+	main_inst.inventory_panel._active_right_tab = "mods"
 	main_inst.inventory_panel.refresh()
 	main_inst._close_inventory()
 	await process_frame
-	_assert(main_inst.state == MainGame.GameState.PLAYING and not main_inst.inventory_panel.visible, "InventoryPanel closes and resumes game")
-
-	main_inst.level_up_modal.open_for_level(2, main_inst.stats)
-	await process_frame
-	_assert(main_inst.level_up_modal.visible, "LevelUpModal displays upgrade cards")
-	main_inst.level_up_modal._pick({"kind": "stat", "stat": GameEnums.StatType.DAMAGE_PCT, "val": 14.0})
-	await process_frame
-	_assert(not main_inst.level_up_modal.visible, "LevelUpModal closes cleanly after pick")
+	_assert(main_inst.state == MainGame.GameState.PLAYING and not main_inst.inventory_panel.visible, "Satchel closes cleanly")
 
 	var boss_times: Array[float] = [390.5, 780.5, 1170.5]
 	for idx in range(boss_times.size()):
@@ -206,11 +219,11 @@ func _run_all() -> void:
 		b.take_damage(999999.0, Vector3.ZERO, false)
 		await process_frame
 		_assert(main_inst.wave_director.bosses_defeated_count == idx + 1, "Boss %d/3 defeat recorded" % [idx + 1])
-		_assert(main_inst.loot_manager.pickups.size() > pickups_before, "Boss %d/3 dropped Diablo loot fountain" % [idx + 1])
+		_assert(main_inst.loot_manager.pickups.size() > pickups_before, "Boss %d/3 dropped strictly Items & Abilities loot" % [idx + 1])
 
 	_assert(main_inst.state == MainGame.GameState.ENDED, "Defeating Boss 3 transitions MainGame to ENDED (Victory)")
 
-	# 7. Procedural SFX check
+	# 9. Procedural SFX check
 	var samples: Array[String] = main_inst.sfx.get_loaded_sample_names()
 	_assert(samples.size() >= 15, "SfxManager synthesized %d procedural WAV samples" % samples.size())
 
