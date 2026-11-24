@@ -55,9 +55,9 @@ jobs:
           echo "Using ANDROID_SDK=$SDK_DIR"
           ls -la "$SDK_DIR/build-tools"
 
-          KS_PATH="/tmp/paw_prism_release.keystore"
-          KS_ALIAS="${ANDROID_KEYSTORE_ALIAS:-pawprism}"
-          KS_PASS="${ANDROID_KEYSTORE_PASSWORD:-pawprism2026}"
+          export KS_PATH="/tmp/paw_prism_release.keystore"
+          export KS_ALIAS="${ANDROID_KEYSTORE_ALIAS:-pawprism}"
+          export KS_PASS="${ANDROID_KEYSTORE_PASSWORD:-pawprism2026}"
           if [ -n "${ANDROID_KEYSTORE_BASE64:-}" ]; then
             echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > "$KS_PATH"
           else
@@ -78,16 +78,20 @@ jobs:
           export/android/debug_keystore_pass = "${KS_PASS}"
           EOF
 
-          python3 - <<PY
+          python3 - <<'PY'
+          import os
           p = "export_presets.cfg"
+          ks_path = os.environ["KS_PATH"]
+          ks_alias = os.environ["KS_ALIAS"]
+          ks_pass = os.environ["KS_PASS"]
           with open(p, "r") as f:
               txt = f.read()
-          txt = txt.replace('keystore/debug=""', f'keystore/debug="{KS_PATH}"')
-          txt = txt.replace('keystore/debug_user=""', f'keystore/debug_user="{KS_ALIAS}"')
-          txt = txt.replace('keystore/debug_password=""', f'keystore/debug_password="{KS_PASS}"')
-          txt = txt.replace('keystore/release=""', f'keystore/release="{KS_PATH}"')
-          txt = txt.replace('keystore/release_user=""', f'keystore/release_user="{KS_ALIAS}"')
-          txt = txt.replace('keystore/release_password=""', f'keystore/release_password="{KS_PASS}"')
+          txt = txt.replace('keystore/debug=""', f'keystore/debug="{ks_path}"')
+          txt = txt.replace('keystore/debug_user=""', f'keystore/debug_user="{ks_alias}"')
+          txt = txt.replace('keystore/debug_password=""', f'keystore/debug_password="{ks_pass}"')
+          txt = txt.replace('keystore/release=""', f'keystore/release="{ks_path}"')
+          txt = txt.replace('keystore/release_user=""', f'keystore/release_user="{ks_alias}"')
+          txt = txt.replace('keystore/release_password=""', f'keystore/release_password="{ks_pass}"')
           with open(p, "w") as f:
               f.write(txt)
           PY
