@@ -47,7 +47,11 @@ func _ready() -> void:
 	if DisplayServer.is_touchscreen_available():
 		_is_mobile_touch = true
 
-	if OS.has_feature("web"):
+	if OS.has_feature("android") or OS.has_feature("ios"):
+		_is_mobile_touch = true
+		get_viewport().msaa_3d = Viewport.MSAA_DISABLED
+		get_viewport().scaling_3d_scale = 0.72
+	elif OS.has_feature("web"):
 		get_viewport().msaa_3d = Viewport.MSAA_DISABLED
 		var has_rev = JavaScriptBridge.eval("window.location.search.includes('review=1')")
 		_review_mode = bool(has_rev)
@@ -99,14 +103,17 @@ func _ready() -> void:
 		if skill_executor != null:
 			skill_executor.trigger_reactive_nova(kind, pos, dmg, radius)
 	)
-	player.dashed.connect(func() -> void:
-		sfx.play("dash_whoosh")
-		if skill_executor != null and player != null:
-			skill_executor.trigger_all_skills_from_dash(player.global_position)
-	)
 	player.static_spark_requested.connect(func(pos: Vector3) -> void:
 		if skill_executor != null:
 			skill_executor.trigger_static_spark(pos)
+	)
+	player.stride_honey_requested.connect(func(pos: Vector3) -> void:
+		if skill_executor != null:
+			skill_executor.trigger_reactive_nova("stride_honey_nova", pos, 24.0, 4.4)
+	)
+	player.comet_stride_requested.connect(func(pos: Vector3) -> void:
+		if skill_executor != null:
+			skill_executor.trigger_all_skills_bonus(pos)
 	)
 	player.orbit_shield_requested.connect(func() -> void:
 		if skill_executor != null:
@@ -180,9 +187,13 @@ func _update_responsive_scale() -> void:
 	if win_sz.x <= 10 or win_sz.y <= 10:
 		return
 	var target_csf: float = 1.0
-	if win_sz.y > int(float(win_sz.x) * 1.05):
-		var aspect_inv: float = float(win_sz.y) / float(win_sz.x)
-		target_csf = clampf(1.0 + (aspect_inv - 1.0) * 0.75, 1.0, 1.72)
+	var aspect_hw: float = float(win_sz.y) / float(win_sz.x)
+	if aspect_hw > 1.50:
+		target_csf = 2.75
+	elif aspect_hw > 1.05:
+		target_csf = 1.95
+	elif _is_mobile_touch:
+		target_csf = 1.45
 	if absf(target_csf - _last_content_scale) > 0.02:
 		_last_content_scale = target_csf
 		get_tree().root.content_scale_factor = target_csf
@@ -211,10 +222,6 @@ func _build_ui() -> void:
 	hud.open_inventory_requested.connect(_open_inventory)
 	hud.toggle_pause_requested.connect(_toggle_pause)
 	hud.toggle_mute_requested.connect(_toggle_mute)
-	hud.dash_requested.connect(func() -> void:
-		if player != null:
-			player.trigger_touch_dash()
-	)
 	ui_layer.add_child(hud)
 	hud.set_mobile_mode(_is_mobile_touch, _allow_mouse_touch)
 

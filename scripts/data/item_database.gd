@@ -14,10 +14,10 @@ static func _ensure_effects() -> void:
 		return
 	var defs: Array[Dictionary] = [
 		# Standard & Tradeoff Global Effects (18)
-		{"id": "dash_honey_nova", "tag": "Dash -> Honey Nova", "icon": "dash_paw", "color": Color(1.0, 0.78, 0.28), "is_tradeoff": false},
-		{"id": "dash_triggers_skills", "tag": "Dash Fires Skills | Slow Auto", "icon": "dash_paw", "color": Color(0.55, 0.90, 1.0), "is_tradeoff": true},
+		{"id": "stride_honey_nova", "tag": "Moving -> Honey Nova", "icon": "honey_slam", "color": Color(1.0, 0.78, 0.28), "is_tradeoff": false},
+		{"id": "cadence_burst", "tag": "4th Cast -> Burst | Slow", "icon": "star_upgrade", "color": Color(0.55, 0.90, 1.0), "is_tradeoff": true},
 		{"id": "turret_stance", "tag": "Stand Still -> 2x Cast", "icon": "sun_meadow", "color": Color(1.0, 0.86, 0.42), "is_tradeoff": true},
-		{"id": "zoomies_on_kill", "tag": "Kills -> Speed Burst", "icon": "dash_paw", "color": Color(0.52, 0.95, 0.58), "is_tradeoff": false},
+		{"id": "zoomies_on_kill", "tag": "Kills -> Speed Burst", "icon": "star_upgrade", "color": Color(0.52, 0.95, 0.58), "is_tradeoff": false},
 		{"id": "edge_ricochet", "tag": "Shots Bounce Back", "icon": "star_upgrade", "color": Color(0.65, 0.92, 1.0), "is_tradeoff": false},
 		{"id": "short_barrage", "tag": "+2 Shots | Short Range", "icon": "star_upgrade", "color": Color(0.56, 0.96, 0.60), "is_tradeoff": true},
 		{"id": "sniper_focus", "tag": "Pierce +2 | 1 Fast Shot", "icon": "star_upgrade", "color": Color(1.0, 0.78, 0.42), "is_tradeoff": true},
@@ -25,18 +25,18 @@ static func _ensure_effects() -> void:
 		{"id": "ember_corpse", "tag": "Kills -> Fire Pop", "icon": "fireball_berry", "color": Color(1.0, 0.50, 0.24), "is_tradeoff": false},
 		{"id": "frost_shatter", "tag": "Chill Kills -> Ice Ring", "icon": "frost_nova", "color": Color(0.45, 0.92, 1.0), "is_tradeoff": false},
 		{"id": "static_sprint", "tag": "Moving -> Zap Sparks", "icon": "whisker_lightning", "color": Color(0.55, 0.88, 1.0), "is_tradeoff": false},
-		{"id": "vamp_dash", "tag": "Dash -> Siphon Heal", "icon": "heart", "color": Color(1.0, 0.45, 0.58), "is_tradeoff": false},
+		{"id": "kill_siphon", "tag": "Kills -> Siphon Heal", "icon": "heart", "color": Color(1.0, 0.45, 0.58), "is_tradeoff": false},
 		{"id": "thorns_burst", "tag": "Hit -> Bramble Nova", "icon": "boss_crown", "color": Color(0.95, 0.56, 0.34), "is_tradeoff": false},
 		{"id": "gravity_slams", "tag": "AoE Pulls Foes In", "icon": "sun_meadow", "color": Color(0.76, 0.60, 1.0), "is_tradeoff": false},
 		{"id": "glass_spark", "tag": "Heavy Impact | Fragile", "icon": "skull", "color": Color(1.0, 0.44, 0.44), "is_tradeoff": true},
-		{"id": "double_dash", "tag": "2x Dash Charges", "icon": "dash_paw", "color": Color(1.0, 0.88, 0.36), "is_tradeoff": false},
+		{"id": "fleet_paws", "tag": "Moving -> Speed Ramp", "icon": "star_upgrade", "color": Color(1.0, 0.88, 0.36), "is_tradeoff": false},
 		{"id": "orbit_shield", "tag": "Hit -> Star Shield", "icon": "starlight_orb", "color": Color(0.48, 0.86, 1.0), "is_tradeoff": false},
 		{"id": "lucky_clover", "tag": "Rarer Loot & Links", "icon": "bag", "color": Color(0.54, 0.96, 0.62), "is_tradeoff": false},
 		# Unique Keystones (5)
 		{"id": "nova_barrage", "tag": "All Shots Fire 360 Ring", "icon": "star_upgrade", "color": Color(1.0, 0.58, 0.22), "is_tradeoff": false, "unique_only": true},
 		{"id": "prism_echo", "tag": "Linked Mods Double-Proc", "icon": "paw_prism_crest", "color": Color(0.94, 0.72, 1.0), "is_tradeoff": false, "unique_only": true},
 		{"id": "aegis_freeze", "tag": "Hit -> Freezing Honey Nova", "icon": "frost_nova", "color": Color(0.52, 0.92, 1.0), "is_tradeoff": false, "unique_only": true},
-		{"id": "comet_dash", "tag": "Dash Fires All Skills", "icon": "dash_paw", "color": Color(1.0, 0.80, 0.28), "is_tradeoff": false, "unique_only": true},
+		{"id": "comet_stride", "tag": "Moving -> Bonus Casts", "icon": "meteor_pine", "color": Color(1.0, 0.80, 0.28), "is_tradeoff": false, "unique_only": true},
 		{"id": "cheat_death", "tag": "Fatal Hit -> Burst Heal", "icon": "heart", "color": Color(1.0, 0.88, 0.36), "is_tradeoff": false, "unique_only": true},
 	]
 	for d in defs:
@@ -131,7 +131,7 @@ static func get_unique_templates() -> Array[Dictionary]:
 			"name": "Paws of the Comet",
 			"slot": GameEnums.EquipSlot.BOOTS,
 			"style": "boots",
-			"effects": ["comet_dash", "double_dash"],
+			"effects": ["comet_stride", "fleet_paws"],
 			"sockets": [GameEnums.GemColor.GREEN, GameEnums.GemColor.GREEN, GameEnums.GemColor.BLUE],
 			"links": [true, true],
 		},
@@ -161,7 +161,7 @@ static func create_tutorial_wand() -> ItemInstance:
 	item.equip_slot = GameEnums.EquipSlot.WEAPON
 	item.rarity = GameEnums.Rarity.MAGIC
 	item.visual_style = "acorn_wand"
-	item.effects = ["dash_honey_nova"]
+	item.effects = ["stride_honey_nova"]
 	item.setup_sockets([GameEnums.GemColor.GREEN, GameEnums.GemColor.GREEN], [true])
 	return item
 
@@ -273,7 +273,7 @@ static func generate_item(forced_rarity: int = -1, lucky_bonus: bool = false, fo
 	if rarity == GameEnums.Rarity.COMMON:
 		item.item_name = base_name
 	elif rarity == GameEnums.Rarity.MAGIC:
-		var magic_pref: Array[String] = ["Dasher's", "Swift", "Sunlit", "Bramble", "Starry", "Ember", "Frost", "Clover"]
+		var magic_pref: Array[String] = ["Zoomer's", "Swift", "Sunlit", "Bramble", "Starry", "Ember", "Frost", "Clover"]
 		item.item_name = "%s %s" % [magic_pref[rng.randi() % magic_pref.size()], base_name]
 	else:
 		var rare_adj: Array[String] = ["Star", "Honey", "Clover", "Moon", "Sun", "Whisker", "Bramble", "Glimmer", "Paw"]

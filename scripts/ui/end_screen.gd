@@ -33,7 +33,8 @@ func _apply_responsive_layout() -> void:
 	var vp: Vector2 = get_viewport_rect().size
 	if vp.x <= 10.0 or _panel == null:
 		return
-	_panel.custom_minimum_size = Vector2(minf(vp.x - 32.0, 620.0), 400.0)
+	var is_portrait: bool = vp.x < 750.0
+	_panel.custom_minimum_size = Vector2(minf(vp.x - 20.0, 620.0), minf(vp.y - 32.0, 520.0) if is_portrait else 400.0)
 
 func _build_ui() -> void:
 	var dim: ColorRect = ColorRect.new()
@@ -89,9 +90,14 @@ func _build_ui() -> void:
 	build_well.add_theme_stylebox_override("panel", UiHelper.make_panel_box(UiHelper.BG_WELL, UiHelper.BORDER_SUBTLE, 10, 1, 10, false))
 	v.add_child(build_well)
 
+	var build_scroll: TouchScrollContainer = TouchScrollContainer.new()
+	build_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	build_well.add_child(build_scroll)
+
 	_build_vbox = VBoxContainer.new()
+	_build_vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_build_vbox.add_theme_constant_override("separation", 8)
-	build_well.add_child(_build_vbox)
+	build_scroll.add_child(_build_vbox)
 
 	var btns: HBoxContainer = HBoxContainer.new()
 	btns.add_theme_constant_override("separation", 12)

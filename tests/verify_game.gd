@@ -91,7 +91,7 @@ func _run_all() -> void:
 
 	var test_wep: ItemInstance = ItemInstance.new()
 	test_wep.equip_slot = GameEnums.EquipSlot.WEAPON
-	test_wep.effects = ["short_barrage", "double_dash", "glass_spark"]
+	test_wep.effects = ["short_barrage", "fleet_paws", "glass_spark", "kill_siphon"]
 	test_wep.setup_sockets([GameEnums.GemColor.GREEN, GameEnums.GemColor.GREEN, GameEnums.GemColor.BLUE], [true, false])
 	var g_acorn: GemInstance = GemInstance.new("acorn_barrage")
 	var g_multi: GemInstance = GemInstance.new("mod_multishot")
@@ -107,22 +107,25 @@ func _run_all() -> void:
 		if int(c["uid"]) == g_acorn.uid:
 			acorn_cfg = c
 	_assert(not acorn_cfg.is_empty(), "Main Acorn Barrage compiled cleanly")
+	var base_acorn_cd: float = float(acorn_cfg["cooldown"])
 	# Base 1 + mod_multishot (+2) + short_barrage (+2) = 5 projectiles, 0.55x lifetime!
 	_assert(int(acorn_cfg["projectiles"]) == 5, "Multi-Shot + Short Barrage tradeoff grants 5 projectiles (got %d)" % int(acorn_cfg["projectiles"]))
 	_assert(float(acorn_cfg["lifetime_mult"]) < 0.7, "Short Barrage reduces projectile lifetime range")
 	_assert(bool(acorn_cfg["echo"]) == false, "Unlinked Echo does NOT apply across unlinked socket gap")
-	_assert(test_stats.dash_max_charges == 2 and is_equal_approx(test_stats.incoming_dmg_mult, 1.45), "Double Dash & Glass Cannon flags compiled")
+	_assert(not ("dash_max_charges" in test_stats), "Dash properties completely removed from HeroStats")
+	_assert(test_stats.has_fleet_paws and test_stats.has_kill_siphon and is_equal_approx(test_stats.incoming_dmg_mult, 1.45), "Fleet Paws, Kill Siphon & Glass Spark flags compiled")
 	_assert(not GemDatabase.does_modifier_apply("mod_multishot", "honey_slam"), "Multi-Shot does NOT apply to melee Honey Slam")
 
-	# Enable link[1] + test Unique prism_echo + sniper_focus override
+	# Enable link[1] + test Unique prism_echo + sniper_focus + replacement movement/cadence effects
 	test_wep.links[1] = true
-	test_wep.effects = ["prism_echo", "sniper_focus", "comet_dash"]
+	test_wep.effects = ["prism_echo", "sniper_focus", "comet_stride", "cadence_burst", "stride_honey_nova"]
 	test_stats.recompute()
 	for c in test_stats.active_skill_configs:
 		if int(c["uid"]) == g_acorn.uid:
 			acorn_cfg = c
 	_assert(bool(acorn_cfg["echo"]) == true and int(acorn_cfg["projectiles"]) == 1 and int(acorn_cfg["pierce"]) >= 2, "Linked Echo + Sniper Focus forces 1 fast piercing shot")
-	_assert(test_stats.has_dash_triggers_skills and test_stats.dash_max_charges == 2, "Comet Dash enables 2 charges and Dash-triggers-skills")
+	_assert(test_stats.has_comet_stride and test_stats.has_cadence_burst and test_stats.has_stride_honey_nova, "Comet Stride, Cadence Burst & Stride Honey Nova compiled cleanly")
+	_assert(float(acorn_cfg["cooldown"]) > base_acorn_cd * 1.15, "Cadence Burst applies 1.18x skill cooldown tradeoff")
 
 	# Test Equipment Swap preserves gems safely
 	var tiny_wep: ItemInstance = ItemInstance.new()
@@ -181,15 +184,21 @@ func _run_all() -> void:
 	main_inst.start_new_run("shiba")
 	await process_frame
 	_assert(main_inst.state == MainGame.GameState.PLAYING and not main_inst._is_tutorial, "20-Min Run entered PLAYING state cleanly")
-	_assert(main_inst.hud.touch_controls != null, "TouchControls overlay attached to HudController")
+	_assert(main_inst.hud.touch_controls != null and not main_inst.hud.touch_controls.has_signal("dash_triggered"), "TouchControls pure joystick overlay attached without Dash pad")
+	_assert(not main_inst.player.has_signal("dashed") and main_inst.player.has_signal("stride_honey_requested") and main_inst.player.has_signal("comet_stride_requested"), "PlayerController removed dash and exposes stride triggers")
 	var touch_start_x: float = main_inst.player.global_position.x
 	main_inst.player.set_touch_move(Vector2(1.0, 0.0))
 	main_inst.player.step(0.1)
 	_assert(main_inst.player.global_position.x > touch_start_x + 0.4, "Touch joystick vector moves player hero")
-	main_inst.player.trigger_touch_dash()
-	main_inst.player.step(0.05)
-	_assert(main_inst.player.get_dash_ready_fraction() < 1.0, "Touch dash trigger starts Hop-Dash cooldown")
 	main_inst.player.set_touch_move(Vector2.ZERO)
+
+	# Verify TouchScrollContainer + kill_siphon + SkillExecutor stride/cadence hooks
+	var ts_probe: TouchScrollContainer = TouchScrollContainer.new()
+	_assert(ts_probe != null and not TouchScrollContainer.was_recent_drag(), "TouchScrollContainer instantiates and reports clean initial drag state")
+	ts_probe.free()
+	main_inst.skill_executor.trigger_reactive_nova("stride_honey_nova", main_inst.player.global_position, 24.0, 4.4)
+	main_inst.skill_executor.trigger_reactive_nova("cadence_burst", main_inst.player.global_position, 34.0, 4.6)
+	main_inst.skill_executor.trigger_all_skills_bonus(main_inst.player.global_position)
 
 	for _f in range(20):
 		main_inst._process(0.05)
@@ -198,9 +207,11 @@ func _run_all() -> void:
 	main_inst._open_inventory()
 	main_inst._seed_review_loot()
 	main_inst.inventory_panel._selected_bag_idx = 0
-	main_inst.inventory_panel.refresh()
+	for mtab in ["gear", "items", "skills", "build"]:
+		main_inst.inventory_panel._mobile_tab = mtab
+		main_inst.inventory_panel.refresh()
 	await process_frame
-	_assert(main_inst.state == MainGame.GameState.INVENTORY and main_inst.inventory_panel.visible, "Satchel opens and displays visual tradeoff comparison")
+	_assert(main_inst.state == MainGame.GameState.INVENTORY and main_inst.inventory_panel.visible, "Satchel opens and switches tabs cleanly across mobile & desktop layouts")
 	main_inst.inventory_panel._active_right_tab = "main"
 	main_inst.inventory_panel.refresh()
 	main_inst.inventory_panel._active_right_tab = "mods"

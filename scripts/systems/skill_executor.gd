@@ -22,6 +22,7 @@ var _shield_orbit_timer: float = 0.0
 var _shield_orbit_nodes: Array[MeshInstance3D] = []
 var _shield_orbit_angle: float = 0.0
 var _shield_orbit_hit_cd: Dictionary = {}
+var _cast_counter: int = 0
 
 func setup(p_world: Node3D, p_grid: SpatialGrid, p_stats: HeroStats) -> void:
 	world_root = p_world
@@ -47,6 +48,7 @@ func clear_all() -> void:
 				n.queue_free()
 	_orbit_groups.clear()
 	_shield_orbit_timer = 0.0
+	_cast_counter = 0
 	_shield_orbit_hit_cd.clear()
 	for n in _shield_orbit_nodes:
 		if is_instance_valid(n):
@@ -166,9 +168,12 @@ func trigger_reactive_nova(kind: String, pos: Vector3, dmg: float, radius: float
 			col = Color(0.52, 0.92, 1.0)
 			p_cold = true
 			p_slow = true
-		"dash_honey_nova":
+		"stride_honey_nova":
 			col = Color(1.0, 0.78, 0.22)
 			p_slow = true
+		"cadence_burst":
+			col = Color(0.55, 0.90, 1.0)
+			p_slow = false
 		"thorns_burst":
 			col = Color(0.95, 0.42, 0.26)
 		"ember_corpse":
@@ -186,8 +191,8 @@ func trigger_reactive_nova(kind: String, pos: Vector3, dmg: float, radius: float
 	world_root.add_child(a)
 	_areas.append(a)
 
-func trigger_all_skills_from_dash(player_pos: Vector3) -> void:
-	if stats == null or not stats.has_dash_triggers_skills or world_root == null:
+func trigger_all_skills_bonus(player_pos: Vector3) -> void:
+	if stats == null or not stats.has_comet_stride or world_root == null:
 		return
 	for cfg in stats.active_skill_configs:
 		if String(cfg["gem_id"]) == "starlight_orb":
@@ -404,6 +409,10 @@ func _trigger_skill(cfg: Dictionary, player_pos: Vector3, is_echo: bool) -> bool
 
 	if not is_echo:
 		skill_casted.emit(gid)
+		if stats != null and stats.has_cadence_burst:
+			_cast_counter += 1
+			if _cast_counter % 4 == 0:
+				trigger_reactive_nova("cadence_burst", player_pos, 34.0, 4.6)
 	return true
 
 func _fire_fan(origin: Vector3, target: Vector3, cfg: Dictionary, style: String, spread_step: float) -> void:

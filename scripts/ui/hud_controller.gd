@@ -4,7 +4,6 @@ extends Control
 signal open_inventory_requested()
 signal toggle_pause_requested()
 signal toggle_mute_requested()
-signal dash_requested()
 
 var touch_controls: TouchControls = null
 var _is_mobile_mode: bool = false
@@ -21,8 +20,7 @@ var _mute_lbl: Label = null
 var _pause_btn: Button = null
 var _pause_lbl: Label = null
 var _bl_panel: PanelContainer = null
-var _dash_lbl: Label = null
-var _dash_charges_lbl: Label = null
+var _bl_box: BoxContainer = null
 var _bc_vbox: VBoxContainer = null
 
 var _hero_portrait: TextureRect = null
@@ -41,7 +39,6 @@ var _boss_hp_bar: ProgressBar = null
 
 var _hp_bar: ProgressBar = null
 var _hp_lbl: Label = null
-var _dash_bar: ProgressBar = null
 var _inv_btn: Button = null
 var _inv_lbl: Label = null
 var _mute_icon: TextureRect = null
@@ -79,35 +76,35 @@ func _notification(what: int) -> void:
 		_apply_responsive_layout()
 
 func _build_hud() -> void:
-	# === Top Status Strip (no XP bar) ===
+	# === Top Status Strip ===
 	_top_bar = HBoxContainer.new()
 	_top_bar.set_anchors_preset(Control.PRESET_TOP_WIDE)
-	_top_bar.offset_top = 14
+	_top_bar.offset_top = 12
 	_top_bar.offset_left = 18
 	_top_bar.offset_right = -18
-	_top_bar.offset_bottom = 66
-	_top_bar.add_theme_constant_override("separation", 12)
+	_top_bar.offset_bottom = 62
+	_top_bar.add_theme_constant_override("separation", 10)
 	_top_bar.mouse_filter = Control.MOUSE_FILTER_PASS
 	add_child(_top_bar)
 
 	_left_pill = PanelContainer.new()
-	_left_pill.add_theme_stylebox_override("panel", UiHelper.make_panel_box(UiHelper.BG_WOOD_DEEP, UiHelper.BORDER_BRASS, 12, 2, 7))
+	_left_pill.add_theme_stylebox_override("panel", UiHelper.make_panel_box(UiHelper.BG_WOOD_DEEP, UiHelper.BORDER_BRASS, 12, 2, 6))
 	_top_bar.add_child(_left_pill)
 	var lp_h: HBoxContainer = HBoxContainer.new()
-	lp_h.add_theme_constant_override("separation", 10)
+	lp_h.add_theme_constant_override("separation", 8)
 	_left_pill.add_child(lp_h)
 
-	_hero_portrait = UiHelper.make_icon_rect(UiIcons.get_hero_portrait("shiba"), 32)
+	_hero_portrait = UiHelper.make_icon_rect(UiIcons.get_hero_portrait("shiba"), 30)
 	lp_h.add_child(_hero_portrait)
 
-	lp_h.add_child(UiHelper.make_icon_rect(UiIcons.get_ui_icon("skull"), 18))
+	lp_h.add_child(UiHelper.make_icon_rect(UiIcons.get_ui_icon("skull"), 17))
 	_kills_lbl = Label.new()
 	_kills_lbl.text = "0"
 	_kills_lbl.add_theme_font_override("font", UiHelper.get_bold_font())
 	_kills_lbl.add_theme_font_size_override("font_size", 14)
 	lp_h.add_child(_kills_lbl)
 
-	lp_h.add_child(UiHelper.make_icon_rect(UiIcons.get_ui_icon("boss_crown"), 18))
+	lp_h.add_child(UiHelper.make_icon_rect(UiIcons.get_ui_icon("boss_crown"), 17))
 	_bosses_lbl = Label.new()
 	_bosses_lbl.text = "0/3"
 	_bosses_lbl.add_theme_font_override("font", UiHelper.get_bold_font())
@@ -120,15 +117,15 @@ func _build_hud() -> void:
 	spacer1.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_top_bar.add_child(spacer1)
 
-	# Center Clock Plaque (20-Min Run)
+	# Center Clock Plaque
 	_clock_pill = PanelContainer.new()
-	_clock_pill.add_theme_stylebox_override("panel", UiHelper.make_panel_box(UiHelper.BG_WOOD_DEEP, UiHelper.BORDER_GOLD, 12, 2, 8))
+	_clock_pill.add_theme_stylebox_override("panel", UiHelper.make_panel_box(UiHelper.BG_WOOD_DEEP, UiHelper.BORDER_GOLD, 12, 2, 7))
 	_top_bar.add_child(_clock_pill)
 	var cp_h: HBoxContainer = HBoxContainer.new()
-	cp_h.add_theme_constant_override("separation", 12)
+	cp_h.add_theme_constant_override("separation", 10)
 	_clock_pill.add_child(cp_h)
 
-	_phase_icon = UiHelper.make_icon_rect(UiIcons.get_ui_icon("sun_meadow"), 22)
+	_phase_icon = UiHelper.make_icon_rect(UiIcons.get_ui_icon("sun_meadow"), 20)
 	cp_h.add_child(_phase_icon)
 
 	_phase_lbl = Label.new()
@@ -150,18 +147,18 @@ func _build_hud() -> void:
 	_next_boss_lbl.add_theme_color_override("font_color", Color(1.0, 0.68, 0.46))
 	cp_h.add_child(_next_boss_lbl)
 
-	# Center Tutorial Objective Plaque (Tutorial Mode)
+	# Center Tutorial Objective Plaque
 	_tut_pill = PanelContainer.new()
 	_tut_pill.visible = false
-	_tut_pill.add_theme_stylebox_override("panel", UiHelper.make_panel_box(Color(0.24, 0.17, 0.08), UiHelper.BORDER_GOLD, 12, 3, 9))
+	_tut_pill.add_theme_stylebox_override("panel", UiHelper.make_panel_box(Color(0.24, 0.17, 0.08), UiHelper.BORDER_GOLD, 12, 3, 8))
 	_top_bar.add_child(_tut_pill)
 	var tp_h: HBoxContainer = HBoxContainer.new()
-	tp_h.add_theme_constant_override("separation", 9)
+	tp_h.add_theme_constant_override("separation", 7)
 	_tut_pill.add_child(tp_h)
-	tp_h.add_child(UiHelper.make_icon_rect(UiIcons.get_ui_icon("star_upgrade"), 20))
+	tp_h.add_child(UiHelper.make_icon_rect(UiIcons.get_ui_icon("star_upgrade"), 18))
 	_tut_lbl = Label.new()
 	_tut_lbl.text = "1/3  Walk to Wand"
-	UiHelper.apply_display_font(_tut_lbl, 17, Color(1.0, 0.90, 0.42), 2)
+	UiHelper.apply_display_font(_tut_lbl, 16, Color(1.0, 0.90, 0.42), 2)
 	tp_h.add_child(_tut_lbl)
 
 	var spacer2: Control = Control.new()
@@ -172,7 +169,7 @@ func _build_hud() -> void:
 	# Optional FPS pill
 	_fps_pill = PanelContainer.new()
 	_fps_pill.visible = false
-	_fps_pill.add_theme_stylebox_override("panel", UiHelper.make_panel_box(UiHelper.BG_WELL, UiHelper.BORDER_BRASS, 8, 1, 6, false))
+	_fps_pill.add_theme_stylebox_override("panel", UiHelper.make_panel_box(UiHelper.BG_WELL, UiHelper.BORDER_BRASS, 8, 1, 5, false))
 	_top_bar.add_child(_fps_pill)
 	_fps_lbl = Label.new()
 	_fps_lbl.text = "60 FPS"
@@ -234,8 +231,8 @@ func _build_hud() -> void:
 	_boss_panel.set_anchors_preset(Control.PRESET_TOP_WIDE)
 	_boss_panel.offset_left = 250
 	_boss_panel.offset_right = -250
-	_boss_panel.offset_top = 74
-	_boss_panel.offset_bottom = 132
+	_boss_panel.offset_top = 72
+	_boss_panel.offset_bottom = 128
 	add_child(_boss_panel)
 
 	var bp_v: VBoxContainer = VBoxContainer.new()
@@ -262,8 +259,8 @@ func _build_hud() -> void:
 	# === Styled Event Banner ===
 	var banner_center: CenterContainer = CenterContainer.new()
 	banner_center.set_anchors_preset(Control.PRESET_TOP_WIDE)
-	banner_center.offset_top = 138
-	banner_center.offset_bottom = 190
+	banner_center.offset_top = 136
+	banner_center.offset_bottom = 188
 	banner_center.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(banner_center)
 
@@ -274,7 +271,7 @@ func _build_hud() -> void:
 
 	_banner_lbl = Label.new()
 	_banner_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	UiHelper.apply_display_font(_banner_lbl, 21, Color(1.0, 0.90, 0.42), 3)
+	UiHelper.apply_display_font(_banner_lbl, 19, Color(1.0, 0.90, 0.42), 3)
 	_banner_panel.add_child(_banner_lbl)
 
 	# === Right Loot Toast Feed ===
@@ -282,42 +279,45 @@ func _build_hud() -> void:
 	_toast_vbox.set_anchors_preset(Control.PRESET_TOP_RIGHT)
 	_toast_vbox.offset_left = -350
 	_toast_vbox.offset_right = -18
-	_toast_vbox.offset_top = 76
+	_toast_vbox.offset_top = 74
 	_toast_vbox.offset_bottom = 340
 	_toast_vbox.add_theme_constant_override("separation", 6)
 	_toast_vbox.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(_toast_vbox)
 
-	# === Bottom-Left Hero Vitals & Satchel Button ===
+	# === Hero Vitals & Satchel Dock (bottom-left on Desktop, clean full-width bottom bar on Portrait) ===
 	_bl_panel = PanelContainer.new()
-	_bl_panel.add_theme_stylebox_override("panel", UiHelper.make_panel_box(UiHelper.BG_WOOD_DEEP, UiHelper.BORDER_BRASS, 14, 2, 11))
+	_bl_panel.add_theme_stylebox_override("panel", UiHelper.make_panel_box(UiHelper.BG_WOOD_DEEP, UiHelper.BORDER_BRASS, 14, 2, 10))
 	_bl_panel.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
 	_bl_panel.offset_left = 18
-	_bl_panel.offset_top = -132
+	_bl_panel.offset_top = -104
 	_bl_panel.offset_right = 296
 	_bl_panel.offset_bottom = -14
 	add_child(_bl_panel)
 
-	var bl_v: VBoxContainer = VBoxContainer.new()
-	bl_v.add_theme_constant_override("separation", 7)
-	_bl_panel.add_child(bl_v)
+	_bl_box = BoxContainer.new()
+	_bl_box.vertical = true
+	_bl_box.add_theme_constant_override("separation", 8)
+	_bl_panel.add_child(_bl_box)
 
 	var hp_row: HBoxContainer = HBoxContainer.new()
+	hp_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	hp_row.add_theme_constant_override("separation", 6)
-	bl_v.add_child(hp_row)
+	_bl_box.add_child(hp_row)
 	hp_row.add_child(UiHelper.make_icon_rect(UiIcons.get_ui_icon("heart"), 22))
 
 	_hp_bar = ProgressBar.new()
 	_hp_bar.show_percentage = false
 	_hp_bar.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_hp_bar.custom_minimum_size = Vector2(0, 24)
+	_hp_bar.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	_hp_bar.custom_minimum_size = Vector2(0, 28)
 	UiHelper.style_progress_bar(_hp_bar, Color(0.86, 0.22, 0.30), Color(0.16, 0.07, 0.09), 7)
 	hp_row.add_child(_hp_bar)
 
 	_hp_lbl = Label.new()
 	_hp_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_hp_lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	_hp_lbl.add_theme_font_size_override("font_size", 13)
+	_hp_lbl.add_theme_font_size_override("font_size", 14)
 	_hp_lbl.add_theme_font_override("font", UiHelper.get_bold_font())
 	_hp_lbl.add_theme_color_override("font_color", UiHelper.TEXT_CREAM)
 	_hp_lbl.add_theme_color_override("font_outline_color", Color(0.08, 0.03, 0.04, 0.95))
@@ -325,41 +325,14 @@ func _build_hud() -> void:
 	_hp_bar.add_child(_hp_lbl)
 	_hp_lbl.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 
-	var dash_row: HBoxContainer = HBoxContainer.new()
-	dash_row.add_theme_constant_override("separation", 6)
-	bl_v.add_child(dash_row)
-	dash_row.add_child(UiHelper.make_icon_rect(UiIcons.get_ui_icon("dash_paw"), 18))
-
-	_dash_lbl = Label.new()
-	_dash_lbl.text = "Dash [Space]"
-	_dash_lbl.add_theme_font_override("font", UiHelper.get_bold_font())
-	_dash_lbl.add_theme_font_size_override("font_size", 12)
-	_dash_lbl.add_theme_color_override("font_color", UiHelper.TEXT_PARCHMENT)
-	dash_row.add_child(_dash_lbl)
-
-	_dash_bar = ProgressBar.new()
-	_dash_bar.show_percentage = false
-	_dash_bar.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_dash_bar.custom_minimum_size = Vector2(0, 14)
-	UiHelper.style_progress_bar(_dash_bar, Color(0.98, 0.78, 0.24), Color(0.12, 0.09, 0.08), 5)
-	dash_row.add_child(_dash_bar)
-
-	_dash_charges_lbl = Label.new()
-	_dash_charges_lbl.visible = false
-	_dash_charges_lbl.text = "2x"
-	_dash_charges_lbl.add_theme_font_override("font", UiHelper.get_bold_font())
-	_dash_charges_lbl.add_theme_font_size_override("font_size", 12)
-	_dash_charges_lbl.add_theme_color_override("font_color", Color(1.0, 0.88, 0.36))
-	dash_row.add_child(_dash_charges_lbl)
-
 	_inv_btn = Button.new()
 	_inv_btn.text = ""
 	_inv_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_inv_btn.custom_minimum_size = Vector2(0, 38)
+	_inv_btn.custom_minimum_size = Vector2(0, 40)
 	_inv_btn.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 	UiHelper.style_button(_inv_btn, UiHelper.CTA_SAPPHIRE, UiHelper.BORDER_GOLD, 10, 6)
 	_inv_btn.pressed.connect(func() -> void: open_inventory_requested.emit())
-	bl_v.add_child(_inv_btn)
+	_bl_box.add_child(_inv_btn)
 
 	var inv_cc: CenterContainer = CenterContainer.new()
 	inv_cc.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -369,19 +342,19 @@ func _build_hud() -> void:
 	inv_h.add_theme_constant_override("separation", 6)
 	inv_h.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	inv_cc.add_child(inv_h)
-	inv_h.add_child(UiHelper.make_icon_rect(UiIcons.get_ui_icon("bag"), 18))
+	inv_h.add_child(UiHelper.make_icon_rect(UiIcons.get_ui_icon("bag"), 19))
 	_inv_lbl = Label.new()
 	_inv_lbl.text = "Satchel [Tab]"
 	_inv_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	UiHelper.apply_display_font(_inv_lbl, 13, UiHelper.TEXT_CREAM, 2)
+	UiHelper.apply_display_font(_inv_lbl, 14, UiHelper.TEXT_CREAM, 2)
 	inv_h.add_child(_inv_lbl)
 
-	# === Bottom-Center Ability Dock (no levels / passives clutter) ===
+	# === Bottom-Center Ability Dock ===
 	_bc_vbox = VBoxContainer.new()
 	_bc_vbox.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
 	_bc_vbox.offset_left = 310
 	_bc_vbox.offset_right = -310
-	_bc_vbox.offset_top = -124
+	_bc_vbox.offset_top = -104
 	_bc_vbox.offset_bottom = -14
 	_bc_vbox.alignment = BoxContainer.ALIGNMENT_END
 	_bc_vbox.add_theme_constant_override("separation", 4)
@@ -393,9 +366,8 @@ func _build_hud() -> void:
 	_skills_hbox.add_theme_constant_override("separation", 8)
 	_bc_vbox.add_child(_skills_hbox)
 
-	# === Multi-Touch Virtual Joystick & Dash Pad ===
+	# === Multi-Touch Virtual Joystick (Dash removed!) ===
 	touch_controls = TouchControls.new()
-	touch_controls.dash_triggered.connect(func() -> void: dash_requested.emit())
 	touch_controls.excluded_controls = [_left_pill, _clock_pill, _tut_pill, _mute_btn, _pause_btn, _bl_panel]
 	add_child(touch_controls)
 
@@ -416,7 +388,7 @@ func _build_hud() -> void:
 		gl.visible = false
 		gl.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		gl.add_theme_font_override("font", UiHelper.get_bold_font())
-		gl.add_theme_font_size_override("font_size", 12)
+		gl.add_theme_font_size_override("font_size", 13)
 		gl.add_theme_color_override("font_outline_color", Color(0.05, 0.04, 0.04))
 		gl.add_theme_constant_override("outline_size", 4)
 		add_child(gl)
@@ -428,7 +400,7 @@ func _build_hud() -> void:
 		cl.visible = false
 		cl.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		cl.add_theme_font_override("font", UiHelper.get_display_font())
-		cl.add_theme_font_size_override("font_size", 14)
+		cl.add_theme_font_size_override("font_size", 15)
 		cl.add_theme_color_override("font_outline_color", Color(0.05, 0.04, 0.04))
 		cl.add_theme_constant_override("outline_size", 4)
 		add_child(cl)
@@ -472,47 +444,66 @@ func _apply_responsive_layout() -> void:
 	var vp: Vector2 = get_viewport_rect().size
 	if vp.x <= 10.0:
 		return
-	var is_portrait: bool = vp.x < 960.0
+	var is_portrait: bool = vp.x < 750.0
 	if _phase_lbl != null:
 		_phase_lbl.visible = not is_portrait
+	if _next_boss_lbl != null:
+		_next_boss_lbl.visible = not is_portrait
 	var hide_kb_hints: bool = is_portrait or _is_mobile_mode
 	if _mute_lbl != null:
 		_mute_lbl.visible = not hide_kb_hints
 	if _pause_lbl != null:
 		_pause_lbl.visible = not hide_kb_hints
 	if _mute_btn != null:
-		_mute_btn.custom_minimum_size = Vector2(48 if hide_kb_hints else 72, 42)
+		_mute_btn.custom_minimum_size = Vector2(44 if hide_kb_hints else 72, 42)
 	if _pause_btn != null:
-		_pause_btn.custom_minimum_size = Vector2(48 if hide_kb_hints else 80, 42)
-	if _dash_lbl != null:
-		_dash_lbl.text = "Dash" if _is_mobile_mode else "Dash [Space]"
+		_pause_btn.custom_minimum_size = Vector2(44 if hide_kb_hints else 80, 42)
 	if _top_bar != null:
-		_top_bar.offset_left = 10 if is_portrait else 18
-		_top_bar.offset_right = -10 if is_portrait else -18
-		_top_bar.add_theme_constant_override("separation", 6 if is_portrait else 12)
+		_top_bar.offset_left = 8 if is_portrait else 18
+		_top_bar.offset_right = -8 if is_portrait else -18
+		_top_bar.add_theme_constant_override("separation", 6 if is_portrait else 10)
 	if _timer_lbl != null:
-		_timer_lbl.add_theme_font_size_override("font_size", 17 if is_portrait else 20)
-	if _next_boss_lbl != null:
-		_next_boss_lbl.add_theme_font_size_override("font_size", 11 if is_portrait else 13)
+		_timer_lbl.add_theme_font_size_override("font_size", 16 if is_portrait else 20)
 	if _tut_lbl != null:
-		_tut_lbl.add_theme_font_size_override("font_size", 14 if is_portrait else 17)
+		_tut_lbl.add_theme_font_size_override("font_size", 13 if is_portrait else 16)
 	if _boss_panel != null:
-		_boss_panel.offset_left = 24 if is_portrait else 250
-		_boss_panel.offset_right = -24 if is_portrait else -250
+		_boss_panel.offset_left = 12 if is_portrait else 250
+		_boss_panel.offset_right = -12 if is_portrait else -250
+	if _bl_panel != null and _bl_box != null and _inv_btn != null:
+		if is_portrait:
+			_bl_box.vertical = false
+			_bl_panel.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
+			_bl_panel.offset_left = 10
+			_bl_panel.offset_right = -10
+			_bl_panel.offset_top = -68
+			_bl_panel.offset_bottom = -10
+			_hp_bar.custom_minimum_size = Vector2(0, 34)
+			_inv_btn.size_flags_horizontal = Control.SIZE_SHRINK_END
+			_inv_btn.custom_minimum_size = Vector2(142, 42)
+		else:
+			_bl_box.vertical = true
+			_bl_panel.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
+			_bl_panel.offset_left = 18
+			_bl_panel.offset_right = 296
+			_bl_panel.offset_top = -104
+			_bl_panel.offset_bottom = -14
+			_hp_bar.custom_minimum_size = Vector2(0, 28)
+			_inv_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			_inv_btn.custom_minimum_size = Vector2(0, 40)
 	if _bc_vbox != null:
 		if is_portrait:
-			_bc_vbox.offset_left = 18
-			_bc_vbox.offset_right = -18
-			_bc_vbox.offset_top = -248
-			_bc_vbox.offset_bottom = -148
+			_bc_vbox.offset_left = 8
+			_bc_vbox.offset_right = -8
+			_bc_vbox.offset_top = -162
+			_bc_vbox.offset_bottom = -76
 		else:
 			_bc_vbox.offset_left = 310
 			_bc_vbox.offset_right = -310
-			_bc_vbox.offset_top = -124
+			_bc_vbox.offset_top = -104
 			_bc_vbox.offset_bottom = -14
 	if _toast_vbox != null:
-		_toast_vbox.offset_left = -280 if is_portrait else -350
-		_toast_vbox.offset_right = -14 if is_portrait else -18
+		_toast_vbox.offset_left = -260 if is_portrait else -350
+		_toast_vbox.offset_right = -10 if is_portrait else -18
 	if _inv_lbl != null and _unread_loot == 0:
 		_inv_lbl.text = "Satchel" if _is_mobile_mode else "Satchel [Tab]"
 	if touch_controls != null:
@@ -600,19 +591,19 @@ func rebuild_skill_bar(stats: HeroStats) -> void:
 		var gid: String = String(cfg["gem_id"])
 		var gcol: Color = GameEnums.gem_color_value(int(cfg["color"]))
 		var card: PanelContainer = PanelContainer.new()
-		card.custom_minimum_size = Vector2(88, 84)
-		card.add_theme_stylebox_override("panel", UiHelper.make_panel_box(UiHelper.BG_WALNUT, gcol, 11, 2, 6))
+		card.custom_minimum_size = Vector2(74, 72)
+		card.add_theme_stylebox_override("panel", UiHelper.make_panel_box(UiHelper.BG_WALNUT, gcol, 11, 2, 5))
 
 		var v: VBoxContainer = VBoxContainer.new()
 		v.alignment = BoxContainer.ALIGNMENT_CENTER
-		v.add_theme_constant_override("separation", 3)
+		v.add_theme_constant_override("separation", 2)
 		card.add_child(v)
 
 		var well_center: CenterContainer = CenterContainer.new()
 		v.add_child(well_center)
 		var well: PanelContainer = PanelContainer.new()
-		well.add_theme_stylebox_override("panel", UiHelper.make_panel_box(UiHelper.BG_WELL, gcol.darkened(0.25), 8, 1, 3, false))
-		well.add_child(UiHelper.make_icon_rect(UiIcons.get_skill_icon(gid), 32))
+		well.add_theme_stylebox_override("panel", UiHelper.make_panel_box(UiHelper.BG_WELL, gcol.darkened(0.25), 7, 1, 3, false))
+		well.add_child(UiHelper.make_icon_rect(UiIcons.get_skill_icon(gid), 28))
 		well_center.add_child(well)
 
 		var name_lbl: Label = Label.new()
@@ -627,7 +618,7 @@ func rebuild_skill_bar(stats: HeroStats) -> void:
 
 		var pip_row: HBoxContainer = HBoxContainer.new()
 		pip_row.alignment = BoxContainer.ALIGNMENT_CENTER
-		pip_row.custom_minimum_size = Vector2(0, 14)
+		pip_row.custom_minimum_size = Vector2(0, 12)
 		pip_row.add_theme_constant_override("separation", 3)
 		v.add_child(pip_row)
 		var mod_cols: Array = cfg.get("linked_mod_colors", [])
@@ -639,11 +630,11 @@ func rebuild_skill_bar(stats: HeroStats) -> void:
 			pip_row.add_child(unl)
 		else:
 			for mc in mod_cols:
-				pip_row.add_child(UiHelper.make_icon_rect(UiIcons.get_gem_icon(GameEnums.GemType.MODIFIER, int(mc)), 14))
+				pip_row.add_child(UiHelper.make_icon_rect(UiIcons.get_gem_icon(GameEnums.GemType.MODIFIER, int(mc)), 12))
 
 		var cd_bar: ProgressBar = ProgressBar.new()
 		cd_bar.show_percentage = false
-		cd_bar.custom_minimum_size = Vector2(0, 6)
+		cd_bar.custom_minimum_size = Vector2(0, 5)
 		cd_bar.max_value = 1.0
 		UiHelper.style_progress_bar(cd_bar, gcol, UiHelper.BG_WELL, 3)
 		v.add_child(cd_bar)
@@ -692,9 +683,6 @@ func update_hud(delta: float, stats: HeroStats, player: PlayerController, wave_d
 		if is_instance_valid(bar):
 			bar.value = skill_exec.get_cooldown_fraction(int(uid))
 
-	if touch_controls != null:
-		touch_controls.set_dash_fraction(player.get_dash_ready_fraction())
-
 	_hud_throttle += delta
 	if _hud_throttle < 0.10:
 		return
@@ -704,7 +692,8 @@ func update_hud(delta: float, stats: HeroStats, player: PlayerController, wave_d
 		var t: float = wave_dir.elapsed_time
 		var mins: int = int(t) / 60
 		var secs: int = int(t) % 60
-		_timer_lbl.text = "%02d:%02d / 20:00" % [mins, secs]
+		var is_portrait: bool = get_viewport_rect().size.x < 750.0
+		_timer_lbl.text = ("%02d:%02d" % [mins, secs]) if is_portrait else ("%02d:%02d / 20:00" % [mins, secs])
 		var prof: Dictionary = EnemyDatabase.get_wave_profile(t)
 		var pname: String = String(prof["phase_name"])
 		if pname != _last_phase_name:
@@ -726,11 +715,6 @@ func update_hud(delta: float, stats: HeroStats, player: PlayerController, wave_d
 	_hp_bar.max_value = stats.max_hp
 	_hp_bar.value = player.current_hp
 	_hp_lbl.text = "%d / %d" % [int(ceil(player.current_hp)), int(round(stats.max_hp))]
-	_dash_bar.max_value = 1.0
-	_dash_bar.value = player.get_dash_ready_fraction()
-	_dash_charges_lbl.visible = stats.dash_max_charges > 1
-	if _dash_charges_lbl.visible:
-		_dash_charges_lbl.text = "%d/%d" % [player.dash_charges, stats.dash_max_charges]
 
 	var inv_default: String = "Satchel" if _is_mobile_mode else "Satchel [Tab]"
 	var inv_txt: String = "Satchel (%d!)" % _unread_loot if _unread_loot > 0 else inv_default

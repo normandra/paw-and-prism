@@ -1,0 +1,124 @@
+name: Build Android APK & Publish Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "GitHub Release tag name"
+        required: true
+        default: "v2.1-mobile"
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build-android-apk:
+    runs-on: ubuntu-latest
+    env:
+      GODOT_VERSION: "4.7.2-stable"
+      GODOT_TEMPLATE_DIR: "4.7.2.stable"
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Java 17 (Temurin)
+        uses: actions/setup-java@v4
+        with:
+          distribution: "temurin"
+          java-version: "17"
+
+      - name: Download Godot 4.7.2 & Android Export Templates
+        run: |
+          mkdir -p "$HOME/.local/bin" "$HOME/.local/share/godot/export_templates/${GODOT_TEMPLATE_DIR}" "$HOME/.config/godot" /tmp/godot_dl
+          curl -fsSL "https://github.com/godotengine/godot-builds/releases/download/${GODOT_VERSION}/Godot_v${GODOT_VERSION}_linux.x86_64.zip" -o /tmp/godot_dl/godot.zip
+          unzip -q /tmp/godot_dl/godot.zip -d "$HOME/.local/bin"
+          chmod +x "$HOME/.local/bin/Godot_v${GODOT_VERSION}_linux.x86_64"
+          ln -sf "$HOME/.local/bin/Godot_v${GODOT_VERSION}_linux.x86_64" "$HOME/.local/bin/godot"
+
+          curl -fsSL "https://github.com/godotengine/godot-builds/releases/download/${GODOT_VERSION}/Godot_v${GODOT_VERSION}_export_templates.tpz" -o /tmp/godot_dl/templates.tpz
+          unzip -q /tmp/godot_dl/templates.tpz -d /tmp/godot_dl/tpl_unpack
+          mv /tmp/godot_dl/tpl_unpack/templates/* "$HOME/.local/share/godot/export_templates/${GODOT_TEMPLATE_DIR}/"
+          rm -rf /tmp/godot_dl
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Configure Android SDK, Keystore & Godot Editor Settings
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_ALIAS: ${{ secrets.ANDROID_KEYSTORE_ALIAS }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+        run: |
+          SDK_DIR="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
+          echo "Using ANDROID_SDK=$SDK_DIR"
+          ls -la "$SDK_DIR/build-tools"
+
+          KS_PATH="/tmp/paw_prism_release.keystore"
+          KS_ALIAS="${ANDROID_KEYSTORE_ALIAS:-pawprism}"
+          KS_PASS="${ANDROID_KEYSTORE_PASSWORD:-pawprism2026}"
+          if [ -n "${ANDROID_KEYSTORE_BASE64:-}" ]; then
+            echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > "$KS_PATH"
+          else
+            keytool -genkeypair -v -keystore "$KS_PATH" -alias "$KS_ALIAS" \
+              -keyalg RSA -keysize 2048 -validity 10000 \
+              -storepass "$KS_PASS" -keypass "$KS_PASS" \
+              -dname "CN=PawAndPrism, OU=Game, O=PawAndPrism, L=Meadow, S=OR, C=US"
+          fi
+
+          cat > "$HOME/.config/godot/editor_settings-4.7.tres" <<EOF
+          [gd_resource type="EditorSettings" format=3]
+
+          [resource]
+          export/android/android_sdk_path = "${SDK_DIR}"
+          export/android/java_sdk_path = "${JAVA_HOME}"
+          export/android/debug_keystore = "${KS_PATH}"
+          export/android/debug_keystore_user = "${KS_ALIAS}"
+          export/android/debug_keystore_pass = "${KS_PASS}"
+          EOF
+
+          python3 - <<PY
+          p = "export_presets.cfg"
+          with open(p, "r") as f:
+              txt = f.read()
+          txt = txt.replace('keystore/debug=""', f'keystore/debug="{KS_PATH}"')
+          txt = txt.replace('keystore/debug_user=""', f'keystore/debug_user="{KS_ALIAS}"')
+          txt = txt.replace('keystore/debug_password=""', f'keystore/debug_password="{KS_PASS}"')
+          txt = txt.replace('keystore/release=""', f'keystore/release="{KS_PATH}"')
+          txt = txt.replace('keystore/release_user=""', f'keystore/release_user="{KS_ALIAS}"')
+          txt = txt.replace('keystore/release_password=""', f'keystore/release_password="{KS_PASS}"')
+          with open(p, "w") as f:
+              f.write(txt)
+          PY
+
+      - name: Import & Run Headless Verification Suite
+        run: |
+          godot --headless --path . --import
+          godot --headless --path . --script res://tests/verify_game.gd
+
+      - name: Export Signed Release Android APK
+        run: |
+          mkdir -p builds/android
+          godot --headless --path . --export-release "Android" builds/android/PawAndPrism.apk
+          ls -lh builds/android/PawAndPrism.apk
+          SDK_DIR="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
+          APKSIGNER="$(find "$SDK_DIR/build-tools" -name apksigner | sort | tail -n 1)"
+          if [ -n "$APKSIGNER" ]; then
+            "$APKSIGNER" verify --print-certs builds/android/PawAndPrism.apk
+          fi
+
+      - name: Upload APK to GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          if [ "${GITHUB_EVENT_NAME}" = "workflow_dispatch" ]; then
+            TAG="${{ github.event.inputs.release_tag }}"
+          fi
+          NOTES="Paw & Prism ($TAG) — Android ARM64 APK (portrait one-handed play, drag-to-move joystick, touch-scrollable Satchel, zero leveling, 3 loot types, PoE-style Tutorial)."
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" builds/android/PawAndPrism.apk --clobber
+          else
+            gh release create "$TAG" builds/android/PawAndPrism.apk --title "Paw & Prism $TAG" --notes "$NOTES" --target "${{ github.sha }}"
+          fi

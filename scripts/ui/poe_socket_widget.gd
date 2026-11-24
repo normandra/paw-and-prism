@@ -15,14 +15,16 @@ var mini_mode: bool = false
 
 var _hover_idx: int = -1
 var _pulse_time: float = 0.0
+var _press_idx: int = -1
+var _press_pos: Vector2 = Vector2.ZERO
 
 func _init() -> void:
-	mouse_filter = Control.MOUSE_FILTER_STOP
+	mouse_filter = Control.MOUSE_FILTER_PASS
 	custom_minimum_size = Vector2(240, 66)
 
 func configure(p_slot: int, p_item: ItemInstance, p_sel_gem: GemInstance) -> void:
 	mini_mode = false
-	mouse_filter = Control.MOUSE_FILTER_STOP
+	mouse_filter = Control.MOUSE_FILTER_PASS
 	size_flags_vertical = Control.SIZE_SHRINK_BEGIN
 	equip_slot = p_slot
 	item = p_item
@@ -72,11 +74,17 @@ func _gui_input(event: InputEvent) -> void:
 			_hover_idx = new_hover
 			_update_hover_tooltip()
 			queue_redraw()
-	elif event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
-		var hit: int = _hit_test(event.position)
-		if hit >= 0:
-			socket_clicked.emit(equip_slot, hit)
-			accept_event()
+	elif event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
+		var mb: InputEventMouseButton = event
+		if mb.pressed:
+			_press_idx = _hit_test(mb.position)
+			_press_pos = mb.position
+		elif _press_idx >= 0:
+			var hit: int = _hit_test(mb.position)
+			if hit == _press_idx and mb.position.distance_to(_press_pos) < 12.0 and not TouchScrollContainer.was_recent_drag():
+				socket_clicked.emit(equip_slot, hit)
+				accept_event()
+			_press_idx = -1
 
 func _update_hover_tooltip() -> void:
 	if item == null or _hover_idx < 0 or _hover_idx >= item.get_socket_count():

@@ -19,13 +19,12 @@ var crit_mult: float = 165.0
 # Behavioral Flags Derived From Equipped Global Item Effects
 var active_effects: Dictionary = {}
 var active_effect_list: Array[String] = []
-var dash_max_charges: int = 1
 var incoming_dmg_mult: float = 1.0
 var has_lucky_clover: bool = false
 var has_turret_stance: bool = false
-var has_dash_honey_nova: bool = false
-var has_dash_triggers_skills: bool = false
-var has_vamp_dash: bool = false
+var has_stride_honey_nova: bool = false
+var has_cadence_burst: bool = false
+var has_kill_siphon: bool = false
 var has_zoomies_on_kill: bool = false
 var has_ember_corpse: bool = false
 var has_frost_shatter: bool = false
@@ -34,7 +33,8 @@ var has_thorns_burst: bool = false
 var has_aegis_freeze: bool = false
 var has_orbit_shield: bool = false
 var has_cheat_death: bool = false
-var has_comet_dash: bool = false
+var has_fleet_paws: bool = false
+var has_comet_stride: bool = false
 
 # Compiled PoE Active Skill List
 var active_skill_configs: Array[Dictionary] = []
@@ -207,10 +207,9 @@ func recompute() -> void:
 
 	has_lucky_clover = has_effect("lucky_clover")
 	has_turret_stance = has_effect("turret_stance")
-	has_dash_honey_nova = has_effect("dash_honey_nova")
-	has_comet_dash = has_effect("comet_dash")
-	has_dash_triggers_skills = has_effect("dash_triggers_skills") or has_comet_dash
-	has_vamp_dash = has_effect("vamp_dash")
+	has_stride_honey_nova = has_effect("stride_honey_nova")
+	has_cadence_burst = has_effect("cadence_burst")
+	has_kill_siphon = has_effect("kill_siphon")
 	has_zoomies_on_kill = has_effect("zoomies_on_kill")
 	has_ember_corpse = has_effect("ember_corpse")
 	has_frost_shatter = has_effect("frost_shatter")
@@ -219,7 +218,8 @@ func recompute() -> void:
 	has_aegis_freeze = has_effect("aegis_freeze")
 	has_orbit_shield = has_effect("orbit_shield")
 	has_cheat_death = has_effect("cheat_death")
-	dash_max_charges = 2 if (has_effect("double_dash") or has_comet_dash) else 1
+	has_fleet_paws = has_effect("fleet_paws")
+	has_comet_stride = has_effect("comet_stride")
 	incoming_dmg_mult = 1.45 if has_effect("glass_spark") else 1.0
 
 	# Compile PoE Main Socket Abilities + Linked Modifier Abilities
@@ -331,8 +331,8 @@ func _compile_main_skill(main_gem: GemInstance, mods_list: Array[GemInstance], e
 		final_cd *= 1.33
 	if has_effect("glass_spark"):
 		final_dmg *= 1.75
-	if has_effect("dash_triggers_skills") and not has_comet_dash:
-		final_cd *= 1.50
+	if has_effect("cadence_burst"):
+		final_cd *= 1.18
 
 	final_cd = maxf(0.18, final_cd)
 

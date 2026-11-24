@@ -5,8 +5,9 @@ signal player_hurt(dmg: float, hp_after: float)
 signal player_died()
 signal cheat_death_triggered()
 signal reactive_nova_requested(kind: String, pos: Vector3, dmg: float, radius: float)
-signal dashed()
 signal static_spark_requested(pos: Vector3)
+signal stride_honey_requested(pos: Vector3)
+signal comet_stride_requested(pos: Vector3)
 signal orbit_shield_requested()
 
 var stats: HeroStats = null
@@ -23,20 +24,18 @@ var _aura_ring_holder: Node3D = null
 
 var _facing_dir: Vector3 = Vector3(0.0, 0.0, 1.0)
 var external_move_vec: Vector2 = Vector2.ZERO
-var _external_dash_queued: bool = false
 var is_moving: bool = false
 var _walk_phase: float = 0.0
 var _invuln_timer: float = 0.0
-var _dash_timer: float = 0.0
-var _dash_cooldown: float = 0.0
-var dash_charges: int = 1
-var _dash_dir: Vector3 = Vector3.ZERO
 var _cheat_death_cd: float = 0.0
 var _honey_aegis_cd: float = 0.0
 var _thorns_cd: float = 0.0
 var _orbit_shield_cd: float = 0.0
 var _zoomies_timer: float = 0.0
 var _static_dist_accum: float = 0.0
+var _honey_dist_accum: float = 0.0
+var _comet_dist_accum: float = 0.0
+var _move_ramp_time: float = 0.0
 
 var _last_weapon_style: String = "__init__"
 var _last_helmet_style: String = "__init__"
@@ -46,19 +45,18 @@ func setup(p_stats: HeroStats) -> void:
 	current_hp = stats.max_hp
 	is_dead = false
 	_invuln_timer = 0.0
-	_dash_timer = 0.0
-	_dash_cooldown = 0.0
-	dash_charges = stats.dash_max_charges
 	_cheat_death_cd = 0.0
 	_honey_aegis_cd = 0.0
 	_thorns_cd = 0.0
 	_orbit_shield_cd = 0.0
 	_zoomies_timer = 0.0
 	_static_dist_accum = 0.0
+	_honey_dist_accum = 0.0
+	_comet_dist_accum = 0.0
+	_move_ramp_time = 0.0
 	_last_weapon_style = "__init__"
 	_last_helmet_style = "__init__"
 	external_move_vec = Vector2.ZERO
-	_external_dash_queued = false
 
 	if _rig != null:
 		_rig.queue_free()
@@ -81,7 +79,6 @@ func refresh_equipment_visuals() -> void:
 	if stats == null or _rig == null:
 		return
 	current_hp = minf(current_hp, stats.max_hp)
-	dash_charges = clampi(dash_charges, 0, stats.dash_max_charges)
 	var w_item: ItemInstance = stats.equipped.get(GameEnums.EquipSlot.WEAPON, null)
 	var h_item: ItemInstance = stats.equipped.get(GameEnums.EquipSlot.HELMET, null)
 	var w_style: String = w_item.visual_style if w_item != null else ""
@@ -115,28 +112,16 @@ func refresh_equipment_visuals() -> void:
 func set_touch_move(vec: Vector2) -> void:
 	external_move_vec = vec.limit_length(1.0)
 
-func trigger_touch_dash() -> void:
-	_external_dash_queued = true
-
-func get_dash_cooldown_max() -> float:
-	if stats == null:
-		return 2.0
-	return 1.85
-
-func get_dash_ready_fraction() -> float:
-	if stats == null:
-		return 1.0
-	if dash_charges > 0:
-		return 1.0
-	var cd_max: float = get_dash_cooldown_max()
-	return clampf(1.0 - _dash_cooldown / cd_max, 0.0, 1.0)
-
 func has_zoomies_active() -> bool:
 	return _zoomies_timer > 0.0
 
 func notify_kill() -> void:
-	if stats != null and stats.has_zoomies_on_kill:
+	if stats == null:
+		return
+	if stats.has_zoomies_on_kill:
 		_zoomies_timer = 2.0
+	if stats.has_kill_siphon:
+		heal(2.5)
 
 func step(delta: float) -> void:
 	if is_dead or stats == null:
@@ -145,15 +130,6 @@ func step(delta: float) -> void:
 	# Cooldowns & Regen
 	if _invuln_timer > 0.0:
 		_invuln_timer -= delta
-	if dash_charges < stats.dash_max_charges:
-		if _dash_cooldown > 0.0:
-			_dash_cooldown -= delta
-		if _dash_cooldown <= 0.0:
-			dash_charges += 1
-			if dash_charges < stats.dash_max_charges:
-				_dash_cooldown = get_dash_cooldown_max()
-	else:
-		_dash_cooldown = 0.0
 	if _cheat_death_cd > 0.0:
 		_cheat_death_cd -= delta
 	if _honey_aegis_cd > 0.0:
@@ -188,30 +164,16 @@ func step(delta: float) -> void:
 		input_dir = Vector3(external_move_vec.x, 0.0, external_move_vec.y)
 		_facing_dir = input_dir.normalized()
 
-	# Trigger Hop-Dash
-	var want_dash: bool = Input.is_action_just_pressed("dash") or Input.is_key_pressed(KEY_SPACE) or _external_dash_queued
-	_external_dash_queued = false
-	if want_dash and dash_charges > 0 and _dash_timer <= 0.0:
-		_dash_timer = 0.22
-		dash_charges -= 1
-		if _dash_cooldown <= 0.0:
-			_dash_cooldown = get_dash_cooldown_max()
-		_invuln_timer = maxf(_invuln_timer, 0.26)
-		_dash_dir = input_dir if input_dir.length_squared() > 0.01 else _facing_dir
-		if stats.has_dash_honey_nova:
-			reactive_nova_requested.emit("dash_honey_nova", global_position, 26.0, 4.4)
-		if stats.has_vamp_dash:
-			heal(12.0)
-		dashed.emit()
+	var moving_input: bool = input_dir.length_squared() > 0.001
+	if moving_input:
+		_move_ramp_time = minf(2.0, _move_ramp_time + delta)
+	else:
+		_move_ramp_time = maxf(0.0, _move_ramp_time - delta * 2.5)
 
 	# Apply movement
-	var speed: float = stats.move_speed * (1.28 if _zoomies_timer > 0.0 else 1.0)
-	var move_delta: Vector3 = Vector3.ZERO
-	if _dash_timer > 0.0:
-		_dash_timer -= delta
-		move_delta = _dash_dir * (speed * 2.55) * delta
-	elif input_dir.length_squared() > 0.001:
-		move_delta = input_dir * speed * delta
+	var fleet_mult: float = 1.0 + (0.25 * (_move_ramp_time / 2.0) if stats.has_fleet_paws else 0.0)
+	var speed: float = stats.move_speed * fleet_mult * (1.28 if _zoomies_timer > 0.0 else 1.0)
+	var move_delta: Vector3 = input_dir * speed * delta if moving_input else Vector3.ZERO
 
 	global_position += move_delta
 	var bound: float = ArenaBuilder.ARENA_HALF_SIZE - 1.5
@@ -220,11 +182,22 @@ func step(delta: float) -> void:
 
 	var step_dist: float = Vector2(move_delta.x, move_delta.z).length()
 	is_moving = step_dist > 0.002
-	if is_moving and stats.has_static_sprint:
-		_static_dist_accum += step_dist
-		if _static_dist_accum >= 5.5:
-			_static_dist_accum -= 5.5
-			static_spark_requested.emit(global_position)
+	if is_moving:
+		if stats.has_static_sprint:
+			_static_dist_accum += step_dist
+			if _static_dist_accum >= 5.5:
+				_static_dist_accum -= 5.5
+				static_spark_requested.emit(global_position)
+		if stats.has_stride_honey_nova:
+			_honey_dist_accum += step_dist
+			if _honey_dist_accum >= 7.0:
+				_honey_dist_accum -= 7.0
+				stride_honey_requested.emit(global_position)
+		if stats.has_comet_stride:
+			_comet_dist_accum += step_dist
+			if _comet_dist_accum >= 8.5:
+				_comet_dist_accum -= 8.5
+				comet_stride_requested.emit(global_position)
 
 	_animate_chibi(delta, is_moving)
 
@@ -238,12 +211,7 @@ func _animate_chibi(delta: float, moving_now: bool) -> void:
 	if _aura_ring_holder != null:
 		_aura_ring_holder.rotation.y += delta * 0.9
 
-	if _dash_timer > 0.0:
-		var hop_t: float = clampf(1.0 - (_dash_timer / 0.22), 0.0, 1.0)
-		_body_pivot.position.y = sin(hop_t * PI) * 0.95
-		_body_pivot.rotation.x = 0.25
-		_body_pivot.scale = Vector3(0.92, 1.12, 0.92)
-	elif moving_now:
+	if moving_now:
 		_walk_phase += delta * 15.0
 		var hop: float = absf(sin(_walk_phase)) * 0.14
 		_body_pivot.position.y = hop

@@ -12,20 +12,31 @@ var _title_lbl: Label = null
 var _close_btn: Button = null
 var _tut_banner_panel: PanelContainer = null
 var _tut_banner_lbl: Label = null
+
+var _mobile_tabs_row: HBoxContainer = null
+var _m_tab_gear_btn: Button = null
+var _m_tab_items_btn: Button = null
+var _m_tab_skills_btn: Button = null
+var _m_tab_build_btn: Button = null
+
 var _cols: BoxContainer = null
 var _left_box: PanelContainer = null
 var _left_build_vbox: VBoxContainer = null
 var _center_box: PanelContainer = null
+var _pending_gem_bar: PanelContainer = null
+var _pending_gem_lbl: Label = null
 var _center_slots_vbox: VBoxContainer = null
 var _right_box: PanelContainer = null
+var _right_tab_row: HBoxContainer = null
 
 var _tab_items_btn: Button = null
 var _tab_main_btn: Button = null
 var _tab_mods_btn: Button = null
-var _tab_build_btn: Button = null
 var _right_content_vbox: VBoxContainer = null
 
-var _active_right_tab: String = "items"
+var _is_mobile_layout: bool = false
+var _mobile_tab: String = "gear" # gear | items | skills | build
+var _active_right_tab: String = "items" # items | main | mods
 var _selected_bag_idx: int = -1
 var _selected_pouch_idx: int = -1
 var _tutorial_hint: String = ""
@@ -49,10 +60,13 @@ func set_tutorial_hint(hint: String) -> void:
 		_tut_banner_lbl.text = hint
 	if hint.begins_with("Main tab"):
 		_active_right_tab = "main"
+		_mobile_tab = "skills"
 	elif hint.begins_with("Mods tab"):
 		_active_right_tab = "mods"
+		_mobile_tab = "skills"
 	elif hint.begins_with("Items tab"):
 		_active_right_tab = "items"
+		_mobile_tab = "items"
 
 func _clamp_frame_size() -> void:
 	if _frame == null:
@@ -60,37 +74,56 @@ func _clamp_frame_size() -> void:
 	var vp: Vector2 = get_viewport_rect().size
 	if vp.x <= 10.0 or vp.y <= 10.0:
 		vp = Vector2(1280.0, 720.0)
-	var is_portrait: bool = vp.x < 960.0
-	if is_portrait:
-		_frame.custom_minimum_size = Vector2(vp.x - 24.0, vp.y - 36.0)
+	_is_mobile_layout = vp.x < 900.0
+	if _is_mobile_layout:
+		_frame.custom_minimum_size = Vector2(vp.x - 16.0, vp.y - 24.0)
 		if _cols != null:
-			_cols.vertical = true
-		if _left_box != null:
-			_left_box.visible = false
-		if _tab_build_btn != null:
-			_tab_build_btn.visible = true
+			_cols.vertical = false
+		if _mobile_tabs_row != null:
+			_mobile_tabs_row.visible = true
 		if _title_lbl != null:
 			_title_lbl.text = "SATCHEL"
 		if _close_btn != null:
 			_close_btn.text = "Resume"
-			_close_btn.custom_minimum_size = Vector2(106, 40)
+			_close_btn.custom_minimum_size = Vector2(112, 44)
 	else:
 		_frame.custom_minimum_size = Vector2(minf(vp.x - 48.0, 1220.0), minf(vp.y - 40.0, 680.0))
 		if _cols != null:
 			_cols.vertical = false
-		if _left_box != null:
-			_left_box.visible = true
-		if _tab_build_btn != null:
-			_tab_build_btn.visible = false
+		if _mobile_tabs_row != null:
+			_mobile_tabs_row.visible = false
 		if _title_lbl != null:
 			_title_lbl.text = "HERO SATCHEL"
 		if _close_btn != null:
 			_close_btn.text = "Resume [Tab / Esc]"
 			_close_btn.custom_minimum_size = Vector2(175, 40)
-		if _active_right_tab == "build":
-			_active_right_tab = "items"
-			if visible and _stats != null:
-				refresh()
+
+	if visible and _stats != null:
+		_apply_column_visibility()
+
+func _apply_column_visibility() -> void:
+	if _is_mobile_layout:
+		if _left_box != null:
+			_left_box.visible = false
+		if _center_box != null:
+			_center_box.visible = (_mobile_tab == "gear")
+		if _right_box != null:
+			_right_box.visible = (_mobile_tab != "gear")
+		if _right_tab_row != null:
+			_right_tab_row.visible = (_mobile_tab == "skills")
+		if _tab_items_btn != null:
+			_tab_items_btn.visible = false
+	else:
+		if _left_box != null:
+			_left_box.visible = true
+		if _center_box != null:
+			_center_box.visible = true
+		if _right_box != null:
+			_right_box.visible = true
+		if _right_tab_row != null:
+			_right_tab_row.visible = true
+		if _tab_items_btn != null:
+			_tab_items_btn.visible = true
 
 func _build_shell() -> void:
 	var dim: ColorRect = ColorRect.new()
@@ -103,19 +136,19 @@ func _build_shell() -> void:
 	add_child(center)
 
 	_frame = PanelContainer.new()
-	_frame.add_theme_stylebox_override("panel", UiHelper.make_panel_box(UiHelper.BG_WOOD_DEEP, UiHelper.BORDER_GOLD, 16, 3, 14))
+	_frame.add_theme_stylebox_override("panel", UiHelper.make_panel_box(UiHelper.BG_WOOD_DEEP, UiHelper.BORDER_GOLD, 16, 3, 12))
 	center.add_child(_frame)
 
 	var root_v: VBoxContainer = VBoxContainer.new()
-	root_v.add_theme_constant_override("separation", 10)
+	root_v.add_theme_constant_override("separation", 8)
 	_frame.add_child(root_v)
 
 	# Header Row
 	var hdr: HBoxContainer = HBoxContainer.new()
-	hdr.add_theme_constant_override("separation", 12)
+	hdr.add_theme_constant_override("separation", 10)
 	root_v.add_child(hdr)
 
-	hdr.add_child(UiHelper.make_icon_rect(UiIcons.get_ui_icon("paw_prism_crest"), 32))
+	hdr.add_child(UiHelper.make_icon_rect(UiIcons.get_ui_icon("paw_prism_crest"), 30))
 
 	_title_lbl = Label.new()
 	_title_lbl.text = "HERO SATCHEL"
@@ -126,9 +159,10 @@ func _build_shell() -> void:
 
 	_close_btn = Button.new()
 	_close_btn.text = "Resume [Tab / Esc]"
-	_close_btn.custom_minimum_size = Vector2(175, 40)
+	_close_btn.custom_minimum_size = Vector2(175, 42)
 	_close_btn.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 	UiHelper.style_button(_close_btn, UiHelper.CTA_EMERALD, UiHelper.CTA_EMERALD_RIM, 10)
+	_close_btn.add_theme_font_size_override("font_size", 15)
 	_close_btn.pressed.connect(func() -> void: close_panel())
 	hdr.add_child(_close_btn)
 
@@ -142,19 +176,36 @@ func _build_shell() -> void:
 	_tut_banner_panel.add_child(tb_h)
 	tb_h.add_child(UiHelper.make_icon_rect(UiIcons.get_ui_icon("star_upgrade"), 20))
 	_tut_banner_lbl = Label.new()
+	_tut_banner_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_tut_banner_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_tut_banner_lbl.add_theme_font_override("font", UiHelper.get_bold_font())
 	_tut_banner_lbl.add_theme_font_size_override("font_size", 14)
 	_tut_banner_lbl.add_theme_color_override("font_color", Color(1.0, 0.92, 0.45))
 	tb_h.add_child(_tut_banner_lbl)
 
-	# Responsive 3-Column / Stacked Body
+	# Mobile Single-Column Primary Tabs (Gear | Items | Skills | Build)
+	_mobile_tabs_row = HBoxContainer.new()
+	_mobile_tabs_row.visible = false
+	_mobile_tabs_row.add_theme_constant_override("separation", 6)
+	root_v.add_child(_mobile_tabs_row)
+
+	_m_tab_gear_btn = _make_mobile_tab_btn("Gear", "gear")
+	_mobile_tabs_row.add_child(_m_tab_gear_btn)
+	_m_tab_items_btn = _make_mobile_tab_btn("Items", "items")
+	_mobile_tabs_row.add_child(_m_tab_items_btn)
+	_m_tab_skills_btn = _make_mobile_tab_btn("Skills", "skills")
+	_mobile_tabs_row.add_child(_m_tab_skills_btn)
+	_m_tab_build_btn = _make_mobile_tab_btn("Build", "build")
+	_mobile_tabs_row.add_child(_m_tab_build_btn)
+
+	# Body Columns
 	_cols = BoxContainer.new()
 	_cols.vertical = false
 	_cols.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	_cols.add_theme_constant_override("separation", 12)
 	root_v.add_child(_cols)
 
-	# === LEFT COLUMN: Active Skills & Behavioral Global Effects ===
+	# === LEFT COLUMN: Active Build (Desktop) ===
 	_left_box = PanelContainer.new()
 	_left_box.custom_minimum_size = Vector2(290, 0)
 	_left_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -172,7 +223,7 @@ func _build_shell() -> void:
 	UiHelper.apply_display_font(lh_lbl, 16, UiHelper.BORDER_GOLD, 2)
 	left_v.add_child(lh_lbl)
 
-	var left_scroll: ScrollContainer = ScrollContainer.new()
+	var left_scroll: TouchScrollContainer = TouchScrollContainer.new()
 	left_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	left_v.add_child(left_scroll)
 
@@ -181,7 +232,7 @@ func _build_shell() -> void:
 	_left_build_vbox.add_theme_constant_override("separation", 8)
 	left_scroll.add_child(_left_build_vbox)
 
-	# === CENTER COLUMN: 6 Equipment Slots + Fixed Linked Sockets ===
+	# === CENTER COLUMN: 6 Equipment Slots + Linked Sockets ===
 	_center_box = PanelContainer.new()
 	_center_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_center_box.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -193,23 +244,48 @@ func _build_shell() -> void:
 	center_v.add_theme_constant_override("separation", 7)
 	_center_box.add_child(center_v)
 
+	_pending_gem_bar = PanelContainer.new()
+	_pending_gem_bar.visible = false
+	_pending_gem_bar.add_theme_stylebox_override("panel", UiHelper.make_panel_box(Color(0.28, 0.21, 0.08), UiHelper.BORDER_GOLD, 9, 2, 7, false))
+	center_v.add_child(_pending_gem_bar)
+	var pg_h: HBoxContainer = HBoxContainer.new()
+	pg_h.add_theme_constant_override("separation", 8)
+	_pending_gem_bar.add_child(pg_h)
+	_pending_gem_lbl = Label.new()
+	_pending_gem_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_pending_gem_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_pending_gem_lbl.add_theme_font_override("font", UiHelper.get_bold_font())
+	_pending_gem_lbl.add_theme_font_size_override("font_size", 13)
+	_pending_gem_lbl.add_theme_color_override("font_color", Color(1.0, 0.92, 0.48))
+	pg_h.add_child(_pending_gem_lbl)
+	var cancel_pg_btn: Button = Button.new()
+	cancel_pg_btn.text = "Cancel"
+	cancel_pg_btn.custom_minimum_size = Vector2(78, 34)
+	cancel_pg_btn.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	UiHelper.style_button(cancel_pg_btn, UiHelper.CTA_RUBY, UiHelper.CTA_RUBY_RIM, 8, 5)
+	cancel_pg_btn.pressed.connect(func() -> void:
+		_selected_pouch_idx = -1
+		refresh()
+	)
+	pg_h.add_child(cancel_pg_btn)
+
 	var center_hint: Label = Label.new()
-	center_hint.text = "Select Main or Mod -> click pulsing socket  |  Click filled socket to remove"
+	center_hint.text = "Tap a pulsing socket to insert  |  Tap filled socket to remove"
 	center_hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	center_hint.add_theme_font_size_override("font_size", 11)
+	center_hint.add_theme_font_size_override("font_size", 12)
 	center_hint.add_theme_color_override("font_color", UiHelper.TEXT_PARCHMENT)
 	center_v.add_child(center_hint)
 
-	var slots_scroll: ScrollContainer = ScrollContainer.new()
+	var slots_scroll: TouchScrollContainer = TouchScrollContainer.new()
 	slots_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	center_v.add_child(slots_scroll)
 
 	_center_slots_vbox = VBoxContainer.new()
 	_center_slots_vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_center_slots_vbox.add_theme_constant_override("separation", 7)
+	_center_slots_vbox.add_theme_constant_override("separation", 8)
 	slots_scroll.add_child(_center_slots_vbox)
 
-	# === RIGHT COLUMN: 3 Loot Type Tabs + Build (Portrait) ===
+	# === RIGHT COLUMN: Items / Main / Mods (+ Build when mobile) ===
 	_right_box = PanelContainer.new()
 	_right_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_right_box.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -221,38 +297,70 @@ func _build_shell() -> void:
 	right_v.add_theme_constant_override("separation", 8)
 	_right_box.add_child(right_v)
 
-	var tab_row: HBoxContainer = HBoxContainer.new()
-	tab_row.add_theme_constant_override("separation", 6)
-	right_v.add_child(tab_row)
+	_right_tab_row = HBoxContainer.new()
+	_right_tab_row.add_theme_constant_override("separation", 6)
+	right_v.add_child(_right_tab_row)
 
 	_tab_items_btn = _make_tab_button("items")
-	tab_row.add_child(_tab_items_btn)
+	_right_tab_row.add_child(_tab_items_btn)
 	_tab_main_btn = _make_tab_button("main")
-	tab_row.add_child(_tab_main_btn)
+	_right_tab_row.add_child(_tab_main_btn)
 	_tab_mods_btn = _make_tab_button("mods")
-	tab_row.add_child(_tab_mods_btn)
-	_tab_build_btn = _make_tab_button("build")
-	_tab_build_btn.text = "Build"
-	_tab_build_btn.visible = false
-	tab_row.add_child(_tab_build_btn)
+	_right_tab_row.add_child(_tab_mods_btn)
 
 	_right_content_vbox = VBoxContainer.new()
 	_right_content_vbox.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	_right_content_vbox.add_theme_constant_override("separation", 7)
+	_right_content_vbox.add_theme_constant_override("separation", 8)
 	right_v.add_child(_right_content_vbox)
+
+func _make_mobile_tab_btn(lbl: String, tab_key: String) -> Button:
+	var btn: Button = Button.new()
+	btn.text = lbl
+	btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	btn.custom_minimum_size = Vector2(0, 42)
+	btn.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	btn.add_theme_font_size_override("font_size", 14)
+	btn.pressed.connect(func() -> void:
+		_mobile_tab = tab_key
+		if tab_key == "items":
+			_active_right_tab = "items"
+		elif tab_key == "skills" and _active_right_tab == "items":
+			_active_right_tab = "main"
+		sfx_requested.emit("ui_click")
+		refresh()
+	)
+	return btn
 
 func _make_tab_button(tab_key: String) -> Button:
 	var btn: Button = Button.new()
 	btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	btn.custom_minimum_size = Vector2(0, 36)
+	btn.custom_minimum_size = Vector2(0, 40)
 	btn.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	btn.add_theme_font_size_override("font_size", 14)
 	btn.pressed.connect(func() -> void:
 		_active_right_tab = tab_key
 		_selected_bag_idx = -1
 		_selected_pouch_idx = -1
+		sfx_requested.emit("ui_click")
 		refresh()
 	)
 	return btn
+
+func _connect_tap(card: Control, callback: Callable) -> void:
+	card.mouse_filter = Control.MOUSE_FILTER_PASS
+	card.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	var st: Dictionary = {"down": false, "pos": Vector2.ZERO}
+	card.gui_input.connect(func(ev: InputEvent) -> void:
+		if ev is InputEventMouseButton and ev.button_index == MOUSE_BUTTON_LEFT:
+			var mb: InputEventMouseButton = ev
+			if mb.pressed:
+				st["down"] = true
+				st["pos"] = mb.position
+			elif bool(st["down"]):
+				st["down"] = false
+				if mb.position.distance_to(st["pos"]) < 12.0 and not TouchScrollContainer.was_recent_drag():
+					callback.call()
+	)
 
 func open_panel(stats: HeroStats) -> void:
 	_stats = stats
@@ -273,22 +381,41 @@ func refresh() -> void:
 		return
 	var main_count: int = _stats.get_pouch_gems(GameEnums.GemType.MAIN).size()
 	var mod_count: int = _stats.get_pouch_gems(GameEnums.GemType.MODIFIER).size()
+	var skill_total: int = main_count + mod_count
+
 	_tab_items_btn.text = "Items (%d)" % _stats.item_bag.size()
 	_tab_main_btn.text = "Main (%d)" % main_count
 	_tab_mods_btn.text = "Mods (%d)" % mod_count
 
-	for pair in [[_tab_items_btn, "items"], [_tab_main_btn, "main"], [_tab_mods_btn, "mods"], [_tab_build_btn, "build"]]:
+	if _m_tab_items_btn != null:
+		_m_tab_items_btn.text = "Items (%d)" % _stats.item_bag.size()
+	if _m_tab_skills_btn != null:
+		_m_tab_skills_btn.text = "Skills (%d)" % skill_total
+
+	for pair in [[_tab_items_btn, "items"], [_tab_main_btn, "main"], [_tab_mods_btn, "mods"]]:
 		var btn: Button = pair[0]
 		var key: String = pair[1]
-		if btn != null:
+		UiHelper.style_button(
+			btn,
+			UiHelper.BG_OAK_CARD if _active_right_tab == key else UiHelper.BG_WELL,
+			UiHelper.BORDER_GOLD if _active_right_tab == key else UiHelper.BORDER_BRASS,
+			9,
+			6
+		)
+
+	for mpair in [[_m_tab_gear_btn, "gear"], [_m_tab_items_btn, "items"], [_m_tab_skills_btn, "skills"], [_m_tab_build_btn, "build"]]:
+		var mbtn: Button = mpair[0]
+		var mkey: String = mpair[1]
+		if mbtn != null:
 			UiHelper.style_button(
-				btn,
-				UiHelper.BG_OAK_CARD if _active_right_tab == key else UiHelper.BG_WELL,
-				UiHelper.BORDER_GOLD if _active_right_tab == key else UiHelper.BORDER_BRASS,
+				mbtn,
+				UiHelper.BG_OAK_CARD if _mobile_tab == mkey else UiHelper.BG_WELL,
+				UiHelper.BORDER_GOLD if _mobile_tab == mkey else UiHelper.BORDER_BRASS,
 				9,
 				6
 			)
 
+	_apply_column_visibility()
 	_refresh_left_build()
 	_refresh_center_slots()
 	_refresh_right_column()
@@ -301,6 +428,8 @@ func _refresh_left_build() -> void:
 func _populate_build_vbox(container: VBoxContainer) -> void:
 	var s: HeroStats = _stats
 	var hdef: Dictionary = HeroDatabase.get_hero(s.hero_id)
+	var fs_title: int = 15 if _is_mobile_layout else 13
+	var fs_sub: int = 13 if _is_mobile_layout else 11
 
 	var hero_card: PanelContainer = PanelContainer.new()
 	hero_card.add_theme_stylebox_override("panel", UiHelper.make_panel_box(UiHelper.BG_WELL, UiHelper.BORDER_BRASS, 10, 1, 8, false))
@@ -308,48 +437,48 @@ func _populate_build_vbox(container: VBoxContainer) -> void:
 	var hh: HBoxContainer = HBoxContainer.new()
 	hh.add_theme_constant_override("separation", 10)
 	hero_card.add_child(hh)
-	hh.add_child(UiHelper.make_icon_rect(UiIcons.get_hero_portrait(s.hero_id), 40))
+	hh.add_child(UiHelper.make_icon_rect(UiIcons.get_hero_portrait(s.hero_id), 44 if _is_mobile_layout else 40))
 	var hv: VBoxContainer = VBoxContainer.new()
 	hv.add_theme_constant_override("separation", 4)
 	hh.add_child(hv)
 	var hn: Label = Label.new()
 	hn.text = String(hdef["hero_name"])
-	UiHelper.apply_display_font(hn, 15, Color(1.0, 0.88, 0.42), 2)
+	UiHelper.apply_display_font(hn, 16 if _is_mobile_layout else 15, Color(1.0, 0.88, 0.42), 2)
 	hv.add_child(hn)
 
 	var vitals_h: HBoxContainer = HBoxContainer.new()
-	vitals_h.add_theme_constant_override("separation", 10)
+	vitals_h.add_theme_constant_override("separation", 12)
 	hv.add_child(vitals_h)
-	for pair in [["heart", "%d" % int(round(s.max_hp))], ["dash_paw", "%.1f | %dx" % [s.move_speed, s.dash_max_charges]]]:
-		var vp: HBoxContainer = HBoxContainer.new()
-		vp.add_theme_constant_override("separation", 4)
-		vp.add_child(UiHelper.make_icon_rect(UiIcons.get_ui_icon(pair[0]), 14))
+	for pair in [["heart", "%d HP" % int(round(s.max_hp))], ["star_upgrade", "%.1f Spd" % s.move_speed]]:
+		var vp_box: HBoxContainer = HBoxContainer.new()
+		vp_box.add_theme_constant_override("separation", 4)
+		vp_box.add_child(UiHelper.make_icon_rect(UiIcons.get_ui_icon(pair[0]), 16))
 		var vl: Label = Label.new()
 		vl.text = pair[1]
-		vl.add_theme_font_size_override("font_size", 12)
+		vl.add_theme_font_size_override("font_size", 13 if _is_mobile_layout else 12)
 		vl.add_theme_color_override("font_color", UiHelper.TEXT_CREAM)
-		vp.add_child(vl)
-		vitals_h.add_child(vp)
+		vp_box.add_child(vl)
+		vitals_h.add_child(vp_box)
 
 	# Linked Active Skills
 	var sk_hdr: Label = Label.new()
 	sk_hdr.text = "ACTIVE ABILITIES (%d)" % s.active_skill_configs.size()
 	sk_hdr.add_theme_font_override("font", UiHelper.get_bold_font())
-	sk_hdr.add_theme_font_size_override("font_size", 12)
+	sk_hdr.add_theme_font_size_override("font_size", fs_sub + 1)
 	sk_hdr.add_theme_color_override("font_color", Color(0.56, 0.90, 1.0))
 	container.add_child(sk_hdr)
 
 	if s.active_skill_configs.is_empty():
 		var emp_s: Label = Label.new()
 		emp_s.text = "None socketed yet."
-		emp_s.add_theme_font_size_override("font_size", 12)
+		emp_s.add_theme_font_size_override("font_size", fs_sub + 1)
 		emp_s.add_theme_color_override("font_color", UiHelper.TEXT_PARCHMENT)
 		container.add_child(emp_s)
 	else:
 		for cfg in s.active_skill_configs:
 			var gcol: Color = GameEnums.gem_color_value(int(cfg["color"]))
 			var sc: PanelContainer = PanelContainer.new()
-			sc.add_theme_stylebox_override("panel", UiHelper.make_panel_box(UiHelper.BG_WELL, gcol.darkened(0.2), 9, 1, 7, false))
+			sc.add_theme_stylebox_override("panel", UiHelper.make_panel_box(UiHelper.BG_WELL, gcol.darkened(0.2), 9, 1, 8, false))
 			container.add_child(sc)
 			var sv: VBoxContainer = VBoxContainer.new()
 			sv.add_theme_constant_override("separation", 4)
@@ -357,17 +486,17 @@ func _populate_build_vbox(container: VBoxContainer) -> void:
 			var sh: HBoxContainer = HBoxContainer.new()
 			sh.add_theme_constant_override("separation", 8)
 			sv.add_child(sh)
-			sh.add_child(UiHelper.make_icon_rect(UiIcons.get_skill_icon(String(cfg["gem_id"])), 24))
+			sh.add_child(UiHelper.make_icon_rect(UiIcons.get_skill_icon(String(cfg["gem_id"])), 26))
 			var sn: Label = Label.new()
-			sn.text = "%s" % String(cfg["gem_name"])
+			sn.text = String(cfg["gem_name"])
 			sn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 			sn.add_theme_font_override("font", UiHelper.get_bold_font())
-			sn.add_theme_font_size_override("font_size", 13)
+			sn.add_theme_font_size_override("font_size", fs_title)
 			sn.add_theme_color_override("font_color", UiHelper.TEXT_CREAM)
 			sh.add_child(sn)
 			var stats_p: Label = Label.new()
 			stats_p.text = "%.0f | %.2fs" % [float(cfg["damage"]), float(cfg["cooldown"])]
-			stats_p.add_theme_font_size_override("font_size", 11)
+			stats_p.add_theme_font_size_override("font_size", fs_sub)
 			stats_p.add_theme_color_override("font_color", UiHelper.TEXT_PARCHMENT)
 			sh.add_child(stats_p)
 
@@ -380,13 +509,13 @@ func _populate_build_vbox(container: VBoxContainer) -> void:
 				sv.add_child(mr)
 				for k in range(mod_names.size()):
 					var mcol: Color = GameEnums.gem_color_value(int(mod_cols[k]))
-					mr.add_child(UiHelper.make_badge_pill(String(mod_names[k]), mcol.darkened(0.65), mcol, UiHelper.TEXT_CREAM, 10))
+					mr.add_child(UiHelper.make_badge_pill(String(mod_names[k]), mcol.darkened(0.65), mcol, UiHelper.TEXT_CREAM, 11))
 
 	# Global Effects
 	var ef_hdr: Label = Label.new()
 	ef_hdr.text = "GLOBAL EFFECTS (%d)" % s.active_effect_list.size()
 	ef_hdr.add_theme_font_override("font", UiHelper.get_bold_font())
-	ef_hdr.add_theme_font_size_override("font_size", 12)
+	ef_hdr.add_theme_font_size_override("font_size", fs_sub + 1)
 	ef_hdr.add_theme_color_override("font_color", Color(1.0, 0.86, 0.44))
 	container.add_child(ef_hdr)
 
@@ -394,7 +523,7 @@ func _populate_build_vbox(container: VBoxContainer) -> void:
 		var emp_e: Label = Label.new()
 		emp_e.text = "Equip Relics to gain Global Effects."
 		emp_e.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		emp_e.add_theme_font_size_override("font_size", 12)
+		emp_e.add_theme_font_size_override("font_size", fs_sub + 1)
 		emp_e.add_theme_color_override("font_color", UiHelper.TEXT_PARCHMENT)
 		container.add_child(emp_e)
 	else:
@@ -414,6 +543,12 @@ func _refresh_center_slots() -> void:
 	if _selected_pouch_idx >= 0 and _selected_pouch_idx < _stats.gem_pouch.size():
 		sel_gem = _stats.gem_pouch[_selected_pouch_idx]
 
+	if _pending_gem_bar != null and _pending_gem_lbl != null:
+		_pending_gem_bar.visible = (sel_gem != null)
+		if sel_gem != null:
+			_pending_gem_lbl.text = "Tap a pulsing %s socket to insert %s" % [GameEnums.gem_color_letter(sel_gem.get_gem_color()), sel_gem.get_gem_name()]
+
+	var fs_slot: int = 15 if _is_mobile_layout else 13
 	for slot in [
 		GameEnums.EquipSlot.WEAPON,
 		GameEnums.EquipSlot.HELMET,
@@ -427,48 +562,56 @@ func _refresh_center_slots() -> void:
 		var r_col: Color = GameEnums.rarity_color(item.rarity) if item != null else Color(0.55, 0.50, 0.45)
 
 		var card: PanelContainer = PanelContainer.new()
+		card.mouse_filter = Control.MOUSE_FILTER_PASS
 		card.add_theme_stylebox_override("panel", UiHelper.make_panel_box(UiHelper.BG_WELL, b_col, 10, 1, 8, false))
 		_center_slots_vbox.add_child(card)
 
 		var cv: VBoxContainer = VBoxContainer.new()
-		cv.add_theme_constant_override("separation", 5)
+		cv.mouse_filter = Control.MOUSE_FILTER_PASS
+		cv.add_theme_constant_override("separation", 6)
 		card.add_child(cv)
 
 		var hdr_panel: PanelContainer = PanelContainer.new()
+		hdr_panel.mouse_filter = Control.MOUSE_FILTER_PASS
 		hdr_panel.add_theme_stylebox_override("panel", UiHelper.make_accent_card_box(UiHelper.BG_OAK_CARD if item != null else UiHelper.BG_WELL, b_col, 8, 7))
 		cv.add_child(hdr_panel)
 
 		var hh: HBoxContainer = HBoxContainer.new()
+		hh.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		hh.add_theme_constant_override("separation", 8)
 		hdr_panel.add_child(hh)
-		hh.add_child(UiHelper.make_icon_rect(UiIcons.get_slot_icon(slot), 24))
+		hh.add_child(UiHelper.make_icon_rect(UiIcons.get_slot_icon(slot), 26 if _is_mobile_layout else 24))
 
 		var hv: VBoxContainer = VBoxContainer.new()
 		hv.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		hv.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		hv.add_theme_constant_override("separation", 4)
 		hh.add_child(hv)
 
 		var top_r: HBoxContainer = HBoxContainer.new()
+		top_r.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		top_r.add_theme_constant_override("separation", 6)
 		hv.add_child(top_r)
 
 		var name_lbl: Label = Label.new()
 		name_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		name_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		name_lbl.add_theme_font_override("font", UiHelper.get_bold_font())
-		name_lbl.add_theme_font_size_override("font_size", 13)
+		name_lbl.add_theme_font_size_override("font_size", fs_slot)
 		name_lbl.add_theme_color_override("font_color", r_col)
 		name_lbl.text = ("%s: Empty" % GameEnums.slot_label(slot)) if item == null else item.item_name
 		top_r.add_child(name_lbl)
 
 		if item != null:
-			top_r.add_child(UiHelper.make_badge_pill(GameEnums.rarity_label(item.rarity), r_col.darkened(0.68), r_col, UiHelper.TEXT_CREAM, 10))
+			top_r.add_child(UiHelper.make_badge_pill(GameEnums.rarity_label(item.rarity), r_col.darkened(0.68), r_col, UiHelper.TEXT_CREAM, 11))
 			if not item.effects.is_empty():
 				var ef_flow: HFlowContainer = HFlowContainer.new()
+				ef_flow.mouse_filter = Control.MOUSE_FILTER_IGNORE
 				ef_flow.add_theme_constant_override("h_separation", 5)
 				ef_flow.add_theme_constant_override("v_separation", 4)
 				hv.add_child(ef_flow)
 				for eid in item.effects:
-					ef_flow.add_child(UiHelper.make_effect_chip(String(eid), true))
+					ef_flow.add_child(UiHelper.make_effect_chip(String(eid), not _is_mobile_layout))
 
 		if item != null:
 			var sock_widget: PoESocketWidget = PoESocketWidget.new()
@@ -480,6 +623,17 @@ func _refresh_right_column() -> void:
 	for ch in _right_content_vbox.get_children():
 		ch.queue_free()
 
+	if _is_mobile_layout:
+		if _mobile_tab == "build":
+			_build_mobile_build_tab()
+			return
+		elif _mobile_tab == "items":
+			_build_items_tab()
+			return
+		elif _mobile_tab == "skills":
+			_build_gems_tab(GameEnums.GemType.MODIFIER if _active_right_tab == "mods" else GameEnums.GemType.MAIN)
+			return
+
 	match _active_right_tab:
 		"items":
 			_build_items_tab()
@@ -487,35 +641,39 @@ func _refresh_right_column() -> void:
 			_build_gems_tab(GameEnums.GemType.MAIN)
 		"mods":
 			_build_gems_tab(GameEnums.GemType.MODIFIER)
-		"build":
-			var b_well: PanelContainer = PanelContainer.new()
-			b_well.size_flags_vertical = Control.SIZE_EXPAND_FILL
-			b_well.add_theme_stylebox_override("panel", UiHelper.make_panel_box(UiHelper.BG_WELL, UiHelper.BORDER_SUBTLE, 10, 1, 10, false))
-			_right_content_vbox.add_child(b_well)
-			var b_scroll: ScrollContainer = ScrollContainer.new()
-			b_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
-			b_well.add_child(b_scroll)
-			var bv: VBoxContainer = VBoxContainer.new()
-			bv.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-			bv.add_theme_constant_override("separation", 8)
-			b_scroll.add_child(bv)
-			_populate_build_vbox(bv)
+
+func _build_mobile_build_tab() -> void:
+	var b_well: PanelContainer = PanelContainer.new()
+	b_well.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	b_well.add_theme_stylebox_override("panel", UiHelper.make_panel_box(UiHelper.BG_WELL, UiHelper.BORDER_SUBTLE, 10, 1, 10, false))
+	_right_content_vbox.add_child(b_well)
+	var b_scroll: TouchScrollContainer = TouchScrollContainer.new()
+	b_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	b_well.add_child(b_scroll)
+	var bv: VBoxContainer = VBoxContainer.new()
+	bv.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	bv.add_theme_constant_override("separation", 8)
+	b_scroll.add_child(bv)
+	_populate_build_vbox(bv)
 
 func _build_items_tab() -> void:
-	var scroll: ScrollContainer = ScrollContainer.new()
+	var scroll: TouchScrollContainer = TouchScrollContainer.new()
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	_right_content_vbox.add_child(scroll)
 
 	var list_v: VBoxContainer = VBoxContainer.new()
 	list_v.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	list_v.add_theme_constant_override("separation", 6)
+	list_v.mouse_filter = Control.MOUSE_FILTER_PASS
+	list_v.add_theme_constant_override("separation", 7)
 	scroll.add_child(list_v)
 
+	var fs_item: int = 15 if _is_mobile_layout else 13
 	if _stats.item_bag.is_empty():
 		var emp_box: PanelContainer = PanelContainer.new()
 		emp_box.add_theme_stylebox_override("panel", UiHelper.make_panel_box(UiHelper.BG_WELL, UiHelper.BORDER_SUBTLE, 10, 1, 14, false))
 		var emp: Label = Label.new()
 		emp.text = "No Relics in bag yet."
+		emp.add_theme_font_size_override("font_size", fs_item)
 		emp.add_theme_color_override("font_color", UiHelper.TEXT_PARCHMENT)
 		emp_box.add_child(emp)
 		list_v.add_child(emp_box)
@@ -527,23 +685,20 @@ func _build_items_tab() -> void:
 			var is_sel: bool = (i == _selected_bag_idx)
 
 			var row_card: PanelContainer = PanelContainer.new()
-			row_card.mouse_filter = Control.MOUSE_FILTER_STOP
-			row_card.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 			row_card.add_theme_stylebox_override(
 				"panel",
-				UiHelper.make_accent_card_box(UiHelper.BG_OAK_CARD if not is_sel else Color(0.30, 0.23, 0.16), Color(1.0, 0.90, 0.36) if is_sel else b_col, 8, 8)
+				UiHelper.make_accent_card_box(UiHelper.BG_OAK_CARD if not is_sel else Color(0.30, 0.23, 0.16), Color(1.0, 0.90, 0.36) if is_sel else b_col, 8, 9)
 			)
 			var idx_cap: int = i
-			row_card.gui_input.connect(func(ev: InputEvent) -> void:
-				if ev is InputEventMouseButton and ev.pressed and ev.button_index == MOUSE_BUTTON_LEFT:
-					_selected_bag_idx = idx_cap
-					sfx_requested.emit("ui_click")
-					refresh()
+			_connect_tap(row_card, func() -> void:
+				_selected_bag_idx = idx_cap
+				sfx_requested.emit("ui_click")
+				refresh()
 			)
 			list_v.add_child(row_card)
 
 			var rv: VBoxContainer = VBoxContainer.new()
-			rv.add_theme_constant_override("separation", 4)
+			rv.add_theme_constant_override("separation", 5)
 			rv.mouse_filter = Control.MOUSE_FILTER_IGNORE
 			row_card.add_child(rv)
 
@@ -551,13 +706,13 @@ func _build_items_tab() -> void:
 			top_h.add_theme_constant_override("separation", 8)
 			top_h.mouse_filter = Control.MOUSE_FILTER_IGNORE
 			rv.add_child(top_h)
-			top_h.add_child(UiHelper.make_icon_rect(UiIcons.get_slot_icon(it.equip_slot), 22))
+			top_h.add_child(UiHelper.make_icon_rect(UiIcons.get_slot_icon(it.equip_slot), 24))
 			var nl: Label = Label.new()
 			nl.text = it.item_name
 			nl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 			nl.mouse_filter = Control.MOUSE_FILTER_IGNORE
 			nl.add_theme_font_override("font", UiHelper.get_bold_font())
-			nl.add_theme_font_size_override("font_size", 13)
+			nl.add_theme_font_size_override("font_size", fs_item)
 			nl.add_theme_color_override("font_color", r_col)
 			top_h.add_child(nl)
 
@@ -572,7 +727,7 @@ func _build_items_tab() -> void:
 				ef_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 				rv.add_child(ef_row)
 				for eid in it.effects:
-					ef_row.add_child(UiHelper.make_effect_chip(String(eid), true))
+					ef_row.add_child(UiHelper.make_effect_chip(String(eid), not _is_mobile_layout))
 
 	# Selected Item Visual Tradeoff Inspector
 	if _selected_bag_idx >= 0 and _selected_bag_idx < _stats.item_bag.size():
@@ -588,25 +743,22 @@ func _build_items_tab() -> void:
 		cmp_v.add_theme_constant_override("separation", 6)
 		cmp_box.add_child(cmp_v)
 
-		var hdr_row: HBoxContainer = HBoxContainer.new()
-		hdr_row.add_theme_constant_override("separation", 8)
-		cmp_v.add_child(hdr_row)
 		var new_n: Label = Label.new()
 		new_n.text = "%s (%s)" % [sel_item.item_name, sel_item.get_socket_summary_text()]
-		new_n.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		new_n.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		new_n.add_theme_font_override("font", UiHelper.get_bold_font())
-		new_n.add_theme_font_size_override("font_size", 13)
+		new_n.add_theme_font_size_override("font_size", 15 if _is_mobile_layout else 13)
 		new_n.add_theme_color_override("font_color", r_col)
-		hdr_row.add_child(new_n)
+		cmp_v.add_child(new_n)
 
 		var cur_txt: String = "vs Empty" if cur_item == null else ("vs %s (%s)" % [cur_item.item_name, cur_item.get_socket_summary_text()])
 		var vs_lbl: Label = Label.new()
 		vs_lbl.text = cur_txt
-		vs_lbl.add_theme_font_size_override("font_size", 11)
+		vs_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		vs_lbl.add_theme_font_size_override("font_size", 12 if _is_mobile_layout else 11)
 		vs_lbl.add_theme_color_override("font_color", UiHelper.TEXT_PARCHMENT)
 		cmp_v.add_child(vs_lbl)
 
-		# Tradeoff Diff Effect Chips (+ Gained / - Lost / = Shared)
 		var diff_flow: HFlowContainer = HFlowContainer.new()
 		diff_flow.add_theme_constant_override("h_separation", 5)
 		diff_flow.add_theme_constant_override("v_separation", 5)
@@ -615,22 +767,25 @@ func _build_items_tab() -> void:
 		var cur_effects: Array[String] = cur_item.effects if cur_item != null else []
 		for eid in sel_item.effects:
 			if eid in cur_effects:
-				diff_flow.add_child(UiHelper.make_effect_chip(eid, true, "= "))
+				diff_flow.add_child(UiHelper.make_effect_chip(eid, not _is_mobile_layout, "= "))
 			else:
-				diff_flow.add_child(UiHelper.make_effect_chip(eid, true, "+ ", Color(0.40, 0.94, 0.56)))
+				diff_flow.add_child(UiHelper.make_effect_chip(eid, not _is_mobile_layout, "+ ", Color(0.40, 0.94, 0.56)))
 		for eid in cur_effects:
 			if not (eid in sel_item.effects):
-				diff_flow.add_child(UiHelper.make_effect_chip(eid, true, "- ", Color(0.96, 0.44, 0.44)))
+				diff_flow.add_child(UiHelper.make_effect_chip(eid, not _is_mobile_layout, "- ", Color(0.96, 0.44, 0.44)))
 
 		var btns_h: HBoxContainer = HBoxContainer.new()
 		btns_h.add_theme_constant_override("separation", 8)
 		cmp_v.add_child(btns_h)
 
+		var btn_h: int = 44 if _is_mobile_layout else 36
 		var eq_btn: Button = Button.new()
 		eq_btn.text = "Equip"
 		eq_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		eq_btn.custom_minimum_size = Vector2(0, btn_h)
 		eq_btn.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 		UiHelper.style_button(eq_btn, UiHelper.CTA_EMERALD, UiHelper.CTA_EMERALD_RIM, 8, 6)
+		eq_btn.add_theme_font_size_override("font_size", 15 if _is_mobile_layout else 13)
 		eq_btn.pressed.connect(func() -> void:
 			var res: Dictionary = _stats.equip_item_from_bag(_selected_bag_idx)
 			if bool(res.get("ok", false)):
@@ -643,9 +798,10 @@ func _build_items_tab() -> void:
 
 		var drop_btn: Button = Button.new()
 		drop_btn.text = "Drop"
-		drop_btn.custom_minimum_size = Vector2(92, 0)
+		drop_btn.custom_minimum_size = Vector2(96, btn_h)
 		drop_btn.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 		UiHelper.style_button(drop_btn, UiHelper.CTA_RUBY, UiHelper.CTA_RUBY_RIM, 8, 6)
+		drop_btn.add_theme_font_size_override("font_size", 15 if _is_mobile_layout else 13)
 		drop_btn.pressed.connect(func() -> void:
 			_stats.discard_bag_item(_selected_bag_idx)
 			_selected_bag_idx = -1
@@ -656,15 +812,18 @@ func _build_items_tab() -> void:
 		btns_h.add_child(drop_btn)
 
 func _build_gems_tab(filter_gtype: int) -> void:
-	var scroll: ScrollContainer = ScrollContainer.new()
+	var scroll: TouchScrollContainer = TouchScrollContainer.new()
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	_right_content_vbox.add_child(scroll)
 
 	var list_v: VBoxContainer = VBoxContainer.new()
 	list_v.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	list_v.add_theme_constant_override("separation", 6)
+	list_v.mouse_filter = Control.MOUSE_FILTER_PASS
+	list_v.add_theme_constant_override("separation", 7)
 	scroll.add_child(list_v)
 
+	var fs_title: int = 15 if _is_mobile_layout else 13
+	var fs_desc: int = 13 if _is_mobile_layout else 11
 	var shown_count: int = 0
 	for i in range(_stats.gem_pouch.size()):
 		var g: GemInstance = _stats.gem_pouch[i]
@@ -676,28 +835,25 @@ func _build_gems_tab(filter_gtype: int) -> void:
 		var is_sel: bool = (i == _selected_pouch_idx)
 
 		var card: PanelContainer = PanelContainer.new()
-		card.mouse_filter = Control.MOUSE_FILTER_STOP
-		card.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 		card.add_theme_stylebox_override(
 			"panel",
-			UiHelper.make_accent_card_box(UiHelper.BG_OAK_CARD if not is_sel else Color(0.28, 0.22, 0.16), Color(1.0, 0.90, 0.36) if is_sel else gcol, 8, 8)
+			UiHelper.make_accent_card_box(UiHelper.BG_OAK_CARD if not is_sel else Color(0.28, 0.22, 0.16), Color(1.0, 0.90, 0.36) if is_sel else gcol, 8, 9)
 		)
 		var pouch_idx: int = i
-		card.gui_input.connect(func(ev: InputEvent) -> void:
-			if ev is InputEventMouseButton and ev.pressed and ev.button_index == MOUSE_BUTTON_LEFT:
-				_selected_pouch_idx = -1 if _selected_pouch_idx == pouch_idx else pouch_idx
-				sfx_requested.emit("ui_click")
-				refresh()
+		_connect_tap(card, func() -> void:
+			_selected_pouch_idx = -1 if _selected_pouch_idx == pouch_idx else pouch_idx
+			sfx_requested.emit("ui_click")
+			refresh()
 		)
 		list_v.add_child(card)
 
 		var gh: HBoxContainer = HBoxContainer.new()
-		gh.add_theme_constant_override("separation", 8)
+		gh.add_theme_constant_override("separation", 9)
 		gh.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		card.add_child(gh)
 
 		var gtex: Texture2D = UiIcons.get_skill_icon(g.gem_id) if gtype == GameEnums.GemType.MAIN else UiIcons.get_gem_icon(GameEnums.GemType.MODIFIER, g.get_gem_color())
-		gh.add_child(UiHelper.make_icon_rect(gtex, 28))
+		gh.add_child(UiHelper.make_icon_rect(gtex, 32 if _is_mobile_layout else 28))
 
 		var gv: VBoxContainer = VBoxContainer.new()
 		gv.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -715,16 +871,16 @@ func _build_gems_tab(filter_gtype: int) -> void:
 		gn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		gn.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		gn.add_theme_font_override("font", UiHelper.get_bold_font())
-		gn.add_theme_font_size_override("font_size", 13)
+		gn.add_theme_font_size_override("font_size", fs_title)
 		gn.add_theme_color_override("font_color", gcol.lightened(0.25))
 		row_top.add_child(gn)
 
-		row_top.add_child(UiHelper.make_badge_pill(GameEnums.gem_color_letter(g.get_gem_color()), gcol.darkened(0.68), gcol, UiHelper.TEXT_CREAM, 10))
+		row_top.add_child(UiHelper.make_badge_pill(GameEnums.gem_color_letter(g.get_gem_color()), gcol.darkened(0.68), gcol, UiHelper.TEXT_CREAM, 11))
 
 		var d_lbl: Label = Label.new()
 		d_lbl.text = g.get_short_desc()
 		d_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		d_lbl.add_theme_font_size_override("font_size", 11)
+		d_lbl.add_theme_font_size_override("font_size", fs_desc)
 		d_lbl.add_theme_color_override("font_color", UiHelper.TEXT_PARCHMENT)
 		gv.add_child(d_lbl)
 
@@ -733,6 +889,7 @@ func _build_gems_tab(filter_gtype: int) -> void:
 		emp_g.add_theme_stylebox_override("panel", UiHelper.make_panel_box(UiHelper.BG_WELL, UiHelper.BORDER_SUBTLE, 10, 1, 12, false))
 		var el: Label = Label.new()
 		el.text = "No %s abilities in pouch." % ("Main" if filter_gtype == GameEnums.GemType.MAIN else "Modifier")
+		el.add_theme_font_size_override("font_size", fs_title)
 		el.add_theme_color_override("font_color", UiHelper.TEXT_PARCHMENT)
 		emp_g.add_child(el)
 		list_v.add_child(emp_g)
@@ -753,26 +910,49 @@ func _build_gems_tab(filter_gtype: int) -> void:
 		gh_sel.add_theme_constant_override("separation", 8)
 		g_v.add_child(gh_sel)
 		var sel_tex: Texture2D = UiIcons.get_skill_icon(sel_gem.gem_id) if sel_gem.get_gem_type() == GameEnums.GemType.MAIN else UiIcons.get_gem_icon(GameEnums.GemType.MODIFIER, sel_gem.get_gem_color())
-		gh_sel.add_child(UiHelper.make_icon_rect(sel_tex, 24))
+		gh_sel.add_child(UiHelper.make_icon_rect(sel_tex, 26))
 		var sel_title: Label = Label.new()
 		sel_title.text = "%s — %s" % [sel_gem.get_gem_name(), sel_gem.get_short_desc()]
 		sel_title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		sel_title.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		sel_title.add_theme_font_override("font", UiHelper.get_bold_font())
-		sel_title.add_theme_font_size_override("font_size", 12)
+		sel_title.add_theme_font_size_override("font_size", 14 if _is_mobile_layout else 12)
 		sel_title.add_theme_color_override("font_color", gcol.lightened(0.25))
 		gh_sel.add_child(sel_title)
 
 		var hint_l: Label = Label.new()
-		hint_l.text = "Click a pulsing %s socket on the left to insert." % GameEnums.gem_color_letter(sel_gem.get_gem_color())
-		hint_l.add_theme_font_size_override("font_size", 11)
+		hint_l.text = "Tap a pulsing %s socket to insert." % GameEnums.gem_color_letter(sel_gem.get_gem_color())
+		hint_l.add_theme_font_size_override("font_size", 12 if _is_mobile_layout else 11)
 		hint_l.add_theme_color_override("font_color", Color(1.0, 0.90, 0.44))
 		g_v.add_child(hint_l)
 
+		var action_h: HBoxContainer = HBoxContainer.new()
+		action_h.add_theme_constant_override("separation", 8)
+		g_v.add_child(action_h)
+
+		if _is_mobile_layout:
+			var go_gear_btn: Button = Button.new()
+			go_gear_btn.text = "Socket in Gear ->"
+			go_gear_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			go_gear_btn.custom_minimum_size = Vector2(0, 42)
+			go_gear_btn.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+			UiHelper.style_button(go_gear_btn, UiHelper.CTA_EMERALD, UiHelper.CTA_EMERALD_RIM, 8, 5)
+			go_gear_btn.add_theme_font_size_override("font_size", 14)
+			go_gear_btn.pressed.connect(func() -> void:
+				_mobile_tab = "gear"
+				sfx_requested.emit("ui_click")
+				refresh()
+			)
+			action_h.add_child(go_gear_btn)
+
 		var drop_g_btn: Button = Button.new()
 		drop_g_btn.text = "Drop"
-		drop_g_btn.custom_minimum_size = Vector2(0, 32)
+		drop_g_btn.custom_minimum_size = Vector2(96 if _is_mobile_layout else 0, 42 if _is_mobile_layout else 34)
+		if not _is_mobile_layout:
+			drop_g_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		drop_g_btn.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 		UiHelper.style_button(drop_g_btn, UiHelper.CTA_RUBY, UiHelper.CTA_RUBY_RIM, 8, 5)
+		drop_g_btn.add_theme_font_size_override("font_size", 14 if _is_mobile_layout else 13)
 		drop_g_btn.pressed.connect(func() -> void:
 			_stats.discard_gem_from_pouch(_selected_pouch_idx)
 			_selected_pouch_idx = -1
@@ -780,7 +960,7 @@ func _build_gems_tab(filter_gtype: int) -> void:
 			gear_changed.emit()
 			refresh()
 		)
-		g_v.add_child(drop_g_btn)
+		action_h.add_child(drop_g_btn)
 
 func _on_socket_clicked(slot: int, socket_idx: int) -> void:
 	if _stats == null:

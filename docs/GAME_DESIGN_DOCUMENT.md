@@ -1,41 +1,41 @@
 # Paw & Prism — Living Game Design Document (GDD)
 
 > **Status:** Living Design Reference & Rework Blueprint  
-> **Version:** `v2.0` (Behavioral Loot, Zero-Leveling & Playable Tutorial Revamp)  
+> **Version:** `v2.1` (Mobile Portrait UX, Zero-Dash Combat & Android APK Release)  
 > **Engine & Renderer:** Godot `4.7.2` (`GL Compatibility`)  
 > **Live Web Build:** https://normandra.github.io/paw-and-prism/  
 > **Repository:** https://github.com/normandra/paw-and-prism  
-> **Target Platforms:** Web (single-threaded HTML5/WASM, no `SharedArrayBuffer`), macOS, Windows, Linux  
+> **Target Platforms:** Web (single-threaded HTML5/WASM, no `SharedArrayBuffer`), Android (`arm64-v8a` Portrait APK), macOS, Windows, Linux  
 
 ---
 
 ## How to Use This Document
 
 Each section separates verified mechanics from future exploration:
-1. **`Current Implementation` (Code-Verified `v2.0`):** Exact systems, tables, parameters, and script owners active in the project.
+1. **`Current Implementation` (Code-Verified `v2.1`):** Exact systems, tables, parameters, and script owners active in the project.
 2. **`Rework Ideas & Design Knobs`:** Checkable `[ ]` balance levers and next-step feature ideas ready to edit directly.
 
 ---
 
 ## 1. High Concept, Core Pillars & Gameplay Loop
 
-**Pitch:** *Vampire Survivors meets Diablo behavioral item tradeoffs and Path of Exile ability linking in a cozy 3D woodland meadow.* Pick a chibi critter hero (or learn step-by-step in the bare-pawed Tutorial), weave through 20 minutes of escalating critter swarms from Morning to Twilight, hunt strictly **3 ground loot types** (*Items*, *Main Socket Abilities*, and *Modifier Abilities*), weigh build-defining Relic tradeoffs inside an icon-first Satchel, and defeat 3 telegraphed bosses.
+**Pitch:** *Vampire Survivors meets Diablo behavioral item tradeoffs and Path of Exile ability linking in a cozy 3D woodland meadow.* Pick a chibi critter hero (or learn step-by-step in the bare-pawed Tutorial), weave effortlessly one-handed through 20 minutes of escalating critter swarms from Morning to Twilight, hunt strictly **3 ground loot types** (*Items*, *Main Socket Abilities*, and *Modifier Abilities*), weigh build-defining Relic tradeoffs inside a touch-scrollable Satchel, and defeat 3 telegraphed bosses.
 
 ### Core Design Pillars
 
-| Pillar | Design Choice | Current Implementation (`v2.0`) | Primary Code Owners |
+| Pillar | Design Choice | Current Implementation (`v2.1`) | Primary Code Owners |
 |---|---|---|---|
 | **1. Zero Leveling / Pure Loot Power** | No XP bars, XP shards, or "pick 1 of 3" stat-stick modals | All hero power & playstyle mutations come exclusively from equipped Items and socketed/linked Abilities | `hero_stats.gd`, `loot_manager.gd` |
 | **2. Behavioral Items & Rarity Tradeoffs** | Rarity shapes socket count & behavioral tradeoffs, never dull `+X%` fluff | `Common` / `Magic` / `Rare` / `Unique` items across 6 slots grant `18` behavioral/tradeoff Global Effects + `5` Unique Keystones + fixed socket/link rolls | `item_database.gd`, `item_instance.gd`, `inventory_panel.gd` |
 | **3. PoE Ability Linking (Main + Modifier)** | Clean 2-type gem grammar | `10` Main Socket Abilities + `10` Modifier Abilities insert into fixed colored (`R`/`G`/`B`/`W`) sockets and share effects across linked gaps | `gem_database.gd`, `poe_socket_widget.gd`, `skill_executor.gd` |
 | **4. PoE-Style Playable Tutorial** | Learn by looting & linking hands-on | Dedicated bare-pawed `TUTORIAL` run walking through **First Item -> First Main Ability -> First Linked Modifier** | `tutorial_director.gd`, `main_game.gd` |
-| **5. 20-Min 3-Boss Gauntlet + Mobile** | Readable swarms & touch support | 7 regular critter species, 3 scripted bosses (`06:30`, `13:00`, `19:30`), 3D biome shifts, icon-first UI & multi-touch virtual joystick | `wave_director.gd`, `touch_controls.gd`, `hud_controller.gd` |
+| **5. Mobile Portrait & 3-Boss Gauntlet** | One-handed touch ergonomics & readable UI | Hop-Dash removed; `2.75×` portrait phone scaling, momentum `TouchScrollContainer`, 4-tab mobile Satchel, Android APK CI & 3 scripted bosses (`06:30`, `13:00`, `19:30`) | `wave_director.gd`, `touch_controls.gd`, `touch_scroll_container.gd`, `hud_controller.gd` |
 
-### Core Moment-to-Moment Loop (`v2.0`)
+### Core Moment-to-Moment Loop (`v2.1`)
 
 ```mermaid
 flowchart LR
-    K["Auto-Cast Linked Main Abilities + Hop-Dash"] --> D["Enemies, Elites, Chests & Bosses Drop 3 Loot Types"]
+    K["Move & Weave + Auto-Cast Linked Main Abilities"] --> D["Enemies, Elites, Chests & Bosses Drop 3 Loot Types"]
     D --> L1["1. Items / Relics (Global Behavioral Effects + Fixed Sockets/Links)"]
     D --> L2["2. Main Socket Abilities (Active Skills)"]
     D --> L3["3. Modifier Abilities (Behavior Mutators)"]
@@ -64,10 +64,9 @@ flowchart LR
 | Input | Action | Notes |
 |---|---|---|
 | `WASD` / `Arrow Keys` | 8-directional movement | Clamped to `±66.5m` inside `136×136m` arena (`ArenaBuilder.ARENA_HALF_SIZE = 68.0`) |
-| `Space` / `Shift` | Hop-Dash (`dash` action) | `0.22s` dash burst at `2.55×` move speed (`1.28×` extra while Zoomies active), `0.26s` i-frames, `1.85s` charge cooldown (`1` base charge, `2` charges with `double_dash` or `comet_dash`) |
-| **Touch Drag** *(Mobile)* | Analog floating virtual joystick (`touch_controls.gd`) | Spawned outside HUD buttons; `10%` deadzone, `55%` full speed; auto-enabled on touchscreens or `?mobile=1` |
-| **Touch `DASH` Pad** *(Mobile)* | Circular Hop-Dash pad (`bottom-right`) | `54px` radius espresso/gold button with live radial cooldown arc (`DASH_RADIUS * 1.28` hit area) |
-| `Tab` / `I` | Toggle Hero Satchel | Pauses combat; shows Active Build, 6 Equipped Gear + PoE Sockets, Items/Main/Mods tabs & Tradeoff Inspector |
+| **Touch Drag** *(Mobile)* | Analog floating virtual joystick (`touch_controls.gd`) | Pure drag-anywhere floating stick (`BASE_RADIUS = 56px`, `KNOB_RADIUS = 22px`), bottom-center `"DRAG TO MOVE"` hint in portrait; auto-enabled on touchscreens/Android or `?mobile=1` |
+| **Touch Swipe** *(Satchel / EndScreen)* | Momentum vertical scroll (`touch_scroll_container.gd`) | Global drag-to-scroll (`>10px` threshold + inertia glide); blocks accidental taps via `was_recent_drag(180)` |
+| `Tab` / `I` | Toggle Hero Satchel | Pauses combat; 4-tab Portrait (`Gear \| Items \| Skills \| Build`) on phones, 3-column layout on Desktop |
 | `Esc` | Pause / Resume (`EndScreen`) | Also closes Satchel if open |
 | `M` | Toggle procedural audio mute | Reflected in HUD `[M]` button |
 | `F3` | Toggle FPS readout pill | Visible automatically when `?review=1` or `--review` is active |
@@ -93,7 +92,7 @@ flowchart LR
 
 ### Rework Ideas — Combat & Camera
 - [ ] **Optional Cursor / Right-Stick Aiming:** Toggle between Auto-Aim Nearest and Cursor Aim (`[Q]`) for deliberate *Boomerang Bone* or *Sniper Focus* piercing shots.
-- [ ] **Perfect-Hop Dash Timing:** Reward dodging just before an enemy telegraph detonates with an instant cooldown refresh or bonus spark burst.
+- [ ] **Manual Relic Active Trigger (Optional):** Evaluate whether a single optional portrait thumb-skill (or stride trigger indicator) improves active boss dodging without cluttering one-handed play.
 - [ ] **Micro Impact Juice:** Subtle hit-stop freeze frames or squash/stretch pop on `cheat_death`, boss phase changes, and corpse explosions.
 
 ---
@@ -106,7 +105,7 @@ In a standard **20-Min Run**, each hero starts equipped with a **Magic 2-link St
 |---|---|---|---|---|---|---|---|---|
 | `shiba` | **Mochi the Shiba**<br>*Acorn Ranger* | `135` | `8.6` | *Mochi's Acorn Wand* (`G=G`) | *Acorn Barrage* (`ACRN`) | `zoomies_on_kill` (*Kills -> Speed Burst*) | `ribbon_hood` | Fast pup bursting with speed after every kill |
 | `bunny` | **Pip the Bunny**<br>*Starlight Mage* | `120` | `9.0` | *Pip's Star Staff* (`B=G`) | *Starlight Orbs* (`STAR`) | `orbit_shield` (*Hit -> Star Shield*) | `wizard_hat` | Swift bunny summoning swirling star blades |
-| `bear` | **Bramble the Bear**<br>*Honey Paladin* | `155` | `8.0` | *Bramble's Honey Hammer* (`R=B`) | *Honey Slam* (`SLAM`) | `dash_honey_nova` (*Dash -> Honey Nova*) | `leaf_crown` | Sturdy bear smashing honey novas on Hop-Dash |
+| `bear` | **Bramble the Bear**<br>*Honey Paladin* | `155` | `8.0` | *Bramble's Honey Hammer* (`R=B`) | *Honey Slam* (`SLAM`) | `stride_honey_nova` (*Moving -> Honey Nova*) | `leaf_crown` | Sturdy bear pulsing honey novas while marching |
 | `cat` | **Nori the Cat**<br>*Storm Whisker* | `125` | `8.9` | *Nori's Spark Claws* (`B=G`) | *Whisker Lightning* (`ZAP`) | `static_sprint` (*Moving -> Zap Sparks*) | `knight_helm` | Zippy cat sparking lightning arcs on the run |
 
 ### Rework Ideas — Heroes
@@ -140,8 +139,8 @@ Items NEVER roll plain numerical stats like `+12% Damage` or `item_level`. Inste
 
 | Effect ID | In-Game Tag | Tradeoff? | Exact Gameplay Behavior |
 |---|---|---|---|
-| `dash_honey_nova` | **Dash -> Honey Nova** | No | Hop-Dash unleashes a `4.4m` slowing Honey Nova (`26` dmg) at origin |
-| `dash_triggers_skills` | **Dash Fires Skills \| Slow Auto** | **Yes** | Hop-Dash casts all non-orbit Main Abilities at once, but automatic cooldowns slow `1.50×` (unless `comet_dash` is also active) |
+| `stride_honey_nova` | **Moving -> Honey Nova** | No | Every `7.0m` traveled unleashes a `4.4m` slowing Honey Nova (`24` dmg) |
+| `cadence_burst` | **4th Cast -> Burst \| Slow** | **Yes** | Every `4th` non-orbit cast erupts a `4.6m` burst (`34` dmg + Chill), at `1.18×` skill cooldowns |
 | `turret_stance` | **Stand Still -> 2x Cast** | **Yes** | Standing still ticks skill cooldowns `2.0×` faster; moving ticks at `0.75×` |
 | `zoomies_on_kill` | **Kills -> Speed Burst** | No | Every critter kill grants `2.0s` of Zoomies (`1.28×` move speed, `1.25×` cast rate) |
 | `edge_ricochet` | **Shots Bounce Back** | No | Non-boomerang projectiles bounce back toward nearest enemy once (`0.85×` lifetime) on timeout or arena wall |
@@ -151,11 +150,11 @@ Items NEVER roll plain numerical stats like `+12% Damage` or `item_level`. Inste
 | `ember_corpse` | **Kills -> Fire Pop** | No | Defeated critters detonate in a `3.6m` fiery nova (`24` dmg + Burn) |
 | `frost_shatter` | **Chill Kills -> Ice Ring** | No | Defeating a chilled critter triggers a `4.4m` icy ring (`26` dmg + Chill slow) |
 | `static_sprint` | **Moving -> Zap Sparks** | No | Every `5.5m` traveled zaps up to `2` nearby foes (`20` dmg lightning arcs) |
-| `vamp_dash` | **Dash -> Siphon Heal** | No | Hop-Dash restores `+12 HP` |
+| `kill_siphon` | **Kills -> Siphon Heal** | No | Every critter kill restores `+2.5 HP` |
 | `thorns_burst` | **Hit -> Bramble Nova** | No | Taking damage triggers a `4.4m` Bramble Nova (`26` dmg, `1.2s` CD) |
 | `gravity_slams` | **AoE Pulls Foes In** | No | Player novas, meteors & explosions yank hit critters inward instead of knocking away |
 | `glass_spark` | **Heavy Impact \| Fragile** | **Yes** | All compiled abilities deal `1.75×` damage, but hero takes `1.45×` incoming damage |
-| `double_dash` | **2x Dash Charges** | No | Grants `2` max Hop-Dash charges |
+| `fleet_paws` | **Moving -> Speed Ramp** | No | Continuous movement ramps up to `+25%` move speed over `2.0s` |
 | `orbit_shield` | **Hit -> Star Shield** | No | Taking damage activates `3` orbiting star shields (`2.6m`, `22` dmg) for `5.0s` (`6.0s` CD) |
 | `lucky_clover` | **Rarer Loot & Links** | No | Upgrades ground drop & chest rarity weights (`14%` Unique / `40%` Rare) and boosts socket link odds (`+14%`) |
 
@@ -166,12 +165,12 @@ Items NEVER roll plain numerical stats like `+12% Damage` or `item_level`. Inste
 | **Grand Acorn Scepter** | Weapon | `G=G=B=R` (`4L`) | `nova_barrage` (*All Shots Fire 360 Ring*) + `short_barrage` | Turns projectile casts into short-range 360-degree bullet rings |
 | **Prismwhisker Crown** | Helmet | `W=W=W` (`3L`) | `prism_echo` (*Linked Mods Double-Proc*) + `lucky_clover` | Doubles linked Modifier counts (`+2 -> +4` etc.), triggers Double Echo on linked skills & boosts rarity |
 | **Honeycomb Aegis** | Armor | `R=R=B=G` (`4L`) | `aegis_freeze` (*Hit -> Freezing Honey Nova*) + `thorns_burst` | Retaliatory tank chest erupting `5.2m` freezing novas (`32` dmg) + bramble bursts when hit |
-| **Paws of the Comet** | Boots | `G=G=B` (`3L`) | `comet_dash` (*Dash Fires All Skills*) + `double_dash` | Grants `2` Dash charges and unleashes all Main Abilities on every Hop-Dash **without** slow auto penalty |
+| **Paws of the Comet** | Boots | `G=G=B` (`3L`) | `comet_stride` (*Moving -> Bonus Casts*) + `fleet_paws` | Ramps up to `+25%` move speed while moving and triggers bonus casts of all non-orbit Main Abilities every `8.5m` traveled |
 | **Nine-Lives Bell** | Amulet | `W=B` (`2L`) | `cheat_death` (*Fatal Hit -> Burst Heal*) + `zoomies_on_kill` | Prevents fatal blow (`55%` heal + `1.6s` i-frames, `90s` CD) while chaining kill Zoomies |
 | **Starweaver Band** | Ring | `B=G` (`2L`) | `gravity_slams` (*AoE Pulls Foes In*) + `ember_corpse` | Clusters foes into AoEs and chain-detonates kills with Fire Pops |
 
 ### Rework Ideas — Behavioral Items
-- [ ] **Cross-Slot Combo Sets / Synergy Icons:** Highlight active synergies inside the Tradeoff Inspector (e.g., show an amber combo indicator when `comet_dash` + `dash_honey_nova` or `gravity_slams` + `ember_corpse` are both active).
+- [ ] **Cross-Slot Combo Sets / Synergy Icons:** Highlight active synergies inside the Tradeoff Inspector (e.g., show an amber combo indicator when `comet_stride` + `stride_honey_nova` or `gravity_slams` + `ember_corpse` are both active).
 - [ ] **Additional Uniques (`Target 12+`):** Add Unique armor/amulet built specifically around `edge_ricochet` + `sniper_focus` (super-pinball single-shot sniper) or minion/orbit loops.
 
 ---
@@ -218,7 +217,7 @@ Launchable directly via **`TUTORIAL`** on the Title Screen. The player starts co
 
 | Beat | Step Sequence | Ground Spawn / Trigger | Top HUD Plaque | Satchel Banner Guidance |
 |---|---|---|---|---|
-| **1/3 — First Item** | `LOOT_ITEM` -> `EQUIP_ITEM` | Drops **`Meadow Acorn Wand`** (`Magic`, `G=G` 2-link, `dash_honey_nova`) `4.2m` north | `1/3  Walk to Wand` -> `1/3  Equip Wand [Tab]` (pulses Satchel button gold) | `Items tab -> Select Meadow Acorn Wand -> Equip` |
+| **1/3 — First Item** | `LOOT_ITEM` -> `EQUIP_ITEM` | Drops **`Meadow Acorn Wand`** (`Magic`, `G=G` 2-link, `stride_honey_nova`) `4.2m` north | `1/3  Walk to Wand` -> `1/3  Equip Wand [Tab]` (pulses Satchel button gold) | `Items tab -> Select Meadow Acorn Wand -> Equip` |
 | **2/3 — Main Ability** | `LOOT_MAIN` -> `SOCKET_MAIN` -> `KILL_WAVE_1` | Equipping wand drops **`Acorn Barrage`**; socketing spawns `3` `slime_frog` critters (`0.55×` HP) | `2/3  Pick up Acorn Barrage` -> `2/3  Socket Ability [Tab]` -> `2/3  Defeat Critters (0/3)` | `Main tab -> Select Acorn Barrage -> Click Green Socket` |
 | **3/3 — Linked Modifier** | `LOOT_MOD` -> `SOCKET_MOD` -> `KILL_WAVE_2` | 3 kills drops **`Multi-Shot`**; linking spawns `5` `slime_frog` critters (`0.60×` HP) -> `EndScreen.show_tutorial_complete()` | `3/3  Pick up Multi-Shot` -> `3/3  Link Modifier [Tab]` -> `3/3  Test Multi-Shot (0/5)` | `Mods tab -> Select Multi-Shot -> Click Linked Socket` |
 
@@ -256,20 +255,25 @@ Rebalanced `hp_scale` (`1.00× -> 3.60×`) and boss HP (`1250`, `2800`, `5400`) 
 
 ## 8. Art Direction, Icon-First UI & Mobile Support
 
-### Low-Text Storybook Design System (`ui_helper.gd`, `ui_icons.gd`, `poe_socket_widget.gd`)
+### Low-Text Storybook Design System & Mobile Portrait UX (`ui_helper.gd`, `ui_icons.gd`, `poe_socket_widget.gd`, `touch_scroll_container.gd`)
 - **Theme:** 3-tier warm timber (`BG_WOOD_DEEP #1C1412`, `BG_WALNUT #30241C`, `BG_OAK_CARD #3D2E24`, `BG_WELL #17120F`), Enchanted Gold (`#F5C957`), Antiqued Brass (`#947342`), Fredoka 700 headers & Nunito 600/800 body/labels.
-- **Title Screen (`title_screen.gd`):** Concise subtitle pill, 4 visual hero cards (`Portrait + Hero Name + Role + Starter Main Ability + Starter Effect chip`), single-line hero tagline + control hint, and dual **`TUTORIAL`** + **`PLAY RUN`** CTAs (auto-collapses to `2×2` grid in portrait).
-- **Gameplay HUD (`hud_controller.gd`):** Top XP bar and `Lv.` / `Dust` / passive rows removed. Displays Hero Portrait + Kills + Bosses counter, Center Clock/Biome plaque (swaps cleanly to a gold Tutorial Objective plaque during Tutorial), bottom-left `HP` / `Dash [Charges]` / `Satchel [Tab]` dock, and bottom-center Active Ability bar (icon + short code + colored Modifier pips + cooldown bar).
-- **Hero Satchel & Visual Tradeoff Inspector (`inventory_panel.gd`):**
-  - **Left (`Active Build`):** Compact vitals (`HP`, `Spd`, `Dash xN`), Active Ability cards with colored Modifier badges, and Global Effect chips (`UiHelper.make_effect_chip`).
-  - **Center (`Equipped Gear`):** 6 equipment cards with rarity border, inline Global Effect chips, and interactive `PoESocketWidget` (**Pentagon** = Main Ability, **Round Orb** = Modifier Ability, short badge labels with zero gem-level clutter).
-  - **Right (`Items` | `Main` | `Mods` + Portrait `Build`):** Selecting a bag Item shows a **Visual Tradeoff Comparison Card** contrasting `NEW (sockets)` vs `vs EQUIPPED (sockets)` using `+` emerald (gained), `-` crimson (lost), and `=` brass (kept) effect chips alongside `Equip` and `Drop`.
+- **Responsive Mobile Scaling (`main_game.gd`):** Dynamically sets `root.content_scale_factor` to **`2.75`** on tall portrait phones (`aspect_hw > 1.50`), **`1.95`** on square/tablet portrait (`1.05..1.50`), **`1.45`** on mobile landscape, and **`1.0`** on desktop — keeping all phone UI crisp at `~465×1007` logical px without squinting.
+- **Title Screen (`title_screen.gd`):** Concise subtitle pill, 4 visual hero cards (`Portrait + Hero Name + Role + Starter Main Ability + Starter Effect chip`), hero tagline + control hint, and dual **`TUTORIAL`** + **`PLAY RUN`** CTAs (auto-collapses to `2×2` grid in portrait).
+- **Gameplay HUD (`hud_controller.gd`):** Top XP bar, Dash bar, and `Lv.` / `Dust` / passive rows removed. Displays Hero Portrait + Kills + Bosses counter, Center Clock/Biome plaque (or Tutorial Objective plaque), full-width bottom `HP` + `Satchel` dock on portrait (`vp.x < 750`), and compact bottom-center Active Ability bar (`74×72` portrait cards).
+- **Hero Satchel & Touch Scroll (`inventory_panel.gd`, `touch_scroll_container.gd`, `end_screen.gd`):**
+  - All Satchel & EndScreen scrollable lists use `TouchScrollContainer` (global touch/mouse vertical drag scroll `>10px` + momentum glide) and release-without-drag tap guards (`was_recent_drag(180)`, `<12px` drift) so swiping never gets hijacked by nested buttons/sockets.
+  - **Mobile Portrait Mode (`vp.x < 900`):** Single-column 4-tab layout (**`Gear` | `Items` | `Skills` | `Build`**) with larger `13–16px` labels, sticky pending gem banner with `"Socket in Gear ->"` CTA, and zero horizontal squeezing.
+  - **Desktop Mode (`vp.x >= 900`):** 3-column layout: **Left (`Active Build`)**, **Center (`Equipped Gear` + `PoESocketWidget` Pentagon Main / Orb Modifier)**, and **Right (`Items` | `Main` | `Mods`)** with Visual Tradeoff Comparison (`+` emerald / `-` crimson / `=` brass chips).
+
+### Android APK Build & Release Pipeline (`export_presets.cfg`, `.github/workflows/android-release.yml`)
+- **Portrait Android Preset (`[preset.4]` `"Android"`):** Targets `arm64-v8a`, `window/handheld/orientation="portrait"`, immersive fullscreen, `ETC2/ASTC` textures, and outputs `builds/android/PawAndPrism.apk` (`com.pawandprism.game`).
+- **GitHub Actions Workflow (`.github/workflows/android-release.yml`):** Downloads Godot `4.7.2-stable` Linux + `.tpz` export templates, configures JDK 17 + `$ANDROID_HOME` + release keystore, runs `tests/verify_game.gd`, exports and verifies signed `PawAndPrism.apk` with `apksigner`, and attaches/publishes to GitHub Releases on `v*` tag pushes or manual `workflow_dispatch`.
 
 ### Engine & Performance Guardrails
 - Keep regular enemies as a single merged `ArrayMesh` (`cast_shadow = OFF`).
 - Keep Web Retina `scaling_3d_scale` (`0.78` desktop / `0.72` mobile), `MSAA_DISABLED`, `max_active * 0.72` web enemy cap, throttled biome sky updates (`2.5s`), 10 Hz HUD refresh throttle, and `PoESocketWidget._init()` sizing.
 - **Glyph Safety:** `Nunito.ttf` lacks Unicode arrows/triangles (`←`, `▲`, `▼`) — use ASCII (`->`, `|`, `+`, `-`) and verified `·`, `•`, `—`.
-- **Module Ownership Note:** `scripts/ui/level_up_modal.gd` was removed in `v2.0`; `scripts/systems/tutorial_director.gd` was added.
+- **Module Ownership Note:** `scripts/ui/level_up_modal.gd` was removed in `v2.0`; `scripts/systems/tutorial_director.gd` was added in `v2.0`; `scripts/ui/touch_scroll_container.gd` was added in `v2.1`.
 
 ---
 
@@ -283,4 +287,5 @@ Rebalanced `hp_scale` (`1.00× -> 3.60×`) and boss HP (`1250`, `2800`, `5400`) 
 ```
 
 ### Change Log
+- **`2026-11-25 (v2.1 Mobile & Android Release):** Removed Hop-Dash completely across input/physics/HUD/TouchControls and replaced the 5 dash effects with movement/cadence effects (`stride_honey_nova`, `cadence_burst`, `kill_siphon`, `fleet_paws`, `comet_stride`). Overhauled portrait mobile readability (`2.75×` phone `content_scale_factor`, portrait-tuned Title/HUD/EndScreen, 4-tab single-column mobile Satchel) and added `TouchScrollContainer` momentum drag-scrolling with release-tap guards across Satchel and EndScreen. Added portrait ARM64 Android preset (`export_presets.cfg`) and automated signed APK GitHub Release workflow (`.github/workflows/android-release.yml`). Verified via `tests/verify_game.gd`, Web/Desktop builds, and Chrome portrait (`390×844`) & desktop (`1280×720`) screenshots.
 - **`2026-11-24 (v2.0 Revamp):** Replaced XP/leveling, `LevelUpModal`, Passive gems, Heart/Dust ground drops, and Prism Forge crafting with pure behavioral Item Effects & Tradeoffs, strictly 3 ground loot types (`Items`, `Main Abilities`, `Modifier Abilities`) with fixed sockets/links, a 3-beat PoE-style playable Tutorial (`TutorialDirector`), and streamlined icon-first HUD/Title/Satchel (`Tradeoff Comparison Card`). Verified all checks green via headless `tests/verify_game.gd` and rebuilt Web/macOS/Windows/Linux targets.
