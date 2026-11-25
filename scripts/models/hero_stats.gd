@@ -38,6 +38,8 @@ var has_comet_stride: bool = false
 
 # Compiled PoE Active Skill List
 var active_skill_configs: Array[Dictionary] = []
+var equipped_main_count: int = 0
+var multi_skill_cd_mult: float = 1.0
 
 func _init(p_hero_id: String = "shiba") -> void:
 	init_for_hero(p_hero_id)
@@ -222,6 +224,24 @@ func recompute() -> void:
 	has_comet_stride = has_effect("comet_stride")
 	incoming_dmg_mult = 1.45 if has_effect("glass_spark") else 1.0
 
+	# Count total socketed Main Abilities so multi-skill focus tax applies uniformly
+	equipped_main_count = 0
+	for slot in [
+		GameEnums.EquipSlot.WEAPON,
+		GameEnums.EquipSlot.HELMET,
+		GameEnums.EquipSlot.ARMOR,
+		GameEnums.EquipSlot.BOOTS,
+		GameEnums.EquipSlot.AMULET,
+		GameEnums.EquipSlot.RING,
+	]:
+		var cnt_item: ItemInstance = equipped.get(slot, null)
+		if cnt_item == null:
+			continue
+		for g in cnt_item.socketed_gems:
+			if g != null and g.get_gem_type() == GameEnums.GemType.MAIN:
+				equipped_main_count += 1
+	multi_skill_cd_mult = 1.0 + 0.25 * float(maxi(0, equipped_main_count - 1))
+
 	# Compile PoE Main Socket Abilities + Linked Modifier Abilities
 	active_skill_configs.clear()
 	for slot in [
@@ -308,8 +328,9 @@ func _compile_main_skill(main_gem: GemInstance, mods_list: Array[GemInstance], e
 		if mods.has("leech_pct"):
 			leech_pct += float(mods["leech_pct"]) * float(mod_factor)
 
-	if has_effect("prism_echo") and not linked_names.is_empty():
+	if has_effect("prism_echo") and not linked_names.is_empty() and not echo:
 		echo = true
+		final_dmg *= 0.80
 
 	var tags: Array = main_gem.get_tags()
 	var uses_proj: bool = tags.has(GameEnums.SkillTag.PROJECTILE) or tags.has(GameEnums.SkillTag.ORBIT)
@@ -333,6 +354,7 @@ func _compile_main_skill(main_gem: GemInstance, mods_list: Array[GemInstance], e
 		final_dmg *= 1.75
 	if has_effect("cadence_burst"):
 		final_cd *= 1.18
+	final_cd *= multi_skill_cd_mult
 
 	final_cd = maxf(0.18, final_cd)
 

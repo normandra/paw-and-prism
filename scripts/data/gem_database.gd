@@ -46,7 +46,7 @@ static func _ensure_init() -> void:
 		"gem_type": GameEnums.GemType.MAIN,
 		"color": GameEnums.GemColor.RED,
 		"tags": [GameEnums.SkillTag.MELEE, GameEnums.SkillTag.AOE, GameEnums.SkillTag.PHYSICAL],
-		"base_damage": 38.0,
+		"base_damage": 42.0,
 		"cooldown": 1.25,
 		"proj_speed": 0.0,
 		"base_projectiles": 1,
@@ -137,7 +137,7 @@ static func _ensure_init() -> void:
 		"gem_type": GameEnums.GemType.MAIN,
 		"color": GameEnums.GemColor.RED,
 		"tags": [GameEnums.SkillTag.SPELL, GameEnums.SkillTag.AOE, GameEnums.SkillTag.FIRE],
-		"base_damage": 58.0,
+		"base_damage": 66.0,
 		"cooldown": 2.05,
 		"proj_speed": 0.0,
 		"base_projectiles": 1,
@@ -171,7 +171,7 @@ static func _ensure_init() -> void:
 		"required_tags": [GameEnums.SkillTag.PROJECTILE, GameEnums.SkillTag.ORBIT],
 		"short": "MULT",
 		"desc": "+2 Fan Shots",
-		"mods": {"extra_proj": 2, "dmg_mult": 0.85},
+		"mods": {"extra_proj": 2, "dmg_mult": 0.80},
 	})
 	_add({
 		"id": "mod_chain",

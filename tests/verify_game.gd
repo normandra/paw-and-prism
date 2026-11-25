@@ -192,10 +192,34 @@ func _run_all() -> void:
 	_assert(main_inst.player.global_position.x > touch_start_x + 0.4, "Touch joystick vector moves player hero")
 	main_inst.player.set_touch_move(Vector2.ZERO)
 
-	# Verify TouchScrollContainer + kill_siphon + SkillExecutor stride/cadence hooks
+	# Verify TouchScrollContainer + tap-stop + Drop Formula + Focus Load Tax + Volley Shotgun Dampener
 	var ts_probe: TouchScrollContainer = TouchScrollContainer.new()
 	_assert(ts_probe != null and not TouchScrollContainer.was_recent_drag(), "TouchScrollContainer instantiates and reports clean initial drag state")
 	ts_probe.free()
+	var sw_probe: PoESocketWidget = PoESocketWidget.new()
+	_assert(sw_probe.mouse_filter == Control.MOUSE_FILTER_STOP, "PoESocketWidget stops mouse events cleanly inside scroll views")
+	sw_probe.free()
+	_assert(is_equal_approx(LootManager.compute_spawn_intensity(0.0), 1.0), "Opening SpawnIntensity(0s) == 1.0")
+	_assert(LootManager.compute_spawn_intensity(1100.0) > 4.0, "Late-game SpawnIntensity(1100s) scales above 4.0x")
+	_assert(LootManager.compute_regular_item_chance(0.0, false, 0) <= 0.02, "Opening regular item drop chance <= 2.0%%")
+	_assert(LootManager.compute_regular_item_chance(1100.0, false, 0) < LootManager.compute_regular_item_chance(0.0, false, 0), "Spawn-normalized item drop rate scales down as wave spawns accelerate")
+	_assert(LootManager.compute_regular_item_chance(0.0, false, 80) > LootManager.compute_regular_item_chance(0.0, false, 0), "Dry-streak pity increases item drop rate after 65+ kills")
+
+	var focus_stats: HeroStats = HeroStats.new("shiba")
+	_assert(focus_stats.equipped_main_count == 1 and is_equal_approx(focus_stats.multi_skill_cd_mult, 1.0), "1 Main Ability gives 1.00x Focus CD")
+	var helmet_item: ItemInstance = focus_stats.equipped[GameEnums.EquipSlot.HELMET]
+	helmet_item.insert_gem(0, GemInstance.new("petal_cyclone"))
+	focus_stats.recompute()
+	_assert(focus_stats.equipped_main_count == 2 and is_equal_approx(focus_stats.multi_skill_cd_mult, 1.25), "2 Main Abilities apply 1.25x Focus CD")
+	helmet_item.insert_gem(1, GemInstance.new("frost_nova"))
+	focus_stats.recompute()
+	_assert(focus_stats.equipped_main_count == 3 and is_equal_approx(focus_stats.multi_skill_cd_mult, 1.50), "3 Main Abilities apply 1.50x Focus CD")
+
+	var volley_enemy: EnemyEntity = EnemyEntity.new()
+	_assert(is_equal_approx(volley_enemy.consume_volley_dmg_mult(42), 1.0), "First volley projectile deals 1.00x full hit")
+	_assert(is_equal_approx(volley_enemy.consume_volley_dmg_mult(42), 0.35), "Same-volley repeat projectile dampened to 0.35x")
+	volley_enemy.free()
+
 	main_inst.skill_executor.trigger_reactive_nova("stride_honey_nova", main_inst.player.global_position, 24.0, 4.4)
 	main_inst.skill_executor.trigger_reactive_nova("cadence_burst", main_inst.player.global_position, 34.0, 4.6)
 	main_inst.skill_executor.trigger_all_skills_bonus(main_inst.player.global_position)
@@ -204,14 +228,37 @@ func _run_all() -> void:
 		main_inst._process(0.05)
 		await process_frame
 
-	main_inst._open_inventory()
 	main_inst._seed_review_loot()
-	main_inst.inventory_panel._selected_bag_idx = 0
+	main_inst._open_inventory()
+	await process_frame
+	_assert(main_inst.state == MainGame.GameState.INVENTORY and main_inst.inventory_panel.visible, "Satchel opens and displays visual tradeoff comparison")
+	_assert(main_inst.inventory_panel._selected_bag_idx == 0, "Satchel auto-selects item 0 so Tradeoff Card & Equip CTA appear immediately")
+
+	var tap_card: PanelContainer = PanelContainer.new()
+	var tapped: Array[bool] = [false]
+	main_inst.inventory_panel._connect_tap(tap_card, func() -> void: tapped[0] = true)
+	_assert(tap_card.mouse_filter == Control.MOUSE_FILTER_STOP, "Satchel item card uses MOUSE_FILTER_STOP for reliable tapping")
+	var ev_down: InputEventMouseButton = InputEventMouseButton.new()
+	ev_down.button_index = MOUSE_BUTTON_LEFT
+	ev_down.pressed = true
+	ev_down.position = Vector2(20, 20)
+	tap_card.gui_input.emit(ev_down)
+	var ev_up: InputEventMouseButton = InputEventMouseButton.new()
+	ev_up.button_index = MOUSE_BUTTON_LEFT
+	ev_up.pressed = false
+	ev_up.position = Vector2(24, 22)
+	tap_card.gui_input.emit(ev_up)
+	_assert(tapped[0], "Satchel _connect_tap fires cleanly on press+release")
+	tap_card.free()
+
+	var equip_target: ItemInstance = main_inst.stats.item_bag[0]
+	main_inst.inventory_panel._equip_item_at(0)
+	_assert(main_inst.stats.equipped[equip_target.equip_slot] == equip_target, "Direct Satchel _equip_item_at moves Relic into equipped slot")
+	_assert(main_inst.inventory_panel._feedback_panel.visible, "Satchel shows confirmation strip after equipping")
+
 	for mtab in ["gear", "items", "skills", "build"]:
 		main_inst.inventory_panel._mobile_tab = mtab
 		main_inst.inventory_panel.refresh()
-	await process_frame
-	_assert(main_inst.state == MainGame.GameState.INVENTORY and main_inst.inventory_panel.visible, "Satchel opens and switches tabs cleanly across mobile & desktop layouts")
 	main_inst.inventory_panel._active_right_tab = "main"
 	main_inst.inventory_panel.refresh()
 	main_inst.inventory_panel._active_right_tab = "mods"
@@ -226,6 +273,8 @@ func _run_all() -> void:
 		await process_frame
 		var b: EnemyEntity = main_inst.wave_director.active_boss
 		_assert(b != null and is_instance_valid(b) and b.boss_index == idx + 1, "Boss %d/3 spawned at t=%.1fs" % [idx + 1, boss_times[idx]])
+		if idx == 2:
+			_assert(is_equal_approx(b.max_hp, 15000.0), "King Bramblehorn rebalanced HP is 15000")
 		var pickups_before: int = main_inst.loot_manager.pickups.size()
 		b.take_damage(999999.0, Vector3.ZERO, false)
 		await process_frame

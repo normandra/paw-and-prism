@@ -19,12 +19,12 @@ var _press_idx: int = -1
 var _press_pos: Vector2 = Vector2.ZERO
 
 func _init() -> void:
-	mouse_filter = Control.MOUSE_FILTER_PASS
+	mouse_filter = Control.MOUSE_FILTER_STOP
 	custom_minimum_size = Vector2(240, 66)
 
 func configure(p_slot: int, p_item: ItemInstance, p_sel_gem: GemInstance) -> void:
 	mini_mode = false
-	mouse_filter = Control.MOUSE_FILTER_PASS
+	mouse_filter = Control.MOUSE_FILTER_STOP
 	size_flags_vertical = Control.SIZE_SHRINK_BEGIN
 	equip_slot = p_slot
 	item = p_item
@@ -79,11 +79,13 @@ func _gui_input(event: InputEvent) -> void:
 		if mb.pressed:
 			_press_idx = _hit_test(mb.position)
 			_press_pos = mb.position
+			if _press_idx >= 0:
+				accept_event()
 		elif _press_idx >= 0:
 			var hit: int = _hit_test(mb.position)
-			if hit == _press_idx and mb.position.distance_to(_press_pos) < 12.0 and not TouchScrollContainer.was_recent_drag():
+			if hit == _press_idx and mb.position.distance_to(_press_pos) < 18.0 and not TouchScrollContainer.was_recent_drag():
 				socket_clicked.emit(equip_slot, hit)
-				accept_event()
+			accept_event()
 			_press_idx = -1
 
 func _update_hover_tooltip() -> void:

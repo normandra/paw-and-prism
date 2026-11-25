@@ -1,6 +1,8 @@
 class_name TouchScrollContainer
 extends ScrollContainer
 
+const DRAG_THRESHOLD: float = 14.0
+
 static var _last_drag_ms: int = 0
 
 var _tracking: bool = false
@@ -73,7 +75,7 @@ func _input(event: InputEvent) -> void:
 		_handle_drag_move((event as InputEventMouseMotion).position)
 
 func _handle_drag_move(pos: Vector2) -> void:
-	if not _dragging and pos.distance_to(_press_pos) > 10.0:
+	if not _dragging and pos.distance_to(_press_pos) > DRAG_THRESHOLD:
 		_dragging = true
 	var dy: float = pos.y - _last_y
 	_last_y = pos.y

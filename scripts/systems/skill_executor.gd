@@ -23,6 +23,7 @@ var _shield_orbit_nodes: Array[MeshInstance3D] = []
 var _shield_orbit_angle: float = 0.0
 var _shield_orbit_hit_cd: Dictionary = {}
 var _cast_counter: int = 0
+var _next_cast_uid: int = 1
 
 func setup(p_world: Node3D, p_grid: SpatialGrid, p_stats: HeroStats) -> void:
 	world_root = p_world
@@ -49,6 +50,7 @@ func clear_all() -> void:
 	_orbit_groups.clear()
 	_shield_orbit_timer = 0.0
 	_cast_counter = 0
+	_next_cast_uid = 1
 	_shield_orbit_hit_cd.clear()
 	for n in _shield_orbit_nodes:
 		if is_instance_valid(n):
@@ -362,15 +364,21 @@ func _trigger_skill(cfg: Dictionary, player_pos: Vector3, is_echo: bool) -> bool
 			_fire_fan(player_pos, bee_target, cfg, "bee", 0.55)
 		"petal_cyclone":
 			_spiral_phase += 0.55
-			var n: int = int(cfg["projectiles"])
+			var petal_cfg: Dictionary = cfg.duplicate()
+			petal_cfg["cast_uid"] = _next_cast_uid
+			_next_cast_uid += 1
+			var n: int = int(petal_cfg["projectiles"])
 			for i in range(n):
 				var a: float = _spiral_phase + float(i) * TAU / float(n)
-				_spawn_proj(player_pos, Vector3(cos(a), 0.0, sin(a)), cfg, "petal")
+				_spawn_proj(player_pos, Vector3(cos(a), 0.0, sin(a)), petal_cfg, "petal")
 		"frost_nova":
-			var n_ice: int = int(cfg["projectiles"])
+			var frost_cfg: Dictionary = cfg.duplicate()
+			frost_cfg["cast_uid"] = _next_cast_uid
+			_next_cast_uid += 1
+			var n_ice: int = int(frost_cfg["projectiles"])
 			for i in range(n_ice):
 				var a: float = float(i) * TAU / float(n_ice)
-				_spawn_proj(player_pos, Vector3(cos(a), 0.0, sin(a)), cfg, "icicle")
+				_spawn_proj(player_pos, Vector3(cos(a), 0.0, sin(a)), frost_cfg, "icicle")
 			# Also burst cold chill nova right around player
 			var nova: AreaEffectEntity = AreaEffectEntity.new()
 			nova.apply_slow = true
@@ -416,12 +424,15 @@ func _trigger_skill(cfg: Dictionary, player_pos: Vector3, is_echo: bool) -> bool
 	return true
 
 func _fire_fan(origin: Vector3, target: Vector3, cfg: Dictionary, style: String, spread_step: float) -> void:
-	var count: int = int(cfg["projectiles"])
-	if bool(cfg.get("nova_360", false)):
+	var volley_cfg: Dictionary = cfg.duplicate()
+	volley_cfg["cast_uid"] = _next_cast_uid
+	_next_cast_uid += 1
+	var count: int = int(volley_cfg["projectiles"])
+	if bool(volley_cfg.get("nova_360", false)):
 		var ring_count: int = maxi(count, 6)
 		for i in range(ring_count):
 			var a: float = float(i) * (TAU / float(ring_count))
-			_spawn_proj(origin, Vector3(cos(a), 0.0, sin(a)), cfg, style)
+			_spawn_proj(origin, Vector3(cos(a), 0.0, sin(a)), volley_cfg, style)
 		return
 	var dir: Vector3 = target - origin
 	dir.y = 0.0
@@ -432,7 +443,7 @@ func _fire_fan(origin: Vector3, target: Vector3, cfg: Dictionary, style: String,
 	for i in range(count):
 		var off: float = (float(i) - float(count - 1) * 0.5) * spread_step
 		var d: Vector3 = Vector3(cos(base_ang + off), 0.0, sin(base_ang + off))
-		_spawn_proj(origin, d, cfg, style)
+		_spawn_proj(origin, d, volley_cfg, style)
 
 func _spawn_proj(origin: Vector3, dir: Vector3, cfg: Dictionary, style: String, hit_ids: Dictionary = {}) -> void:
 	var p: ProjectileEntity = ProjectileEntity.new()

@@ -37,6 +37,7 @@ var _chill_timer: float = 0.0
 var _knockback_vel: Vector3 = Vector3.ZERO
 var _waddle_phase: float = 0.0
 var _sep_parity: int = 0
+var _volley_hits: Dictionary = {}
 
 # Boss AI state
 var _boss_cd: float = 2.4
@@ -70,6 +71,7 @@ func setup(p_enemy_id: String, hp_scale: float, dmg_scale: float, p_elite: bool 
 	_boss_cd = 2.5
 	_boss_cycle = 0
 	_boss_enraged = false
+	_volley_hits.clear()
 
 	_rig = ChibiMeshFactory.build_enemy_rig(enemy_id, is_elite)
 	if is_elite and not is_boss:
@@ -258,6 +260,16 @@ func apply_chill(dur: float) -> void:
 
 func was_chilled() -> bool:
 	return _chill_timer > 0.0
+
+func consume_volley_dmg_mult(p_cast_uid: int) -> float:
+	if p_cast_uid == 0:
+		return 1.0
+	if _volley_hits.has(p_cast_uid):
+		return 0.35
+	if _volley_hits.size() >= 24:
+		_volley_hits.clear()
+	_volley_hits[p_cast_uid] = true
+	return 1.0
 
 func take_damage(amount: float, knockback_vec: Vector3 = Vector3.ZERO, trigger_flash: bool = true) -> void:
 	if is_dead:

@@ -27,6 +27,7 @@ var crit_mult: float = 165.0
 var is_fire: bool = false
 var is_cold: bool = false
 var leech_pct: float = 0.0
+var cast_uid: int = 0
 var proj_color: Color = Color.GOLD
 var source_cfg: Dictionary = {}
 
@@ -50,6 +51,7 @@ func setup_player_proj(p_pos: Vector3, p_dir: Vector3, cfg: Dictionary, style: S
 	is_fire = bool(cfg.get("ignite", false))
 	is_cold = bool(cfg.get("chill", false))
 	leech_pct = float(cfg.get("leech_pct", 0.0))
+	cast_uid = int(cfg.get("cast_uid", 0))
 
 	pierce_left = int(cfg.get("pierce", 0))
 	chains_left = int(cfg.get("chains", 0))
@@ -118,6 +120,7 @@ func step(delta: float, grid: SpatialGrid, player_pos: Vector3) -> bool:
 			_age = 0.0
 			lifetime = maxf(0.75, lifetime * 0.85)
 			_hit_ids.clear()
+			cast_uid = -cast_uid
 			var bounce_target: Node3D = grid.find_nearest(global_position, 18.0) if grid != null else null
 			if bounce_target != null:
 				var bdir: Vector3 = bounce_target.global_position - global_position
@@ -189,7 +192,8 @@ func step(delta: float, grid: SpatialGrid, player_pos: Vector3) -> bool:
 			return false
 
 		var is_crit: bool = randf() * 100.0 < crit_chance
-		var dmg: float = damage * (crit_mult * 0.01 if is_crit else 1.0)
+		var volley_mult: float = e.consume_volley_dmg_mult(cast_uid) if e.has_method("consume_volley_dmg_mult") else 1.0
+		var dmg: float = damage * volley_mult * (crit_mult * 0.01 if is_crit else 1.0)
 
 		if is_fire and e.has_method("apply_burn"):
 			e.apply_burn(dmg * 0.25, 3.0)

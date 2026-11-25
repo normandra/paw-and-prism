@@ -1,18 +1,18 @@
 # Paw & Prism — Living Game Design Document (GDD)
 
 > **Status:** Living Design Reference & Rework Blueprint  
-> **Version:** `v2.1` (Mobile Portrait UX, Zero-Dash Combat & Android APK Release)  
+> **Version:** `v2.2` (Satchel Equip Fix, Stripped Web Build, Drop-Rate Formula & Boss DPS Balance)  
 > **Engine & Renderer:** Godot `4.7.2` (`GL Compatibility`)  
 > **Live Web Build:** https://normandra.github.io/paw-and-prism/  
 > **Repository:** https://github.com/normandra/paw-and-prism  
-> **Target Platforms:** Web (single-threaded HTML5/WASM, no `SharedArrayBuffer`), Android (`arm64-v8a` Portrait APK), macOS, Windows, Linux  
+> **Target Platforms:** Web (single-threaded HTML5/WASM + PWA Service Worker, no `SharedArrayBuffer`), Android (`arm64-v8a` Portrait APK), macOS, Windows, Linux  
 
 ---
 
 ## How to Use This Document
 
 Each section separates verified mechanics from future exploration:
-1. **`Current Implementation` (Code-Verified `v2.1`):** Exact systems, tables, parameters, and script owners active in the project.
+1. **`Current Implementation` (Code-Verified `v2.2`):** Exact systems, tables, parameters, equations, and script owners active in the project.
 2. **`Rework Ideas & Design Knobs`:** Checkable `[ ]` balance levers and next-step feature ideas ready to edit directly.
 
 ---
@@ -177,7 +177,11 @@ Items NEVER roll plain numerical stats like `+12% Damage` or `item_level`. Inste
 
 ## 5. Ability Linking System (`gem_database.gd`, `hero_stats.gd`)
 
-Only **Main Socket Abilities (`MAIN`)** and **Modifier Abilities (`MODIFIER`)** exist. Gems do not gain XP or have numeric levels — what matters is **which Main Abilities are socketed, which Modifiers share a contiguous link group with them, and how item Global Effects reshape them**.
+Only **Main Socket Abilities (`MAIN`)** and **Modifier Abilities (`MODIFIER`)** exist. Gems do not gain XP or have numeric levels — what matters is **how many Main Abilities you load (`Focus Tax`), which Modifiers share a contiguous link group with them, and how item Global Effects reshape them**.
+
+- **Multi-Main Focus Load (`hero_stats.gd`):** Equipping $N \ge 1$ Main Socket Abilities multiplies every Main skill's cooldown by $\text{CD}_{\text{focus}}(N) = 1.0 + 0.25 \cdot (N - 1)$ (`1.00×` for `1` Main, `1.25×` for `2`, `1.50×` for `3`, `1.75×` for `4`). Spreading across extra unlinked skills trades single-target speed for coverage rather than multiplying free DPS.
+- **Same-Volley Shotgun Dampener (`projectile_entity.gd`, `enemy_entity.gd`, `skill_executor.gd`):** When multiple projectiles from the **same cast volley** (`cast_uid`) strike the same enemy, the 1st hit deals **`1.00×`** damage and each extra projectile from that same volley deals **`0.35×`**. (`edge_ricochet` bounce-backs refresh as `-cast_uid` for a clean `1.00×` return hit.)
+- **`Prismwhisker Crown` Balance (`hero_stats.gd`):** `prism_echo` grants Double Echo (`0.80×` per cast when `mod_echo` is not already linked) while doubling linked Modifier counts.
 
 ### Main Socket Abilities (`10`)
 
@@ -185,20 +189,20 @@ Only **Main Socket Abilities (`MAIN`)** and **Modifier Abilities (`MODIFIER`)** 
 |---|---|---|---|---|---|---|
 | `acorn_barrage` | **Acorn Barrage** (`ACRN`) | Green | `Proj`, `Phys` | `24` | `0.65s` | Aimed fan of flying acorns (`1` base proj, spd `22`) |
 | `starlight_orb` | **Starlight Orbs** (`STAR`) | Blue | `Spell`, `Orbit`, `AoE` | `21` | `0.45s` | Persistent `2` orbiting star blades (`3.4m` radius, `99` pierce) |
-| `honey_slam` | **Honey Slam** (`SLAM`) | Red | `Melee`, `AoE`, `Phys` | `38` | `1.25s` | Slowing honey shockwave near nearest target (`4.3m` radius) |
+| `honey_slam` | **Honey Slam** (`SLAM`) | Red | `Melee`, `AoE`, `Phys` | `42` | `1.25s` | Slowing honey shockwave near nearest target (`4.3m` radius) |
 | `whisker_lightning` | **Whisker Lightning** (`ZAP`) | Blue | `Spell`, `Chain`, `Lightning` | `28` | `0.88s` | Instant static arc jumping across `2` base chains |
 | `petal_cyclone` | **Petal Cyclone** (`PETL`) | Green | `AoE`, `Proj`, `Phys` | `17` | `1.08s` | Rotating `6`-petal outward spiral (`1` pierce) |
 | `fireball_berry` | **Fireball Berry** (`FIRE`) | Red | `Proj`, `Spell`, `AoE`, `Fire` | `34` | `1.18s` | Explosive burning berry (`3.2m` splash + Burn DoT) |
 | `frost_nova` | **Frost Nova** (`FRST`) | Blue | `Spell`, `Proj`, `AoE`, `Cold` | `22` | `1.45s` | `4.2m` Chill ring (`0.7×` dmg) + `8` radial ice shards |
 | `boomerang_bone` | **Boomerang Bone** (`BONE`) | Red | `Proj`, `Phys` | `28` | `1.08s` | Heavy `99`-pierce bone flying outward and returning to hero |
-| `meteor_pine` | **Meteor Pinecone** (`PINE`) | Red | `Spell`, `AoE`, `Fire` | `58` | `2.05s` | Drops heavy burning pinecone slam (`4.2m`) on densest critter cluster |
+| `meteor_pine` | **Meteor Pinecone** (`PINE`) | Red | `Spell`, `AoE`, `Fire` | `66` | `2.05s` | Drops heavy burning pinecone slam (`4.2m`) on densest critter cluster |
 | `spirit_bees` | **Spirit Bees** (`BEES`) | Green | `Minion`, `Proj`, `Phys` | `20` | `0.98s` | Fires `2` naturally homing bees |
 
 ### Modifier Abilities (`10`)
 
 | ID | Name (`Short`) | Color | Required Tags | Linked Mutation |
 |---|---|---|---|---|
-| `mod_multishot` | **Multi-Shot** (`MULT`) | Green | `Proj` or `Orbit` | `+2` projectiles/orbiters (`0.85×` dmg per hit) |
+| `mod_multishot` | **Multi-Shot** (`MULT`) | Green | `Proj` or `Orbit` | `+2` projectiles/orbiters (`0.80×` dmg per hit) |
 | `mod_chain` | **Chain Bounce** (`CHN`) | Green | `Proj` or `Chain` | Bounces `+2` additional targets |
 | `mod_fork` | **Twin Fork** (`FORK`) | Green | `Proj` | Projectiles split into `2` angled projectiles on first hit |
 | `mod_pierce` | **Deep Pierce** (`PRCE`) | Green | `Proj` | Pierces `+3` targets |
@@ -223,33 +227,59 @@ Launchable directly via **`TUTORIAL`** on the Title Screen. The player starts co
 
 ---
 
-## 7. 20-Minute Run Pacing, Drop Economy & Bosses
+## 7. 20-Minute Run Pacing, Drop-Rate Formula & DPS Balance Model
 
-### Loot Drop Economy (`loot_manager.gd`)
-Only **3 collectible types** + **Acorn Treasure Chests** spawn on the meadow floor (`2.6m` pickup radius for Items/Main/Mod, `2.8m` for Chests; no XP shards, hearts, or dust pickups):
-- **Regular Critter:** `8.5%` Item (`11.0%` Lucky) · `7.5%` Ability gem (`9.5%` Lucky, `45%` Main / `55%` Modifier).
-- **Elite Critter** *(every ~52s)*: `1` Rare (`42%` / `60%` Lucky) or Magic Item · `80%` chance `1` Ability gem · Instant `+18 HP` heal.
-- **Acorn Treasure Chest** *(every ~50s, `16–26m` away)*: `1` Rare (`52%` / `72%` Lucky) or Magic Item · `1` Ability gem · Instant `+35 HP` heal + announcement banner.
-- **Boss (3 per Run):** `1` Unique Item + `2` Rare Items + `1` Main Ability + `2` Modifier Abilities + Instant `+50 HP` heal.
+### Loot Drop-Rate Formula & 20-Minute Drop Budget (`loot_manager.gd`, `wave_director.gd`)
+Only **3 collectible types** + **Acorn Treasure Chests** spawn on the meadow floor (`2.6m` pickup radius for Items/Main/Mod, `2.8m` for Chests; no XP shards, hearts, or dust pickups). Because swarm density climbs `~5.94×` from `00:00` (`2 / 0.95s`) to `17:30+` (`5 / 0.40s`), regular enemy drop odds are **time-normalized** against spawn intensity and gated by cooldowns + dry-streak pity so drops stay exciting rather than flooding the bag:
+
+1. **Wave Spawn Intensity $S(t)$:**
+   $$S(t) = \max\!\left(1.0,\; \frac{\text{batch}(t)\,/\,\text{interval}(t)}{2\,/\,0.95}\right)$$
+   - `00:00`: $S = 1.00$ · `04:20`: $S = 2.19$ · `10:40`: $S = 3.80$ · `17:30`: $S = 5.94$
+2. **Regular Enemy Drop Probabilities (checked only after minimum cooldown elapsed):**
+   - **Item Chance** (gate $\Delta t \ge 16.0\text{s}$, or `12.5s` with `lucky_clover`):
+     $$P_{\text{item}}(t, L, k_i) = \text{clamp}\!\left(\frac{0.018 \cdot (1.30 \text{ if } L \text{ else } 1.0)}{S(t)^{0.75}} + \max(0,\, k_i - 65) \cdot 0.0015,\;\; 0.002,\;\; 0.12\right)$$
+   - **Ability Gem Chance** (gate $\Delta t \ge 24.0\text{s}$, or `19.0s` with `lucky_clover`):
+     $$P_{\text{gem}}(t, L, k_g) = \text{clamp}\!\left(\frac{0.011 \cdot (1.30 \text{ if } L \text{ else } 1.0)}{S(t)^{0.75}} + \max(0,\, k_g - 95) \cdot 0.0012,\;\; 0.0015,\;\; 0.09\right)$$
+   - Dry counters $k_i, k_g$ increment per regular kill and reset to `0` on drop (`k_i` Grace `65`, `k_g` Grace `95`). Opening rates start at `1.8%` Item / `1.1%` Gem (`2.34%` / `1.43%` Lucky) and taper to `0.47%` / `0.29%` at `17:30`.
+3. **Structured Drop Sources & Expected 20-Minute Run Budget:**
+   - **Regular Critters (cooldown-gated):** `~18–26` Items (`~1.0–1.5/min`) and `~12–18` Ability gems.
+   - **Elite Critter** *(initial `65s`, repeat every `80s`, `~14` per run)*: `65%` (`80%` Lucky) Item (`42%`/`60%` Rare else Magic) · `40%` (`55%` Lucky) Ability gem · `+18 HP` heal.
+   - **Acorn Treasure Chest** *(initial `55s`, repeat every `95s`, `~12` per run, `16–26m` away)*: `100%` Item (`52%`/`72%` Lucky Rare else Magic) · `50%` (`68%` Lucky) Ability gem · `+35 HP` heal.
+   - **Boss (`3` per Run):** `1` Unique Item + `1` Rare Item + `1` Main Ability + `1` Modifier Ability + `+50 HP` heal.
+
+### Theoretical Single-Ability Maxed-Support DPS Ceiling & Enemy HP Baseline
+Baseline critical factor across all heroes is $\mathbb{E}[\text{crit}] = 1 + 0.08 \times (1.65 - 1) = 1.052$. Because additional equipped Main Abilities increase all cooldowns by `+25%` per extra skill ($\text{CD}(N) = 1 + 0.25(N - 1)$), peak single-target boss DPS comes from funneling a **single Main Ability (`N = 1`)** into a 4-link with top behavioral Uniques/Tradeoffs:
+
+| Maxed Single-Ability Archetype (`N = 1`, 4-Link BiS) | Stack Formula (Single Target) | Stationary Peak DPS | Kiting / Mixed DPS | Role & Tradeoff |
+|---|---|---|---|---|
+| **Acorn Barrage Sniper** (`sniper_focus` + `glass_spark` + `prism_echo` `0.80×` + `turret_stance` + `mod_ignite`) | $24 \times 1.45 \times 1.75 \times 0.80 \times 1.052 = 51.3/\text{hit}$; `2` casts/`0.65s` | **`328 DPS`** *(w/ burn)* | **`~190–290 DPS`** | Best pure boss-killer (`+45%` incoming dmg taken) |
+| **Spirit Bees Homing** (`mod_multishot` `0.80×` -> `6` bees, `0.35×` shotgun weight `= 2.75×/volley` + `glass_spark` + `prism_echo` + `turret_stance`) | $20 \times 0.80 \times 1.75 \times 0.80 \times 1.052 \times 2.75 = 64.8/\text{volley}$; `2` volleys/`0.98s` | **`265–337 DPS`** *(w/ adds Zoomies)* | **`~165–240 DPS`** | Reliable auto-tracking while dodging |
+| **Meteor Pinecone AoE** (`mod_nova_area` + `glass_spark` + `prism_echo` `0.80×` + `turret_stance` + `comet_stride`) | $66 \times 1.75 \times 0.80 \times 1.052 = 97.2/\text{hit}$; `2` hits/`2.05s` (`+24.3` Burn) | **`214 DPS`** *(+`~90` stride casts)* | **`~210–300 DPS`** | Massive AoE pack + add clear |
+
+- **Target Boss & Elite Baseline Against Practical Ceiling (`~240–330 DPS` Maxed / `~110–180 DPS` Mid-Run):**
+  - **`06:30` Sir Grizzle:** **`3,000 HP`** -> `~20–28s` duel at `110–150 DPS`.
+  - **`13:00` Lady Whiskers:** **`7,000 HP`** -> `~30–40s` duel at `175–230 DPS`.
+  - **`19:30` King Bramblehorn:** **`15,000 HP`** -> `~45–60s` finale duel at `250–330 DPS` (no longer dies in `5–10s` to un-dampened projectile shotgunning).
+  - **Elite `Bandit Raccoon` at Twilight (`17:30+`, `96 × 6.0 × 3.6 = 2,074 HP`):** `~7–10s` late-game mini-boss threat.
 
 ### Wave Pacing (`enemy_database.gd`, `wave_director.gd`)
-Rebalanced `hp_scale` (`1.00× -> 3.60×`) and boss HP (`1250`, `2800`, `5400`) to fit pure behavioral item/link scaling without infinite numerical stat-stick inflation:
+Rebalanced `hp_scale` (`1.00× -> 6.00×`) and boss HP (`3000`, `7000`, `15000`) to stay tense against maxed 4-link + Unique builds:
 
 | Time Window | Biome Phase | Enemy Pool | Spawn Int | Batch | HP Scale | Dmg Scale | Max Active (Desk / Web) |
 |---|---|---|---|---|---|---|---|
 | `00:00–02:00` | Sunny Meadow | Frog, Hedgehog | `0.95s` | `2` | `1.00×` | `1.00×` | `42` / `30` |
-| `02:00–04:20` | Sunny Meadow | Frog, Hedgehog, Owl-Bat | `0.78s` | `3` | `1.20×` | `1.10×` | `62` / `44` |
-| `04:20–07:00` | Sunny Meadow | Hedgehog, Owl-Bat, Boar, Frog | `0.65s` | `3` | `1.45×` | `1.22×` | `80` / `57` |
-| `07:00–10:40` | Golden Sunset | Owl-Bat, Boar, Gloom Fox, Hedgehog | `0.56s` | `4` | `1.85×` | `1.42×` | `96` / `69` |
-| `10:40–14:00` | Golden Sunset | Boar, Gloom Fox, Bandit, Shroom-Toad | `0.50s` | `4` | `2.35×` | `1.65×` | `112` / `80` |
-| `14:00–17:30` | Twilight Grove | Fox, Bandit, Toad, Boar, Owl-Bat | `0.44s` | `5` | `2.95×` | `1.90×` | `124` / `89` |
-| `17:30–20:00` | Twilight Finale | Bandit, Toad, Gloom Fox, Boar | `0.40s` | `5` | `3.60×` | `2.20×` | `135` / `97` |
+| `02:00–04:20` | Sunny Meadow | Frog, Hedgehog, Owl-Bat | `0.78s` | `3` | `1.30×` | `1.10×` | `62` / `44` |
+| `04:20–07:00` | Sunny Meadow | Hedgehog, Owl-Bat, Boar, Frog | `0.65s` | `3` | `1.75×` | `1.22×` | `80` / `57` |
+| `07:00–10:40` | Golden Sunset | Owl-Bat, Boar, Gloom Fox, Hedgehog | `0.56s` | `4` | `2.45×` | `1.42×` | `96` / `69` |
+| `10:40–14:00` | Golden Sunset | Boar, Gloom Fox, Bandit, Shroom-Toad | `0.50s` | `4` | `3.40×` | `1.65×` | `112` / `80` |
+| `14:00–17:30` | Twilight Grove | Fox, Bandit, Toad, Boar, Owl-Bat | `0.44s` | `5` | `4.60×` | `1.90×` | `124` / `89` |
+| `17:30–20:00` | Twilight Finale | Bandit, Toad, Gloom Fox, Boar | `0.40s` | `5` | `6.00×` | `2.20×` | `135` / `97` |
 
 - **Swarm Surges:** `04:00`, `09:30`, `15:30`, and `18:00` (`12` Web / `14` Desktop critters).
 - **Scripted Bosses (`enemy_entity.gd`):**
-  - `06:30` (**Sir Grizzle**, `1,250 HP`, `24 dmg`) — Honey Slam (`5.4m`) & Dash Charge (`3.4×` spd); spawns `4x` `acorn_boar` <= `50%` HP.
-  - `13:00` (**Lady Whiskers**, `2,800 HP`, `30 dmg`) — `7`-way (`9` enraged) projectile fans, `5x` meteor rings, `12`-orb radial volley.
-  - `19:30` (**King Bramblehorn**, `5,400 HP`, `38 dmg`) — `12`-way (`16` enraged) spiral volley, `4x` meteors, cross nova, spawns `3x` `gloom_fox` <= `50%` HP.
+  - `06:30` (**Sir Grizzle**, `3,000 HP`, `24 dmg`) — Honey Slam (`5.4m`) & Dash Charge (`3.4×` spd); spawns `4x` `acorn_boar` <= `50%` HP.
+  - `13:00` (**Lady Whiskers**, `7,000 HP`, `30 dmg`) — `7`-way (`9` enraged) projectile fans, `5x` meteor rings, `12`-orb radial volley.
+  - `19:30` (**King Bramblehorn**, `15,000 HP`, `38 dmg`) — `12`-way (`16` enraged) spiral volley, `4x` meteors, cross nova, spawns `3x` `gloom_fox` <= `50%` HP.
 
 ---
 
@@ -260,10 +290,16 @@ Rebalanced `hp_scale` (`1.00× -> 3.60×`) and boss HP (`1250`, `2800`, `5400`) 
 - **Responsive Mobile Scaling (`main_game.gd`):** Dynamically sets `root.content_scale_factor` to **`2.75`** on tall portrait phones (`aspect_hw > 1.50`), **`1.95`** on square/tablet portrait (`1.05..1.50`), **`1.45`** on mobile landscape, and **`1.0`** on desktop — keeping all phone UI crisp at `~465×1007` logical px without squinting.
 - **Title Screen (`title_screen.gd`):** Concise subtitle pill, 4 visual hero cards (`Portrait + Hero Name + Role + Starter Main Ability + Starter Effect chip`), hero tagline + control hint, and dual **`TUTORIAL`** + **`PLAY RUN`** CTAs (auto-collapses to `2×2` grid in portrait).
 - **Gameplay HUD (`hud_controller.gd`):** Top XP bar, Dash bar, and `Lv.` / `Dust` / passive rows removed. Displays Hero Portrait + Kills + Bosses counter, Center Clock/Biome plaque (or Tutorial Objective plaque), full-width bottom `HP` + `Satchel` dock on portrait (`vp.x < 750`), and compact bottom-center Active Ability bar (`74×72` portrait cards).
-- **Hero Satchel & Touch Scroll (`inventory_panel.gd`, `touch_scroll_container.gd`, `end_screen.gd`):**
-  - All Satchel & EndScreen scrollable lists use `TouchScrollContainer` (global touch/mouse vertical drag scroll `>10px` + momentum glide) and release-without-drag tap guards (`was_recent_drag(180)`, `<12px` drift) so swiping never gets hijacked by nested buttons/sockets.
-  - **Mobile Portrait Mode (`vp.x < 900`):** Single-column 4-tab layout (**`Gear` | `Items` | `Skills` | `Build`**) with larger `13–16px` labels, sticky pending gem banner with `"Socket in Gear ->"` CTA, and zero horizontal squeezing.
+- **Hero Satchel & Touch Scroll (`inventory_panel.gd`, `touch_scroll_container.gd`, `poe_socket_widget.gd`, `end_screen.gd`):**
+  - All Satchel & EndScreen scrollable lists use `TouchScrollContainer` (global touch/mouse vertical drag scroll `DRAG_THRESHOLD = 14px` + momentum glide) while item cards & `PoESocketWidget` use `MOUSE_FILTER_STOP` with release-without-drag tap guards (`was_recent_drag(180)`, `<18px` drift) so tapping or swiping never swallows taps.
+  - **One-Tap Item Equipping:** Opening the Items view auto-selects bag Relic #0 (showing its Tradeoff Card + `Equip` CTA immediately), and every item row also includes a direct emerald `Equip` button plus a top confirmation strip (`Equipped <Item>!`).
+  - **Mobile Portrait Mode (`vp.x < 900`):** Single-column 4-tab layout (**`Gear` | `Items` | `Skills` | `Build`**) with `Focus Load` pill, larger `13–16px` labels, sticky pending gem banner with `"Socket in Gear ->"` CTA, and zero horizontal squeezing.
   - **Desktop Mode (`vp.x >= 900`):** 3-column layout: **Left (`Active Build`)**, **Center (`Equipped Gear` + `PoESocketWidget` Pentagon Main / Orb Modifier)**, and **Right (`Items` | `Main` | `Mods`)** with Visual Tradeoff Comparison (`+` emerald / `-` crimson / `=` brass chips).
+
+### Web Load Optimization & Stripped WASM Pipeline (`export_presets.cfg`, `build/web_custom.py`, `.github/workflows/web-release.yml`)
+- **Trimmed Pack & Resource Filtering:** Excludes `tests/*`, `docs/*`, `README.md`, license text, and build helpers (`index.pck` `549 KiB`), disables unused Web VRAM texture compression variants, and adds parallel `<link rel="preload">` tags for `index.wasm` & `index.pck`.
+- **PWA Service Worker Cache:** Enabled Godot's Service Worker (`index.service.worker.js`, `index.manifest.json`) so repeat browser loads start near-instantly offline/from cache.
+- **Custom Stripped WASM CI (`.github/workflows/web-release.yml` + `build/web_custom.py`):** Compiles Godot `4.7.2-stable` (`ed1daf0bf`) with Emscripten `4.0.20`, `optimize="size"`, `lto="full"`, and `disable_physics_2d/3d`, `disable_navigation_2d/3d`, `disable_xr`, and unused 3D/audio/network modules disabled (`custom_web_template/web_nothreads_release.zip` cached via `actions/cache@v4`), exporting & deploying straight to `gh-pages`.
 
 ### Android APK Build & Release Pipeline (`export_presets.cfg`, `.github/workflows/android-release.yml`)
 - **Portrait Android Preset (`[preset.4]` `"Android"`):** Targets `arm64-v8a`, `window/handheld/orientation="portrait"`, immersive fullscreen, `ETC2/ASTC` textures, and outputs `builds/android/PawAndPrism.apk` (`com.pawandprism.game`).
@@ -287,5 +323,6 @@ Rebalanced `hp_scale` (`1.00× -> 3.60×`) and boss HP (`1250`, `2800`, `5400`) 
 ```
 
 ### Change Log
+- **`2026-11-25 (v2.2 Balance, Equip UX & Stripped Web):** Fixed Satchel item/socket tapping (`MOUSE_FILTER_STOP`, `DRAG_THRESHOLD = 14px`, `<18px` tap window), added direct per-row emerald `Equip` buttons, auto-selection of bag Relic #0 with confirmation feedback, and `Focus Load` indicator. Added spawn-normalized Loot Drop-Rate Formula + dry-streak pity + cooldown gates (`~35–48` Items per 20-min run vs swarm spam), Multi-Main Focus Tax (`+25%` CD per extra Main Ability), Same-Volley `0.35×` Shotgun Dampener, `prism_echo` `0.80×` balancing, and calibrated `hp_scale` (`1.0× -> 6.0×`) + Boss HP (`3,000` / `7,000` / `15,000`) against maxed single-ability DPS math (`~240–330` practical DPS). Added trimmed Web export, PWA Service Worker caching, `<link rel="preload">`, `build/web_custom.py`, and `.github/workflows/web-release.yml` stripped-WASM CI pipeline. Verified all checks green via headless `tests/verify_game.gd`.
 - **`2026-11-25 (v2.1 Mobile & Android Release):** Removed Hop-Dash completely across input/physics/HUD/TouchControls and replaced the 5 dash effects with movement/cadence effects (`stride_honey_nova`, `cadence_burst`, `kill_siphon`, `fleet_paws`, `comet_stride`). Overhauled portrait mobile readability (`2.75×` phone `content_scale_factor`, portrait-tuned Title/HUD/EndScreen, 4-tab single-column mobile Satchel) and added `TouchScrollContainer` momentum drag-scrolling with release-tap guards across Satchel and EndScreen. Added portrait ARM64 Android preset (`export_presets.cfg`) and automated signed APK GitHub Release workflow (`.github/workflows/android-release.yml`). Verified via `tests/verify_game.gd`, Web/Desktop builds, and Chrome portrait (`390×844`) & desktop (`1280×720`) screenshots.
 - **`2026-11-24 (v2.0 Revamp):** Replaced XP/leveling, `LevelUpModal`, Passive gems, Heart/Dust ground drops, and Prism Forge crafting with pure behavioral Item Effects & Tradeoffs, strictly 3 ground loot types (`Items`, `Main Abilities`, `Modifier Abilities`) with fixed sockets/links, a 3-beat PoE-style playable Tutorial (`TutorialDirector`), and streamlined icon-first HUD/Title/Satchel (`Tradeoff Comparison Card`). Verified all checks green via headless `tests/verify_game.gd` and rebuilt Web/macOS/Windows/Linux targets.

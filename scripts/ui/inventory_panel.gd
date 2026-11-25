@@ -12,6 +12,8 @@ var _title_lbl: Label = null
 var _close_btn: Button = null
 var _tut_banner_panel: PanelContainer = null
 var _tut_banner_lbl: Label = null
+var _feedback_panel: PanelContainer = null
+var _feedback_lbl: Label = null
 
 var _mobile_tabs_row: HBoxContainer = null
 var _m_tab_gear_btn: Button = null
@@ -183,6 +185,18 @@ func _build_shell() -> void:
 	_tut_banner_lbl.add_theme_color_override("font_color", Color(1.0, 0.92, 0.45))
 	tb_h.add_child(_tut_banner_lbl)
 
+	# Equip / Socket Action Confirmation Strip
+	_feedback_panel = PanelContainer.new()
+	_feedback_panel.visible = false
+	_feedback_panel.add_theme_stylebox_override("panel", UiHelper.make_panel_box(Color(0.11, 0.28, 0.17), UiHelper.CTA_EMERALD_RIM, 8, 1, 6, false))
+	root_v.add_child(_feedback_panel)
+	_feedback_lbl = Label.new()
+	_feedback_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_feedback_lbl.add_theme_font_override("font", UiHelper.get_bold_font())
+	_feedback_lbl.add_theme_font_size_override("font_size", 13)
+	_feedback_lbl.add_theme_color_override("font_color", Color(0.68, 1.0, 0.78))
+	_feedback_panel.add_child(_feedback_lbl)
+
 	# Mobile Single-Column Primary Tabs (Gear | Items | Skills | Build)
 	_mobile_tabs_row = HBoxContainer.new()
 	_mobile_tabs_row.visible = false
@@ -326,6 +340,8 @@ func _make_mobile_tab_btn(lbl: String, tab_key: String) -> Button:
 			_active_right_tab = "items"
 		elif tab_key == "skills" and _active_right_tab == "items":
 			_active_right_tab = "main"
+		if _feedback_panel != null:
+			_feedback_panel.visible = false
 		sfx_requested.emit("ui_click")
 		refresh()
 	)
@@ -341,13 +357,33 @@ func _make_tab_button(tab_key: String) -> Button:
 		_active_right_tab = tab_key
 		_selected_bag_idx = -1
 		_selected_pouch_idx = -1
+		if _feedback_panel != null:
+			_feedback_panel.visible = false
 		sfx_requested.emit("ui_click")
 		refresh()
 	)
 	return btn
 
+func _show_feedback(msg: String) -> void:
+	if _feedback_panel != null and _feedback_lbl != null:
+		_feedback_lbl.text = msg
+		_feedback_panel.visible = not msg.is_empty()
+
+func _equip_item_at(bag_idx: int) -> void:
+	if _stats == null or bag_idx < 0 or bag_idx >= _stats.item_bag.size():
+		return
+	var res: Dictionary = _stats.equip_item_from_bag(bag_idx)
+	if bool(res.get("ok", false)):
+		var eq_item: ItemInstance = res.get("equipped_item", null)
+		_selected_bag_idx = 0 if not _stats.item_bag.is_empty() else -1
+		if eq_item != null:
+			_show_feedback("Equipped %s!" % eq_item.item_name)
+		sfx_requested.emit("equip_snap")
+		gear_changed.emit()
+		refresh()
+
 func _connect_tap(card: Control, callback: Callable) -> void:
-	card.mouse_filter = Control.MOUSE_FILTER_PASS
+	card.mouse_filter = Control.MOUSE_FILTER_STOP
 	card.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 	var st: Dictionary = {"down": false, "pos": Vector2.ZERO}
 	card.gui_input.connect(func(ev: InputEvent) -> void:
@@ -356,16 +392,19 @@ func _connect_tap(card: Control, callback: Callable) -> void:
 			if mb.pressed:
 				st["down"] = true
 				st["pos"] = mb.position
+				card.accept_event()
 			elif bool(st["down"]):
 				st["down"] = false
-				if mb.position.distance_to(st["pos"]) < 12.0 and not TouchScrollContainer.was_recent_drag():
+				card.accept_event()
+				if mb.position.distance_to(st["pos"]) < 18.0 and not TouchScrollContainer.was_recent_drag():
 					callback.call()
 	)
 
 func open_panel(stats: HeroStats) -> void:
 	_stats = stats
-	_selected_bag_idx = -1
+	_selected_bag_idx = 0 if (stats != null and not stats.item_bag.is_empty()) else -1
 	_selected_pouch_idx = -1
+	_show_feedback("")
 	visible = true
 	set_tutorial_hint(_tutorial_hint)
 	_clamp_frame_size()
@@ -459,6 +498,11 @@ func _populate_build_vbox(container: VBoxContainer) -> void:
 		vl.add_theme_color_override("font_color", UiHelper.TEXT_CREAM)
 		vp_box.add_child(vl)
 		vitals_h.add_child(vp_box)
+
+	var focus_txt: String = "Focus: 1 Main (1.00x CD)" if s.equipped_main_count <= 1 else ("Focus: %d Mains (%.2fx CD)" % [s.equipped_main_count, s.multi_skill_cd_mult])
+	var focus_col: Color = Color(0.56, 0.94, 0.68) if s.equipped_main_count <= 1 else Color(1.0, 0.78, 0.36)
+	var focus_pill: PanelContainer = UiHelper.make_badge_pill(focus_txt, focus_col.darkened(0.68), focus_col, UiHelper.TEXT_CREAM, 11)
+	hv.add_child(focus_pill)
 
 	# Linked Active Skills
 	var sk_hdr: Label = Label.new()
@@ -657,6 +701,18 @@ func _build_mobile_build_tab() -> void:
 	_populate_build_vbox(bv)
 
 func _build_items_tab() -> void:
+	if not _stats.item_bag.is_empty() and (_selected_bag_idx < 0 or _selected_bag_idx >= _stats.item_bag.size()):
+		_selected_bag_idx = 0
+
+	var fs_item: int = 15 if _is_mobile_layout else 13
+	if not _stats.item_bag.is_empty():
+		var bag_hint: Label = Label.new()
+		bag_hint.text = "Tap Equip to wear, or tap a Relic to compare below."
+		bag_hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		bag_hint.add_theme_font_size_override("font_size", 12 if _is_mobile_layout else 11)
+		bag_hint.add_theme_color_override("font_color", UiHelper.TEXT_PARCHMENT)
+		_right_content_vbox.add_child(bag_hint)
+
 	var scroll: TouchScrollContainer = TouchScrollContainer.new()
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	_right_content_vbox.add_child(scroll)
@@ -667,7 +723,6 @@ func _build_items_tab() -> void:
 	list_v.add_theme_constant_override("separation", 7)
 	scroll.add_child(list_v)
 
-	var fs_item: int = 15 if _is_mobile_layout else 13
 	if _stats.item_bag.is_empty():
 		var emp_box: PanelContainer = PanelContainer.new()
 		emp_box.add_theme_stylebox_override("panel", UiHelper.make_panel_box(UiHelper.BG_WELL, UiHelper.BORDER_SUBTLE, 10, 1, 14, false))
@@ -719,6 +774,18 @@ func _build_items_tab() -> void:
 			var mini_sw: PoESocketWidget = PoESocketWidget.new()
 			mini_sw.configure_mini(it)
 			top_h.add_child(mini_sw)
+
+			var row_eq_btn: Button = Button.new()
+			row_eq_btn.text = "Equip"
+			row_eq_btn.custom_minimum_size = Vector2(68 if _is_mobile_layout else 62, 32 if _is_mobile_layout else 26)
+			row_eq_btn.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+			UiHelper.style_button(row_eq_btn, UiHelper.CTA_EMERALD, UiHelper.CTA_EMERALD_RIM, 7, 4)
+			row_eq_btn.add_theme_font_size_override("font_size", 13 if _is_mobile_layout else 11)
+			row_eq_btn.pressed.connect(func() -> void:
+				if not TouchScrollContainer.was_recent_drag():
+					_equip_item_at(idx_cap)
+			)
+			top_h.add_child(row_eq_btn)
 
 			if not it.effects.is_empty():
 				var ef_row: HFlowContainer = HFlowContainer.new()
@@ -787,12 +854,7 @@ func _build_items_tab() -> void:
 		UiHelper.style_button(eq_btn, UiHelper.CTA_EMERALD, UiHelper.CTA_EMERALD_RIM, 8, 6)
 		eq_btn.add_theme_font_size_override("font_size", 15 if _is_mobile_layout else 13)
 		eq_btn.pressed.connect(func() -> void:
-			var res: Dictionary = _stats.equip_item_from_bag(_selected_bag_idx)
-			if bool(res.get("ok", false)):
-				_selected_bag_idx = -1
-				sfx_requested.emit("equip_snap")
-				gear_changed.emit()
-				refresh()
+			_equip_item_at(_selected_bag_idx)
 		)
 		btns_h.add_child(eq_btn)
 

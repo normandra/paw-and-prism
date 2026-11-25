@@ -97,7 +97,7 @@ static func _ensure_init() -> void:
 		"boss_grizzle": {
 			"id": "boss_grizzle",
 			"enemy_name": "Sir Grizzle, Honey-Armored King",
-			"hp": 1250.0,
+			"hp": 3000.0,
 			"speed": 4.0,
 			"damage": 24.0,
 			"radius": 1.85,
@@ -110,7 +110,7 @@ static func _ensure_init() -> void:
 		"boss_whiskers": {
 			"id": "boss_whiskers",
 			"enemy_name": "Lady Whiskers, Arcane Owl-Empress",
-			"hp": 2800.0,
+			"hp": 7000.0,
 			"speed": 4.3,
 			"damage": 30.0,
 			"radius": 1.95,
@@ -123,7 +123,7 @@ static func _ensure_init() -> void:
 		"boss_bramblehorn": {
 			"id": "boss_bramblehorn",
 			"enemy_name": "King Bramblehorn, Prism Stag-Dragon",
-			"hp": 5400.0,
+			"hp": 15000.0,
 			"speed": 4.6,
 			"damage": 38.0,
 			"radius": 2.25,
@@ -163,7 +163,7 @@ static func get_wave_profile(elapsed_sec: float) -> Dictionary:
 			"pool": ["slime_frog", "hedgehog", "bat_owl"],
 			"spawn_interval": 0.78,
 			"batch_size": 3,
-			"hp_scale": 1.20,
+			"hp_scale": 1.30,
 			"dmg_scale": 1.10,
 			"max_active": 62,
 		}
@@ -173,7 +173,7 @@ static func get_wave_profile(elapsed_sec: float) -> Dictionary:
 			"pool": ["hedgehog", "bat_owl", "acorn_boar", "slime_frog"],
 			"spawn_interval": 0.65,
 			"batch_size": 3,
-			"hp_scale": 1.45,
+			"hp_scale": 1.75,
 			"dmg_scale": 1.22,
 			"max_active": 80,
 		}
@@ -183,7 +183,7 @@ static func get_wave_profile(elapsed_sec: float) -> Dictionary:
 			"pool": ["bat_owl", "acorn_boar", "gloom_fox", "hedgehog"],
 			"spawn_interval": 0.56,
 			"batch_size": 4,
-			"hp_scale": 1.85,
+			"hp_scale": 2.45,
 			"dmg_scale": 1.42,
 			"max_active": 96,
 		}
@@ -193,7 +193,7 @@ static func get_wave_profile(elapsed_sec: float) -> Dictionary:
 			"pool": ["acorn_boar", "gloom_fox", "raccoon_bandit", "shroom_toad"],
 			"spawn_interval": 0.50,
 			"batch_size": 4,
-			"hp_scale": 2.35,
+			"hp_scale": 3.40,
 			"dmg_scale": 1.65,
 			"max_active": 112,
 		}
@@ -203,7 +203,7 @@ static func get_wave_profile(elapsed_sec: float) -> Dictionary:
 			"pool": ["gloom_fox", "raccoon_bandit", "shroom_toad", "acorn_boar", "bat_owl"],
 			"spawn_interval": 0.44,
 			"batch_size": 5,
-			"hp_scale": 2.95,
+			"hp_scale": 4.60,
 			"dmg_scale": 1.90,
 			"max_active": 124,
 		}
@@ -213,7 +213,7 @@ static func get_wave_profile(elapsed_sec: float) -> Dictionary:
 			"pool": ["raccoon_bandit", "shroom_toad", "gloom_fox", "acorn_boar"],
 			"spawn_interval": 0.40,
 			"batch_size": 5,
-			"hp_scale": 3.60,
+			"hp_scale": 6.00,
 			"dmg_scale": 2.20,
 			"max_active": 135,
 		}

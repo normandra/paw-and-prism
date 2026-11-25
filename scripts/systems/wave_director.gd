@@ -17,8 +17,8 @@ var kills_count: int = 0
 var elapsed_time: float = 0.0
 
 var _spawn_timer: float = 0.5
-var _elite_timer: float = 48.0
-var _chest_timer: float = 35.0
+var _elite_timer: float = 65.0
+var _chest_timer: float = 55.0
 var _surge_index: int = 0
 var _boss_spawned_flags: Array[bool] = [false, false, false]
 var _surge_times: Array[float] = [240.0, 570.0, 930.0, 1080.0]
@@ -44,8 +44,8 @@ func reset() -> void:
 	kills_count = 0
 	elapsed_time = 0.0
 	_spawn_timer = 0.4
-	_elite_timer = 45.0
-	_chest_timer = 32.0
+	_elite_timer = 65.0
+	_chest_timer = 55.0
 	_surge_index = 0
 	_boss_spawned_flags = [false, false, false]
 
@@ -108,7 +108,7 @@ func step(delta: float, player_pos: Vector3, grid: SpatialGrid, loot_mgr: LootMa
 	# Periodic Elite Critter
 	_elite_timer -= delta
 	if _elite_timer <= 0.0:
-		_elite_timer = 52.0
+		_elite_timer = 80.0
 		var pool: Array = prof["pool"]
 		var eid: String = String(pool[randi() % pool.size()])
 		_spawn_enemy(eid, player_pos, float(prof["hp_scale"]), float(prof["dmg_scale"]), true)
@@ -117,7 +117,7 @@ func step(delta: float, player_pos: Vector3, grid: SpatialGrid, loot_mgr: LootMa
 	# Periodic Acorn Chest
 	_chest_timer -= delta
 	if _chest_timer <= 0.0:
-		_chest_timer = 50.0
+		_chest_timer = 95.0
 		var ang: float = randf() * TAU
 		var dist: float = randf_range(16.0, 26.0)
 		var b: float = ArenaBuilder.ARENA_HALF_SIZE - 6.0

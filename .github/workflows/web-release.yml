@@ -1,0 +1,103 @@
+name: Build Stripped Web WASM & Deploy Pages
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+jobs:
+  build-and-deploy-web:
+    runs-on: ubuntu-latest
+    env:
+      GODOT_VERSION: "4.7.2-stable"
+      GODOT_COMMIT: "ed1daf0bf001b61586d9930840f2f1394092c079"
+      GODOT_TEMPLATE_DIR: "4.7.2.stable"
+      EMSDK_VERSION: "4.0.20"
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install build dependencies & SCons
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq scons pkg-config binaryen unzip rsync
+
+      - name: Set up Emscripten ${{ env.EMSDK_VERSION }}
+        uses: mymindstorm/setup-emsdk@v14
+        with:
+          version: ${{ env.EMSDK_VERSION }}
+
+      - name: Restore cached custom stripped Web template
+        id: cache-wasm
+        uses: actions/cache@v4
+        with:
+          path: custom_web_template
+          key: godot-${{ env.GODOT_VERSION }}-web-stripped-${{ hashFiles('build/web_custom.py') }}
+
+      - name: Compile stripped Godot Web template (no physics/nav/XR/unused codecs)
+        if: steps.cache-wasm.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p /tmp/godot_src custom_web_template
+          curl -fsSL "https://github.com/godotengine/godot/archive/${GODOT_COMMIT}.tar.gz" -o /tmp/godot.tar.gz
+          tar -xzf /tmp/godot.tar.gz -C /tmp/godot_src --strip-components=1
+          cp build/web_custom.py /tmp/godot_src/custom.py
+          scons -C /tmp/godot_src platform=web -j"$(nproc)"
+          ls -lh /tmp/godot_src/bin/
+          mv /tmp/godot_src/bin/godot.web.template_release*.zip custom_web_template/web_nothreads_release.zip
+          rm -rf /tmp/godot_src /tmp/godot.tar.gz
+
+      - name: Install Godot 4.7.2 headless binary & export templates
+        run: |
+          mkdir -p "$HOME/.local/bin" "$HOME/.local/share/godot/export_templates/${GODOT_TEMPLATE_DIR}" /tmp/godot_dl
+          curl -fsSL "https://github.com/godotengine/godot-builds/releases/download/${GODOT_VERSION}/Godot_v${GODOT_VERSION}_linux.x86_64.zip" -o /tmp/godot_dl/godot.zip
+          unzip -q /tmp/godot_dl/godot.zip -d "$HOME/.local/bin"
+          chmod +x "$HOME/.local/bin/Godot_v${GODOT_VERSION}_linux.x86_64"
+          ln -sf "$HOME/.local/bin/Godot_v${GODOT_VERSION}_linux.x86_64" "$HOME/.local/bin/godot"
+
+          curl -fsSL "https://github.com/godotengine/godot-builds/releases/download/${GODOT_VERSION}/Godot_v${GODOT_VERSION}_export_templates.tpz" -o /tmp/godot_dl/templates.tpz
+          unzip -q /tmp/godot_dl/templates.tpz -d /tmp/godot_dl/tpl_unpack
+          mv /tmp/godot_dl/tpl_unpack/templates/* "$HOME/.local/share/godot/export_templates/${GODOT_TEMPLATE_DIR}/"
+          rm -rf /tmp/godot_dl
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Import & Run Headless Verification Suite
+        run: |
+          godot --headless --path . --import
+          godot --headless --path . --script res://tests/verify_game.gd
+
+      - name: Export Web build using stripped template & measure sizes
+        run: |
+          mkdir -p builds/web
+          python3 - <<'PY'
+          import os
+          tpl = os.path.abspath("custom_web_template/web_nothreads_release.zip")
+          with open("export_presets.cfg", "r") as f:
+              txt = f.read()
+          txt = txt.replace('custom_template/release=""', f'custom_template/release="{tpl}"', 1)
+          with open("export_presets.cfg", "w") as f:
+              f.write(txt)
+          PY
+          godot --headless --path . --export-release "Web" builds/web/index.html
+          find builds/web -name '*.import' -delete
+          for f in builds/web/*; do
+            printf "%-38s raw=%8d  gzip=%8d\n" "$(basename "$f")" "$(wc -c < "$f")" "$(gzip -c -9 "$f" | wc -c)"
+          done
+
+      - name: Deploy Web build to gh-pages branch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch origin gh-pages:gh-pages
+          git worktree add /tmp/ghpages gh-pages
+          find /tmp/ghpages -mindepth 1 -maxdepth 1 ! -name '.git' -exec rm -rf {} +
+          cp -r builds/web/* /tmp/ghpages/
+          touch /tmp/ghpages/.nojekyll
+          find /tmp/ghpages -name '*.import' -delete
+          git -C /tmp/ghpages add -A
+          git -C /tmp/ghpages commit -m "Deploy stripped Paw & Prism Web build (${{ github.sha }})" || echo "No changes"
+          git -C /tmp/ghpages push origin gh-pages
+          git worktree remove --force /tmp/ghpages
