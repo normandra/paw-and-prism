@@ -196,9 +196,9 @@ func step(delta: float, grid: SpatialGrid, player_pos: Vector3) -> bool:
 		var dmg: float = damage * volley_mult * (crit_mult * 0.01 if is_crit else 1.0)
 
 		if is_fire and e.has_method("apply_burn"):
-			e.apply_burn(dmg * 0.25, 3.0)
+			e.apply_burn(dmg * BalanceConfig.BURN_DPS_RATIO, BalanceConfig.BURN_DURATION)
 		if is_cold and e.has_method("apply_chill"):
-			e.apply_chill(2.5)
+			e.apply_chill(BalanceConfig.CHILL_DURATION)
 		e.take_damage(dmg, direction * 3.0)
 		enemy_hit.emit(e, dmg, is_crit, is_fire, is_cold, e.global_position, leech_pct)
 

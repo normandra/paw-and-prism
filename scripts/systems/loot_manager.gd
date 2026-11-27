@@ -7,16 +7,16 @@ signal hero_heal_requested(amount: float)
 signal loot_bag_full(label: String)
 signal chest_opened()
 
-const BASE_ITEM_DROP: float = 0.018
-const BASE_GEM_DROP: float = 0.011
-const PITY_GRACE_ITEM: int = 65
-const PITY_STEP_ITEM: float = 0.0015
-const PITY_GRACE_GEM: int = 95
-const PITY_STEP_GEM: float = 0.0012
-const ITEM_MIN_INTERVAL: float = 16.0
-const ITEM_MIN_INTERVAL_LUCKY: float = 12.5
-const GEM_MIN_INTERVAL: float = 24.0
-const GEM_MIN_INTERVAL_LUCKY: float = 19.0
+const BASE_ITEM_DROP: float = BalanceConfig.BASE_ITEM_DROP
+const BASE_GEM_DROP: float = BalanceConfig.BASE_GEM_DROP
+const PITY_GRACE_ITEM: int = BalanceConfig.PITY_GRACE_ITEM
+const PITY_STEP_ITEM: float = BalanceConfig.PITY_STEP_ITEM
+const PITY_GRACE_GEM: int = BalanceConfig.PITY_GRACE_GEM
+const PITY_STEP_GEM: float = BalanceConfig.PITY_STEP_GEM
+const ITEM_MIN_INTERVAL: float = BalanceConfig.ITEM_MIN_INTERVAL
+const ITEM_MIN_INTERVAL_LUCKY: float = BalanceConfig.ITEM_MIN_INTERVAL_LUCKY
+const GEM_MIN_INTERVAL: float = BalanceConfig.GEM_MIN_INTERVAL
+const GEM_MIN_INTERVAL_LUCKY: float = BalanceConfig.GEM_MIN_INTERVAL_LUCKY
 
 var world_root: Node3D = null
 var stats: HeroStats = null
@@ -28,9 +28,10 @@ var _last_reg_item_sec: float = -99.0
 var _last_reg_gem_sec: float = -99.0
 
 static func compute_spawn_intensity(elapsed_sec: float) -> float:
+	var base_prof: Dictionary = EnemyDatabase.get_wave_profile(0.0)
+	var base_rate: float = float(base_prof["batch_size"]) / maxf(0.1, float(base_prof["spawn_interval"]))
 	var prof: Dictionary = EnemyDatabase.get_wave_profile(elapsed_sec)
 	var rate: float = float(prof["batch_size"]) / maxf(0.1, float(prof["spawn_interval"]))
-	var base_rate: float = 2.0 / 0.95
 	return maxf(1.0, rate / base_rate)
 
 static func compute_regular_item_chance(elapsed_sec: float, lucky: bool, kills_since_item: int) -> float:
@@ -74,7 +75,7 @@ func drop_for_enemy(enemy: EnemyEntity, elapsed_sec: float) -> void:
 			spawn_specific_item(pos + Vector3(randf_range(-1.5, 1.5), 0.0, randf_range(-1.5, 1.5)), b_item)
 		spawn_specific_gem(pos + Vector3(-1.4, 0.0, 1.2), GemInstance.new(GemDatabase.roll_random_gem_id(_rng, GameEnums.GemType.MAIN)))
 		spawn_specific_gem(pos + Vector3(1.4, 0.0, 1.2), GemInstance.new(GemDatabase.roll_random_gem_id(_rng, GameEnums.GemType.MODIFIER)))
-		hero_heal_requested.emit(50.0)
+		hero_heal_requested.emit(BalanceConfig.BOSS_HEAL)
 		return
 
 	if enemy.is_elite:
@@ -83,7 +84,7 @@ func drop_for_enemy(enemy: EnemyEntity, elapsed_sec: float) -> void:
 			spawn_specific_item(pos, ItemDatabase.generate_item(elite_rarity, lucky, -1, _rng))
 		if _rng.randf() < (0.55 if lucky else 0.40):
 			spawn_specific_gem(pos + Vector3(0.7, 0.0, 0.4), GemInstance.new(GemDatabase.roll_random_gem_id(_rng)))
-		hero_heal_requested.emit(18.0)
+		hero_heal_requested.emit(BalanceConfig.ELITE_HEAL)
 		return
 
 	# Regular enemy drops: spawn-rate-normalized probability + dry-streak pity + cooldown gate
@@ -182,7 +183,7 @@ func _collect_pickup(pk: WorldPickup) -> bool:
 					gem_looted.emit(c_gem)
 				else:
 					spawn_specific_gem(pk.global_position, c_gem)
-			hero_heal_requested.emit(35.0)
+			hero_heal_requested.emit(BalanceConfig.CHEST_HEAL)
 			chest_opened.emit()
 			return true
 	return true

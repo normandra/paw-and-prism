@@ -31,6 +31,7 @@ var _cheat_death_cd: float = 0.0
 var _honey_aegis_cd: float = 0.0
 var _thorns_cd: float = 0.0
 var _orbit_shield_cd: float = 0.0
+var _kill_siphon_cd: float = 0.0
 var _zoomies_timer: float = 0.0
 var _static_dist_accum: float = 0.0
 var _honey_dist_accum: float = 0.0
@@ -49,6 +50,7 @@ func setup(p_stats: HeroStats) -> void:
 	_honey_aegis_cd = 0.0
 	_thorns_cd = 0.0
 	_orbit_shield_cd = 0.0
+	_kill_siphon_cd = 0.0
 	_zoomies_timer = 0.0
 	_static_dist_accum = 0.0
 	_honey_dist_accum = 0.0
@@ -119,9 +121,10 @@ func notify_kill() -> void:
 	if stats == null:
 		return
 	if stats.has_zoomies_on_kill:
-		_zoomies_timer = 2.0
-	if stats.has_kill_siphon:
-		heal(2.5)
+		_zoomies_timer = BalanceConfig.ZOOMIES_DURATION
+	if stats.has_kill_siphon and _kill_siphon_cd <= 0.0:
+		_kill_siphon_cd = BalanceConfig.KILL_SIPHON_ICD_SEC
+		heal(BalanceConfig.KILL_SIPHON_HEAL)
 
 func step(delta: float) -> void:
 	if is_dead or stats == null:
@@ -138,6 +141,8 @@ func step(delta: float) -> void:
 		_thorns_cd -= delta
 	if _orbit_shield_cd > 0.0:
 		_orbit_shield_cd -= delta
+	if _kill_siphon_cd > 0.0:
+		_kill_siphon_cd -= delta
 	if _zoomies_timer > 0.0:
 		_zoomies_timer -= delta
 
@@ -166,13 +171,13 @@ func step(delta: float) -> void:
 
 	var moving_input: bool = input_dir.length_squared() > 0.001
 	if moving_input:
-		_move_ramp_time = minf(2.0, _move_ramp_time + delta)
+		_move_ramp_time = minf(BalanceConfig.FLEET_PAWS_RAMP_SEC, _move_ramp_time + delta)
 	else:
 		_move_ramp_time = maxf(0.0, _move_ramp_time - delta * 2.5)
 
 	# Apply movement
-	var fleet_mult: float = 1.0 + (0.25 * (_move_ramp_time / 2.0) if stats.has_fleet_paws else 0.0)
-	var speed: float = stats.move_speed * fleet_mult * (1.28 if _zoomies_timer > 0.0 else 1.0)
+	var fleet_mult: float = 1.0 + (BalanceConfig.FLEET_PAWS_MAX_BONUS * (_move_ramp_time / BalanceConfig.FLEET_PAWS_RAMP_SEC) if stats.has_fleet_paws else 0.0)
+	var speed: float = stats.move_speed * fleet_mult * (BalanceConfig.ZOOMIES_SPEED_MULT if _zoomies_timer > 0.0 else 1.0)
 	var move_delta: Vector3 = input_dir * speed * delta if moving_input else Vector3.ZERO
 
 	global_position += move_delta
@@ -185,18 +190,18 @@ func step(delta: float) -> void:
 	if is_moving:
 		if stats.has_static_sprint:
 			_static_dist_accum += step_dist
-			if _static_dist_accum >= 5.5:
-				_static_dist_accum -= 5.5
+			if _static_dist_accum >= BalanceConfig.STATIC_SPRINT_DIST:
+				_static_dist_accum -= BalanceConfig.STATIC_SPRINT_DIST
 				static_spark_requested.emit(global_position)
 		if stats.has_stride_honey_nova:
 			_honey_dist_accum += step_dist
-			if _honey_dist_accum >= 7.0:
-				_honey_dist_accum -= 7.0
+			if _honey_dist_accum >= BalanceConfig.STRIDE_HONEY_DIST:
+				_honey_dist_accum -= BalanceConfig.STRIDE_HONEY_DIST
 				stride_honey_requested.emit(global_position)
 		if stats.has_comet_stride:
 			_comet_dist_accum += step_dist
-			if _comet_dist_accum >= 8.5:
-				_comet_dist_accum -= 8.5
+			if _comet_dist_accum >= BalanceConfig.COMET_STRIDE_DIST:
+				_comet_dist_accum -= BalanceConfig.COMET_STRIDE_DIST
 				comet_stride_requested.emit(global_position)
 
 	_animate_chibi(delta, is_moving)
@@ -250,25 +255,25 @@ func take_damage(raw_dmg: float, bypass_invuln: bool = false) -> float:
 
 	var final_dmg: float = maxf(1.0, raw_dmg * stats.incoming_dmg_mult)
 
-	_invuln_timer = 0.45
+	_invuln_timer = BalanceConfig.HIT_INVULN_SEC
 	current_hp -= final_dmg
 
 	# Reactive Behavioral Item Triggers
 	if stats.has_aegis_freeze and _honey_aegis_cd <= 0.0:
-		_honey_aegis_cd = 1.8
-		reactive_nova_requested.emit("aegis_freeze", global_position, 32.0, 5.2)
+		_honey_aegis_cd = BalanceConfig.AEGIS_CD
+		reactive_nova_requested.emit("aegis_freeze", global_position, BalanceConfig.AEGIS_DMG, BalanceConfig.AEGIS_RADIUS)
 	if stats.has_thorns_burst and _thorns_cd <= 0.0:
-		_thorns_cd = 1.2
-		reactive_nova_requested.emit("thorns_burst", global_position, 26.0, 4.4)
+		_thorns_cd = BalanceConfig.THORNS_CD
+		reactive_nova_requested.emit("thorns_burst", global_position, BalanceConfig.THORNS_DMG, BalanceConfig.THORNS_RADIUS)
 	if stats.has_orbit_shield and _orbit_shield_cd <= 0.0:
-		_orbit_shield_cd = 6.0
+		_orbit_shield_cd = BalanceConfig.ORBIT_SHIELD_CD
 		orbit_shield_requested.emit()
 
 	if current_hp <= 0.0:
 		if stats.has_cheat_death and _cheat_death_cd <= 0.0:
-			_cheat_death_cd = 90.0
-			current_hp = stats.max_hp * 0.55
-			_invuln_timer = 1.6
+			_cheat_death_cd = BalanceConfig.CHEAT_DEATH_CD
+			current_hp = stats.max_hp * BalanceConfig.CHEAT_DEATH_HEAL_PCT
+			_invuln_timer = BalanceConfig.CHEAT_DEATH_INVULN
 			cheat_death_triggered.emit()
 			return final_dmg
 		current_hp = 0.0

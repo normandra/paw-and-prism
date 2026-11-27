@@ -11,9 +11,9 @@ static func _ensure_init() -> void:
 		"slime_frog": {
 			"id": "slime_frog",
 			"enemy_name": "Dewdrop Frog",
-			"hp": 26.0,
-			"speed": 3.4,
-			"damage": 7.0,
+			"hp": 42.0,
+			"speed": 3.8,
+			"damage": 11.0,
 			"radius": 0.65,
 			"xp": 10.0,
 			"color": Color(0.45, 0.88, 0.48),
@@ -23,9 +23,9 @@ static func _ensure_init() -> void:
 		"hedgehog": {
 			"id": "hedgehog",
 			"enemy_name": "Spiky Hedgehog",
-			"hp": 36.0,
-			"speed": 4.6,
-			"damage": 9.0,
+			"hp": 58.0,
+			"speed": 5.2,
+			"damage": 14.0,
 			"radius": 0.65,
 			"xp": 14.0,
 			"color": Color(0.60, 0.42, 0.28),
@@ -35,9 +35,9 @@ static func _ensure_init() -> void:
 		"bat_owl": {
 			"id": "bat_owl",
 			"enemy_name": "Flap Owl-Bat",
-			"hp": 32.0,
-			"speed": 5.2,
-			"damage": 10.0,
+			"hp": 50.0,
+			"speed": 5.8,
+			"damage": 15.0,
 			"radius": 0.68,
 			"xp": 15.0,
 			"color": Color(0.44, 0.36, 0.78),
@@ -47,9 +47,9 @@ static func _ensure_init() -> void:
 		"acorn_boar": {
 			"id": "acorn_boar",
 			"enemy_name": "Tusk Piglet",
-			"hp": 78.0,
-			"speed": 3.3,
-			"damage": 15.0,
+			"hp": 125.0,
+			"speed": 3.9,
+			"damage": 20.0,
 			"radius": 0.85,
 			"xp": 24.0,
 			"color": Color(0.76, 0.40, 0.28),
@@ -59,9 +59,9 @@ static func _ensure_init() -> void:
 		"gloom_fox": {
 			"id": "gloom_fox",
 			"enemy_name": "Gloom Fox",
-			"hp": 54.0,
-			"speed": 4.0,
-			"damage": 13.0,
+			"hp": 84.0,
+			"speed": 4.6,
+			"damage": 18.0,
 			"radius": 0.72,
 			"xp": 26.0,
 			"color": Color(0.56, 0.28, 0.68),
@@ -72,9 +72,9 @@ static func _ensure_init() -> void:
 		"raccoon_bandit": {
 			"id": "raccoon_bandit",
 			"enemy_name": "Bandit Raccoon",
-			"hp": 96.0,
-			"speed": 4.4,
-			"damage": 17.0,
+			"hp": 150.0,
+			"speed": 5.2,
+			"damage": 23.0,
 			"radius": 0.80,
 			"xp": 38.0,
 			"color": Color(0.42, 0.44, 0.50),
@@ -84,9 +84,9 @@ static func _ensure_init() -> void:
 		"shroom_toad": {
 			"id": "shroom_toad",
 			"enemy_name": "Puff Shroom-Toad",
-			"hp": 68.0,
-			"speed": 3.1,
-			"damage": 14.0,
+			"hp": 105.0,
+			"speed": 3.7,
+			"damage": 19.0,
 			"radius": 0.78,
 			"xp": 28.0,
 			"color": Color(0.86, 0.26, 0.30),
@@ -97,9 +97,9 @@ static func _ensure_init() -> void:
 		"boss_grizzle": {
 			"id": "boss_grizzle",
 			"enemy_name": "Sir Grizzle, Honey-Armored King",
-			"hp": 3000.0,
-			"speed": 4.0,
-			"damage": 24.0,
+			"hp": 2000.0,
+			"speed": 4.8,
+			"damage": 25.0,
 			"radius": 1.85,
 			"color": Color(0.58, 0.34, 0.16),
 			"accent": Color(1.0, 0.78, 0.18),
@@ -110,8 +110,8 @@ static func _ensure_init() -> void:
 		"boss_whiskers": {
 			"id": "boss_whiskers",
 			"enemy_name": "Lady Whiskers, Arcane Owl-Empress",
-			"hp": 7000.0,
-			"speed": 4.3,
+			"hp": 4500.0,
+			"speed": 5.1,
 			"damage": 30.0,
 			"radius": 1.95,
 			"color": Color(0.32, 0.26, 0.66),
@@ -123,9 +123,9 @@ static func _ensure_init() -> void:
 		"boss_bramblehorn": {
 			"id": "boss_bramblehorn",
 			"enemy_name": "King Bramblehorn, Prism Stag-Dragon",
-			"hp": 15000.0,
-			"speed": 4.6,
-			"damage": 38.0,
+			"hp": 9500.0,
+			"speed": 5.5,
+			"damage": 33.0,
 			"radius": 2.25,
 			"color": Color(0.24, 0.14, 0.36),
 			"accent": Color(1.0, 0.42, 0.84),
@@ -146,74 +146,81 @@ static func get_all_boss_ids() -> Array[String]:
 	return ["boss_grizzle", "boss_whiskers", "boss_bramblehorn"]
 
 static func get_wave_profile(elapsed_sec: float) -> Dictionary:
-	# 20-minute (1200s) difficulty & pool progression (rebalanced for pure loot-driven power)
+	# 20-minute (1200s) difficulty & pool progression (calibrated via tests/balance_audit.gd)
 	if elapsed_sec < 120.0:
 		return {
 			"phase_name": "Sunny Meadow",
 			"pool": ["slime_frog", "hedgehog"],
-			"spawn_interval": 0.95,
-			"batch_size": 2,
+			"spawn_interval": 0.85,
+			"batch_size": 3,
 			"hp_scale": 1.0,
 			"dmg_scale": 1.0,
-			"max_active": 42,
+			"speed_scale": 1.0,
+			"max_active": 48,
 		}
 	elif elapsed_sec < 260.0:
 		return {
 			"phase_name": "Sunny Meadow",
 			"pool": ["slime_frog", "hedgehog", "bat_owl"],
-			"spawn_interval": 0.78,
+			"spawn_interval": 0.72,
 			"batch_size": 3,
-			"hp_scale": 1.30,
+			"hp_scale": 1.25,
 			"dmg_scale": 1.10,
-			"max_active": 62,
+			"speed_scale": 1.04,
+			"max_active": 68,
 		}
 	elif elapsed_sec < 420.0:
 		return {
 			"phase_name": "Sunny Meadow",
 			"pool": ["hedgehog", "bat_owl", "acorn_boar", "slime_frog"],
-			"spawn_interval": 0.65,
-			"batch_size": 3,
-			"hp_scale": 1.75,
+			"spawn_interval": 0.58,
+			"batch_size": 4,
+			"hp_scale": 1.60,
 			"dmg_scale": 1.22,
-			"max_active": 80,
+			"speed_scale": 1.08,
+			"max_active": 88,
 		}
 	elif elapsed_sec < 640.0:
 		return {
 			"phase_name": "Golden Sunset",
 			"pool": ["bat_owl", "acorn_boar", "gloom_fox", "hedgehog"],
-			"spawn_interval": 0.56,
+			"spawn_interval": 0.50,
 			"batch_size": 4,
-			"hp_scale": 2.45,
-			"dmg_scale": 1.42,
-			"max_active": 96,
+			"hp_scale": 2.15,
+			"dmg_scale": 1.35,
+			"speed_scale": 1.12,
+			"max_active": 106,
 		}
 	elif elapsed_sec < 840.0:
 		return {
 			"phase_name": "Golden Sunset",
 			"pool": ["acorn_boar", "gloom_fox", "raccoon_bandit", "shroom_toad"],
-			"spawn_interval": 0.50,
-			"batch_size": 4,
-			"hp_scale": 3.40,
-			"dmg_scale": 1.65,
-			"max_active": 112,
+			"spawn_interval": 0.44,
+			"batch_size": 5,
+			"hp_scale": 2.80,
+			"dmg_scale": 1.48,
+			"speed_scale": 1.17,
+			"max_active": 120,
 		}
 	elif elapsed_sec < 1050.0:
 		return {
 			"phase_name": "Twilight Grove",
 			"pool": ["gloom_fox", "raccoon_bandit", "shroom_toad", "acorn_boar", "bat_owl"],
-			"spawn_interval": 0.44,
+			"spawn_interval": 0.39,
 			"batch_size": 5,
-			"hp_scale": 4.60,
-			"dmg_scale": 1.90,
-			"max_active": 124,
+			"hp_scale": 3.55,
+			"dmg_scale": 1.60,
+			"speed_scale": 1.22,
+			"max_active": 134,
 		}
 	else:
 		return {
 			"phase_name": "Twilight Finale",
 			"pool": ["raccoon_bandit", "shroom_toad", "gloom_fox", "acorn_boar"],
-			"spawn_interval": 0.40,
-			"batch_size": 5,
-			"hp_scale": 6.00,
-			"dmg_scale": 2.20,
-			"max_active": 135,
+			"spawn_interval": 0.36,
+			"batch_size": 6,
+			"hp_scale": 4.30,
+			"dmg_scale": 1.72,
+			"speed_scale": 1.28,
+			"max_active": 145,
 		}

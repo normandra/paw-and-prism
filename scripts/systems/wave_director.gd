@@ -82,6 +82,8 @@ func step(delta: float, player_pos: Vector3, grid: SpatialGrid, loot_mgr: LootMa
 	var is_web: bool = OS.has_feature("web")
 	var max_act_cap: int = int(float(prof["max_active"]) * 0.72) if is_web else int(prof["max_active"])
 
+	var spd_scale: float = float(prof.get("speed_scale", 1.0))
+
 	# Swarm Surges
 	if _surge_index < _surge_times.size() and elapsed_time >= _surge_times[_surge_index]:
 		_surge_index += 1
@@ -91,7 +93,7 @@ func step(delta: float, player_pos: Vector3, grid: SpatialGrid, loot_mgr: LootMa
 			if enemies.size() >= max_act_cap + 14:
 				break
 			var eid: String = String(pool[_k % pool.size()])
-			_spawn_enemy(eid, player_pos, float(prof["hp_scale"]), float(prof["dmg_scale"]), false)
+			_spawn_enemy(eid, player_pos, float(prof["hp_scale"]), float(prof["dmg_scale"]), false, Vector3.INF, spd_scale)
 
 	# Regular Wave Spawning
 	_spawn_timer -= delta
@@ -103,7 +105,7 @@ func step(delta: float, player_pos: Vector3, grid: SpatialGrid, loot_mgr: LootMa
 			if enemies.size() >= max_act_cap:
 				break
 			var eid: String = String(pool[randi() % pool.size()])
-			_spawn_enemy(eid, player_pos, float(prof["hp_scale"]), float(prof["dmg_scale"]), false)
+			_spawn_enemy(eid, player_pos, float(prof["hp_scale"]), float(prof["dmg_scale"]), false, Vector3.INF, spd_scale)
 
 	# Periodic Elite Critter
 	_elite_timer -= delta
@@ -111,7 +113,7 @@ func step(delta: float, player_pos: Vector3, grid: SpatialGrid, loot_mgr: LootMa
 		_elite_timer = 80.0
 		var pool: Array = prof["pool"]
 		var eid: String = String(pool[randi() % pool.size()])
-		_spawn_enemy(eid, player_pos, float(prof["hp_scale"]), float(prof["dmg_scale"]), true)
+		_spawn_enemy(eid, player_pos, float(prof["hp_scale"]), float(prof["dmg_scale"]), true, Vector3.INF, spd_scale)
 		wave_banner.emit("Elite Critter Spotted!", Color(0.86, 0.50, 1.0))
 
 	# Periodic Acorn Chest
@@ -154,9 +156,9 @@ func _spawn_boss(boss_num: int, player_pos: Vector3) -> void:
 	boss_spawned.emit(boss)
 	wave_banner.emit("BOSS %d/3: %s!" % [boss_num, boss.enemy_name], Color(1.0, 0.36, 0.32))
 
-func _spawn_enemy(enemy_id: String, player_pos: Vector3, hp_scale: float, dmg_scale: float, is_elite: bool, exact_pos: Vector3 = Vector3.INF) -> EnemyEntity:
+func _spawn_enemy(enemy_id: String, player_pos: Vector3, hp_scale: float, dmg_scale: float, is_elite: bool, exact_pos: Vector3 = Vector3.INF, speed_scale: float = 1.0) -> EnemyEntity:
 	var e: EnemyEntity = EnemyEntity.new()
-	e.setup(enemy_id, hp_scale, dmg_scale, is_elite)
+	e.setup(enemy_id, hp_scale, dmg_scale, is_elite, speed_scale)
 
 	if exact_pos != Vector3.INF:
 		e.position = exact_pos
@@ -177,7 +179,7 @@ func _spawn_enemy(enemy_id: String, player_pos: Vector3, hp_scale: float, dmg_sc
 		e.spawn_telegraph_requested.connect(_on_enemy_telegraph_cb)
 	e.spawn_minion_requested.connect(func(mid: String, mpos: Vector3) -> void:
 		var prof: Dictionary = EnemyDatabase.get_wave_profile(elapsed_time)
-		_spawn_enemy(mid, player_pos, float(prof["hp_scale"]), float(prof["dmg_scale"]), false, mpos)
+		_spawn_enemy(mid, player_pos, float(prof["hp_scale"]), float(prof["dmg_scale"]), false, mpos, float(prof.get("speed_scale", 1.0)))
 	)
 	e.boss_phase_announced.connect(func(bname: String, msg: String) -> void:
 		wave_banner.emit("%s: %s" % [bname, msg], Color(1.0, 0.52, 0.25))

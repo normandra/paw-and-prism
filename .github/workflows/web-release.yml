@@ -45,7 +45,7 @@ jobs:
           curl -fsSL "https://github.com/godotengine/godot/archive/${GODOT_COMMIT}.tar.gz" -o /tmp/godot.tar.gz
           tar -xzf /tmp/godot.tar.gz -C /tmp/godot_src --strip-components=1
           cp build/web_custom.py /tmp/godot_src/custom.py
-          scons -C /tmp/godot_src platform=web -j"$(nproc)"
+          scons -C /tmp/godot_src platform=web target=template_release -j"$(nproc)"
           ls -lh /tmp/godot_src/bin/
           mv /tmp/godot_src/bin/godot.web.template_release*.zip custom_web_template/web_nothreads_release.zip
           rm -rf /tmp/godot_src /tmp/godot.tar.gz
@@ -68,6 +68,7 @@ jobs:
         run: |
           godot --headless --path . --import
           godot --headless --path . --script res://tests/verify_game.gd
+          godot --headless --path . --script res://tests/balance_audit.gd
 
       - name: Export Web build using stripped template & measure sizes
         run: |

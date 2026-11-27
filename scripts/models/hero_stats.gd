@@ -183,10 +183,10 @@ func unsocket_gem_from_equipped(slot: int, socket_idx: int) -> GemInstance:
 func recompute() -> void:
 	var hdef: Dictionary = HeroDatabase.get_hero(hero_id)
 	max_hp = float(hdef["base_hp"])
-	hp_regen = 0.8
+	hp_regen = BalanceConfig.BASE_HP_REGEN
 	move_speed = float(hdef["base_speed"])
-	crit_chance = 8.0
-	crit_mult = 165.0
+	crit_chance = BalanceConfig.BASE_CRIT_CHANCE
+	crit_mult = BalanceConfig.BASE_CRIT_MULT
 
 	# Collect active Global Item Effects
 	active_effects.clear()
@@ -222,7 +222,7 @@ func recompute() -> void:
 	has_cheat_death = has_effect("cheat_death")
 	has_fleet_paws = has_effect("fleet_paws")
 	has_comet_stride = has_effect("comet_stride")
-	incoming_dmg_mult = 1.45 if has_effect("glass_spark") else 1.0
+	incoming_dmg_mult = BalanceConfig.GLASS_TAKEN_MULT if has_effect("glass_spark") else 1.0
 
 	# Count total socketed Main Abilities so multi-skill focus tax applies uniformly
 	equipped_main_count = 0
@@ -240,7 +240,7 @@ func recompute() -> void:
 		for g in cnt_item.socketed_gems:
 			if g != null and g.get_gem_type() == GameEnums.GemType.MAIN:
 				equipped_main_count += 1
-	multi_skill_cd_mult = 1.0 + 0.25 * float(maxi(0, equipped_main_count - 1))
+	multi_skill_cd_mult = 1.0 + BalanceConfig.MULTI_SKILL_CD_TAX * float(maxi(0, equipped_main_count - 1))
 
 	# Compile PoE Main Socket Abilities + Linked Modifier Abilities
 	active_skill_configs.clear()
@@ -330,7 +330,7 @@ func _compile_main_skill(main_gem: GemInstance, mods_list: Array[GemInstance], e
 
 	if has_effect("prism_echo") and not linked_names.is_empty() and not echo:
 		echo = true
-		final_dmg *= 0.80
+		final_dmg *= BalanceConfig.PRISM_ECHO_DMG_MULT
 
 	var tags: Array = main_gem.get_tags()
 	var uses_proj: bool = tags.has(GameEnums.SkillTag.PROJECTILE) or tags.has(GameEnums.SkillTag.ORBIT)
@@ -340,20 +340,20 @@ func _compile_main_skill(main_gem: GemInstance, mods_list: Array[GemInstance], e
 
 	# Global Behavioral Item Tradeoffs
 	if has_effect("short_barrage") and uses_proj:
-		final_proj += 2
-		lifetime_mult *= 0.55
+		final_proj += BalanceConfig.SHORT_BARRAGE_PROJ
+		lifetime_mult *= BalanceConfig.SHORT_BARRAGE_LIFE_MULT
 	if has_effect("sniper_focus") and tags.has(GameEnums.SkillTag.PROJECTILE):
 		final_proj = 1
-		final_pierce += 2
-		final_speed *= 1.55
-		final_dmg *= 1.45
+		final_pierce += BalanceConfig.SNIPER_EXTRA_PIERCE
+		final_speed *= BalanceConfig.SNIPER_SPEED_MULT
+		final_dmg *= BalanceConfig.SNIPER_DMG_MULT
 	if has_effect("giant_slow_aoe") and (tags.has(GameEnums.SkillTag.AOE) or tags.has(GameEnums.SkillTag.ORBIT)):
-		area_mult *= 1.65
-		final_cd *= 1.33
+		area_mult *= BalanceConfig.GIANT_AOE_RADIUS_MULT
+		final_cd *= BalanceConfig.GIANT_AOE_CD_MULT
 	if has_effect("glass_spark"):
-		final_dmg *= 1.75
+		final_dmg *= BalanceConfig.GLASS_DMG_MULT
 	if has_effect("cadence_burst"):
-		final_cd *= 1.18
+		final_cd *= BalanceConfig.CADENCE_CD_MULT
 	final_cd *= multi_skill_cd_mult
 
 	final_cd = maxf(0.18, final_cd)

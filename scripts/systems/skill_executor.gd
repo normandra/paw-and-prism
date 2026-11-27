@@ -24,6 +24,8 @@ var _shield_orbit_angle: float = 0.0
 var _shield_orbit_hit_cd: Dictionary = {}
 var _cast_counter: int = 0
 var _next_cast_uid: int = 1
+var _kill_proc_icd: float = 0.0
+var _leech_icd: float = 0.0
 
 func setup(p_world: Node3D, p_grid: SpatialGrid, p_stats: HeroStats) -> void:
 	world_root = p_world
@@ -51,6 +53,8 @@ func clear_all() -> void:
 	_shield_orbit_timer = 0.0
 	_cast_counter = 0
 	_next_cast_uid = 1
+	_kill_proc_icd = 0.0
+	_leech_icd = 0.0
 	_shield_orbit_hit_cd.clear()
 	for n in _shield_orbit_nodes:
 		if is_instance_valid(n):
@@ -71,6 +75,11 @@ func step(delta: float, player_pos: Vector3, player_ctrl: PlayerController) -> v
 	if stats == null or world_root == null:
 		return
 
+	if _kill_proc_icd > 0.0:
+		_kill_proc_icd -= delta
+	if _leech_icd > 0.0:
+		_leech_icd -= delta
+
 	# Process delayed Echo casts
 	for i in range(_echo_queue.size() - 1, -1, -1):
 		_echo_queue[i]["delay"] = float(_echo_queue[i]["delay"]) - delta
@@ -82,9 +91,9 @@ func step(delta: float, player_pos: Vector3, player_ctrl: PlayerController) -> v
 	# Manage Orbit skills & trigger Active Skills
 	var cd_rate: float = 1.0
 	if stats.has_turret_stance and player_ctrl != null:
-		cd_rate *= (0.75 if player_ctrl.is_moving else 2.0)
+		cd_rate *= (BalanceConfig.TURRET_MOVE_RATE if player_ctrl.is_moving else BalanceConfig.TURRET_STILL_RATE)
 	if player_ctrl != null and player_ctrl.has_zoomies_active():
-		cd_rate *= 1.25
+		cd_rate *= BalanceConfig.ZOOMIES_CAST_RATE
 
 	var active_orbit_uids: Dictionary = {}
 	for cfg in stats.active_skill_configs:
@@ -199,15 +208,22 @@ func trigger_all_skills_bonus(player_pos: Vector3) -> void:
 	for cfg in stats.active_skill_configs:
 		if String(cfg["gem_id"]) == "starlight_orb":
 			continue
-		_trigger_skill(cfg, player_pos, true)
+		var cfg_copy: Dictionary = cfg.duplicate()
+		cfg_copy["damage"] = float(cfg["damage"]) * BalanceConfig.COMET_STRIDE_DMG_MULT
+		_trigger_skill(cfg_copy, player_pos, true)
 
 func trigger_kill_effects(pos: Vector3, was_chilled_flag: bool) -> void:
-	if stats == null or world_root == null:
+	if stats == null or world_root == null or _kill_proc_icd > 0.0:
 		return
+	var triggered: bool = false
 	if stats.has_ember_corpse:
-		trigger_reactive_nova("ember_corpse", pos, 24.0, 3.6)
+		trigger_reactive_nova("ember_corpse", pos, BalanceConfig.EMBER_CORPSE_DMG, BalanceConfig.EMBER_CORPSE_RADIUS)
+		triggered = true
 	if stats.has_frost_shatter and was_chilled_flag:
-		trigger_reactive_nova("frost_shatter", pos, 26.0, 4.4)
+		trigger_reactive_nova("frost_shatter", pos, BalanceConfig.FROST_SHATTER_DMG, BalanceConfig.FROST_SHATTER_RADIUS)
+		triggered = true
+	if triggered:
+		_kill_proc_icd = BalanceConfig.KILL_PROC_ICD_SEC
 
 func trigger_static_spark(pos: Vector3) -> void:
 	if stats == null or world_root == null or grid == null:
@@ -217,16 +233,16 @@ func trigger_static_spark(pos: Vector3) -> void:
 		return
 	var hit_map: Dictionary = {first_t.get_instance_id(): true}
 	_spawn_lightning_visual(pos, first_t.global_position, Color(0.55, 0.92, 1.0))
-	first_t.take_damage(20.0, Vector3.ZERO)
-	_emit_damage(first_t.global_position, 20.0, false, false, false, 0.0)
+	first_t.take_damage(BalanceConfig.STATIC_SPRINT_DMG, Vector3.ZERO)
+	_emit_damage(first_t.global_position, BalanceConfig.STATIC_SPRINT_DMG, false, false, false, 0.0)
 	var second_t: Node3D = grid.find_nearest(first_t.global_position, 8.0, hit_map)
 	if second_t != null:
 		_spawn_lightning_visual(first_t.global_position, second_t.global_position, Color(0.55, 0.92, 1.0))
-		second_t.take_damage(20.0, Vector3.ZERO)
-		_emit_damage(second_t.global_position, 20.0, false, false, false, 0.0)
+		second_t.take_damage(BalanceConfig.STATIC_SPRINT_DMG, Vector3.ZERO)
+		_emit_damage(second_t.global_position, BalanceConfig.STATIC_SPRINT_DMG, false, false, false, 0.0)
 
 func activate_orbit_shield() -> void:
-	_shield_orbit_timer = 5.0
+	_shield_orbit_timer = BalanceConfig.ORBIT_SHIELD_DUR
 
 func _step_temp_orbit_shield(delta: float, player_pos: Vector3) -> void:
 	if _shield_orbit_timer <= 0.0:
@@ -272,8 +288,8 @@ func _step_temp_orbit_shield(delta: float, player_pos: Vector3) -> void:
 			_shield_orbit_hit_cd[eid] = 0.4
 			var kb: Vector3 = e.global_position - player_pos
 			kb.y = 0.0
-			e.take_damage(22.0, kb.normalized() * 3.2 if kb.length_squared() > 0.01 else Vector3.ZERO)
-			_emit_damage(e.global_position, 22.0, false, false, false, 0.0)
+			e.take_damage(BalanceConfig.ORBIT_SHIELD_DMG, kb.normalized() * 3.2 if kb.length_squared() > 0.01 else Vector3.ZERO)
+			_emit_damage(e.global_position, BalanceConfig.ORBIT_SHIELD_DMG, false, false, false, 0.0)
 
 func _step_orbit_skill(cfg: Dictionary, delta: float, player_pos: Vector3) -> void:
 	var uid: int = int(cfg["uid"])
@@ -335,9 +351,9 @@ func _step_orbit_skill(cfg: Dictionary, delta: float, player_pos: Vector3) -> vo
 			var is_crit: bool = randf() * 100.0 < float(cfg["crit_chance"])
 			var dmg: float = base_dmg * (float(cfg["crit_mult"]) * 0.01 if is_crit else 1.0)
 			if is_fire and e.has_method("apply_burn"):
-				e.apply_burn(dmg * 0.25, 3.0)
+				e.apply_burn(dmg * BalanceConfig.BURN_DPS_RATIO, BalanceConfig.BURN_DURATION)
 			if is_cold and e.has_method("apply_chill"):
-				e.apply_chill(2.5)
+				e.apply_chill(BalanceConfig.CHILL_DURATION)
 			var kb: Vector3 = (e.global_position - player_pos)
 			kb.y = 0.0
 			e.take_damage(dmg, kb.normalized() * 2.2 if kb.length_squared() > 0.01 else Vector3.ZERO)
@@ -419,8 +435,8 @@ func _trigger_skill(cfg: Dictionary, player_pos: Vector3, is_echo: bool) -> bool
 		skill_casted.emit(gid)
 		if stats != null and stats.has_cadence_burst:
 			_cast_counter += 1
-			if _cast_counter % 4 == 0:
-				trigger_reactive_nova("cadence_burst", player_pos, 34.0, 4.6)
+			if _cast_counter % BalanceConfig.CADENCE_EVERY_N == 0:
+				trigger_reactive_nova("cadence_burst", player_pos, BalanceConfig.CADENCE_DMG, BalanceConfig.CADENCE_RADIUS)
 	return true
 
 func _fire_fan(origin: Vector3, target: Vector3, cfg: Dictionary, style: String, spread_step: float) -> void:
@@ -473,9 +489,9 @@ func _cast_chain_lightning(origin: Vector3, first_target: Node3D, cfg: Dictionar
 		var is_crit: bool = randf() * 100.0 < float(cfg["crit_chance"])
 		var dmg: float = base_dmg * (float(cfg["crit_mult"]) * 0.01 if is_crit else 1.0)
 		if is_fire and curr.has_method("apply_burn"):
-			curr.apply_burn(dmg * 0.25, 3.0)
+			curr.apply_burn(dmg * BalanceConfig.BURN_DPS_RATIO, BalanceConfig.BURN_DURATION)
 		if is_cold and curr.has_method("apply_chill"):
-			curr.apply_chill(2.5)
+			curr.apply_chill(BalanceConfig.CHILL_DURATION)
 		curr.take_damage(dmg, Vector3.ZERO)
 		_emit_damage(curr.global_position, dmg, is_crit, is_fire, is_cold, leech_pct)
 
@@ -526,5 +542,9 @@ func _on_area_enemy_hit(_enemy: Node3D, dmg: float, is_crit: bool, is_fire: bool
 	_emit_damage(pos, dmg, is_crit, is_fire, is_cold, leech_pct)
 
 func _emit_damage(pos: Vector3, dmg: float, is_crit: bool, is_fire: bool, is_cold: bool, leech_pct: float) -> void:
-	var heal_amt: float = minf(dmg * leech_pct * 0.01, stats.max_hp * 0.08)
+	var heal_amt: float = 0.0
+	if leech_pct > 0.0 and _leech_icd <= 0.0:
+		heal_amt = minf(dmg * leech_pct * 0.01, BalanceConfig.LEECH_MAX_PER_PROC)
+		if heal_amt > 0.01:
+			_leech_icd = BalanceConfig.LEECH_ICD_SEC
 	damage_dealt.emit(pos, dmg, is_crit, is_fire, is_cold, heal_amt)

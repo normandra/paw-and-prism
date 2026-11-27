@@ -113,7 +113,7 @@ func _run_all() -> void:
 	_assert(float(acorn_cfg["lifetime_mult"]) < 0.7, "Short Barrage reduces projectile lifetime range")
 	_assert(bool(acorn_cfg["echo"]) == false, "Unlinked Echo does NOT apply across unlinked socket gap")
 	_assert(not ("dash_max_charges" in test_stats), "Dash properties completely removed from HeroStats")
-	_assert(test_stats.has_fleet_paws and test_stats.has_kill_siphon and is_equal_approx(test_stats.incoming_dmg_mult, 1.45), "Fleet Paws, Kill Siphon & Glass Spark flags compiled")
+	_assert(test_stats.has_fleet_paws and test_stats.has_kill_siphon and is_equal_approx(test_stats.incoming_dmg_mult, BalanceConfig.GLASS_TAKEN_MULT), "Fleet Paws, Kill Siphon & Glass Spark flags compiled")
 	_assert(not GemDatabase.does_modifier_apply("mod_multishot", "honey_slam"), "Multi-Shot does NOT apply to melee Honey Slam")
 
 	# Enable link[1] + test Unique prism_echo + sniper_focus + replacement movement/cadence effects
@@ -125,7 +125,7 @@ func _run_all() -> void:
 			acorn_cfg = c
 	_assert(bool(acorn_cfg["echo"]) == true and int(acorn_cfg["projectiles"]) == 1 and int(acorn_cfg["pierce"]) >= 2, "Linked Echo + Sniper Focus forces 1 fast piercing shot")
 	_assert(test_stats.has_comet_stride and test_stats.has_cadence_burst and test_stats.has_stride_honey_nova, "Comet Stride, Cadence Burst & Stride Honey Nova compiled cleanly")
-	_assert(float(acorn_cfg["cooldown"]) > base_acorn_cd * 1.15, "Cadence Burst applies 1.18x skill cooldown tradeoff")
+	_assert(float(acorn_cfg["cooldown"]) > base_acorn_cd * 1.15, "Cadence Burst applies %.2fx skill cooldown tradeoff" % BalanceConfig.CADENCE_CD_MULT)
 
 	# Test Equipment Swap preserves gems safely
 	var tiny_wep: ItemInstance = ItemInstance.new()
@@ -210,14 +210,14 @@ func _run_all() -> void:
 	var helmet_item: ItemInstance = focus_stats.equipped[GameEnums.EquipSlot.HELMET]
 	helmet_item.insert_gem(0, GemInstance.new("petal_cyclone"))
 	focus_stats.recompute()
-	_assert(focus_stats.equipped_main_count == 2 and is_equal_approx(focus_stats.multi_skill_cd_mult, 1.25), "2 Main Abilities apply 1.25x Focus CD")
+	_assert(focus_stats.equipped_main_count == 2 and is_equal_approx(focus_stats.multi_skill_cd_mult, 1.28), "2 Main Abilities apply 1.28x Focus CD")
 	helmet_item.insert_gem(1, GemInstance.new("frost_nova"))
 	focus_stats.recompute()
-	_assert(focus_stats.equipped_main_count == 3 and is_equal_approx(focus_stats.multi_skill_cd_mult, 1.50), "3 Main Abilities apply 1.50x Focus CD")
+	_assert(focus_stats.equipped_main_count == 3 and is_equal_approx(focus_stats.multi_skill_cd_mult, 1.56), "3 Main Abilities apply 1.56x Focus CD")
 
 	var volley_enemy: EnemyEntity = EnemyEntity.new()
 	_assert(is_equal_approx(volley_enemy.consume_volley_dmg_mult(42), 1.0), "First volley projectile deals 1.00x full hit")
-	_assert(is_equal_approx(volley_enemy.consume_volley_dmg_mult(42), 0.35), "Same-volley repeat projectile dampened to 0.35x")
+	_assert(is_equal_approx(volley_enemy.consume_volley_dmg_mult(42), BalanceConfig.VOLLEY_REPEAT_MULT), "Same-volley repeat projectile dampened cleanly")
 	volley_enemy.free()
 
 	main_inst.skill_executor.trigger_reactive_nova("stride_honey_nova", main_inst.player.global_position, 24.0, 4.4)
@@ -274,7 +274,7 @@ func _run_all() -> void:
 		var b: EnemyEntity = main_inst.wave_director.active_boss
 		_assert(b != null and is_instance_valid(b) and b.boss_index == idx + 1, "Boss %d/3 spawned at t=%.1fs" % [idx + 1, boss_times[idx]])
 		if idx == 2:
-			_assert(is_equal_approx(b.max_hp, 15000.0), "King Bramblehorn rebalanced HP is 15000")
+			_assert(is_equal_approx(b.max_hp, 9500.0), "King Bramblehorn rebalanced HP is 9500")
 		var pickups_before: int = main_inst.loot_manager.pickups.size()
 		b.take_damage(999999.0, Vector3.ZERO, false)
 		await process_frame

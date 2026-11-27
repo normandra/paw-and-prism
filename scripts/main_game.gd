@@ -109,7 +109,7 @@ func _ready() -> void:
 	)
 	player.stride_honey_requested.connect(func(pos: Vector3) -> void:
 		if skill_executor != null:
-			skill_executor.trigger_reactive_nova("stride_honey_nova", pos, 24.0, 4.4)
+			skill_executor.trigger_reactive_nova("stride_honey_nova", pos, BalanceConfig.STRIDE_HONEY_DMG, BalanceConfig.STRIDE_HONEY_RADIUS)
 	)
 	player.comet_stride_requested.connect(func(pos: Vector3) -> void:
 		if skill_executor != null:
@@ -486,7 +486,7 @@ func _process(delta: float) -> void:
 	skill_executor.step(delta, player.global_position, player)
 	loot_manager.step(delta, player.global_position, wave_director.elapsed_time)
 
-	var touching: Array = spatial_grid.query_radius(player.global_position, 0.55)
+	var touching: Array = spatial_grid.query_radius(player.global_position, BalanceConfig.CONTACT_CHECK_RADIUS)
 	if not touching.is_empty():
 		var e: EnemyEntity = touching[0]
 		player.take_damage(e.contact_damage)

@@ -1,9 +1,10 @@
 # Paw & Prism — Living Game Design Document (GDD)
 
 > **Status:** Living Design Reference & Rework Blueprint  
-> **Version:** `v2.2` (Satchel Equip Fix, Stripped Web Build, Drop-Rate Formula & Boss DPS Balance)  
+> **Version:** `v2.3` (Comprehensive Difficulty Rebalance, `BalanceConfig` + Automated Audit & GitHub Reference Catalog)  
 > **Engine & Renderer:** Godot `4.7.2` (`GL Compatibility`)  
 > **Live Web Build:** https://normandra.github.io/paw-and-prism/  
+> **Items & Skills Catalog:** [docs/ITEMS_AND_SKILLS.md](https://github.com/normandra/paw-and-prism/blob/main/docs/ITEMS_AND_SKILLS.md)  
 > **Repository:** https://github.com/normandra/paw-and-prism  
 > **Target Platforms:** Web (single-threaded HTML5/WASM + PWA Service Worker, no `SharedArrayBuffer`), Android (`arm64-v8a` Portrait APK), macOS, Windows, Linux  
 
@@ -12,8 +13,9 @@
 ## How to Use This Document
 
 Each section separates verified mechanics from future exploration:
-1. **`Current Implementation` (Code-Verified `v2.2`):** Exact systems, tables, parameters, equations, and script owners active in the project.
+1. **`Current Implementation` (Code-Verified `v2.3`):** Exact systems, tables, parameters, equations, and script owners active in the project.
 2. **`Rework Ideas & Design Knobs`:** Checkable `[ ]` balance levers and next-step feature ideas ready to edit directly.
+3. **Quick Player & Balance Catalog:** See [docs/ITEMS_AND_SKILLS.md](https://github.com/normanmahendra/paw-and-prism/blob/main/docs/ITEMS_AND_SKILLS.md) for full Hero, Item Relic, Global Effect, Main Ability, Modifier & Balance Audit reference tables.
 
 ---
 
@@ -77,18 +79,20 @@ flowchart LR
 - **Title Showcase Camera:** Landscape `Vector3(0.0, 2.38, 5.85)` aiming at `(0, 0.56, 0)`; Portrait (`vp.y > vp.x * 1.05`) `Vector3(0.0, 2.65, 7.20)` aiming at `(0, 0.25, 0)`.
 - **Gameplay Chase Camera:** Landscape offset `Vector3(0.0, 17.5, 13.5)`; Portrait `Vector3(0.0, 22.5, 17.0)`; smooth lerp `min(1.0, delta * 9.0)` + quadratic trauma screen shake (`_shake_trauma² * 0.55`).
 
-### Combat & Scaling Mechanics (`player_controller.gd`, `hero_stats.gd`, `skill_executor.gd`)
+### Combat & Scaling Mechanics (`balance_config.gd`, `player_controller.gd`, `hero_stats.gd`, `skill_executor.gd`)
+- **Single Balance Truth:** All combat, sustain, enemy status, item-effect, and drop constants live in [balance_config.gd](https://github.com/normanmahendra/paw-and-prism/blob/main/scripts/data/balance_config.gd) and are verified by `tests/balance_audit.gd`.
 - **Hero Baseline Stats (fixed per hero, zero stat-stick bloat):**
-  - `hp_regen = 0.8/s`, `crit_chance = 8.0%`, `crit_mult = 165.0%`.
-  - Post-hit invulnerability: `0.45s` (`1.6s` when *Nine-Lives Bell* `cheat_death` saves from lethal hit with `55%` Max HP heal, `90s` CD).
-  - Incoming damage formula: `max(1.0, raw_dmg * incoming_dmg_mult)` (`1.45×` when `glass_spark` is equipped, `1.0×` otherwise).
+  - `hp_regen = 0.25/s`, `crit_chance = 8.0%`, `crit_mult = 165.0%` ($\mathbb{E}[\text{crit}] = 1.052$).
+  - Post-hit invulnerability: `0.30s` (`1.4s` when *Nine-Lives Bell* `cheat_death` saves from lethal hit with `45%` Max HP heal, `105s` CD).
+  - Contact hurt check radius: `0.68m`. Incoming damage formula: `max(1.0, raw_dmg * incoming_dmg_mult)` (`1.65×` when `glass_spark` is equipped, `1.0×` otherwise).
 - **Dynamic Cooldown Flow (`skill_executor.gd`):**
   - Base compiled cooldown floor: `max(0.18s, final_cd)`.
-  - Dynamic tick multiplier `cd_rate`: `1.0×` baseline; modified by **`turret_stance`** (`2.0×` faster while standing still, `0.75×` slower while moving) and **`zoomies_on_kill`** (`1.25×` cast rate + `1.28×` move speed for `2.0s` after any kill).
-- **Elemental & Leech Riders:**
-  - Fire skills & `mod_ignite`: apply `25–28%` DPS Burn for `3.0s`.
-  - Cold skills & `mod_chill`: apply Chill slow for `2.5s` (also primes targets for `frost_shatter` icy death rings).
-  - `mod_leech`: heals `5.5%` of linked skill damage dealt per hit, capped at `8%` `max_hp` per hit.
+  - Dynamic tick multiplier `cd_rate`: `1.0×` baseline; modified by **`turret_stance`** (`1.75×` faster while standing still, `0.78×` slower while moving) and **`zoomies_on_kill`** (`1.15×` cast rate + `1.18×` move speed for `1.8s` after any kill).
+- **Elemental, Knockback & Sustain Caps:**
+  - Fire skills & `mod_ignite`: apply `22%` DPS Burn for `3.0s` (`max` stack).
+  - Cold skills & `mod_chill`: slow enemies to `74%` speed for `2.2s` (also primes targets for `frost_shatter`).
+  - Knockback scaling: regular critters `0.38×`, Elites `0.15×`, Bosses `0.00×`.
+  - Sustain hard caps: `mod_leech` heals `2.2%` dmg dealt capped at **`2.5 HP/proc`** (`0.35s` global ICD -> max `7.14 HP/s`); `kill_siphon` heals **`1.2 HP`** (`0.80s` ICD -> max `1.50 HP/s`); combined capped sustain = **`8.89 HP/s`**.
 
 ### Rework Ideas — Combat & Camera
 - [ ] **Optional Cursor / Right-Stick Aiming:** Toggle between Auto-Aim Nearest and Cursor Aim (`[Q]`) for deliberate *Boomerang Bone* or *Sniper Focus* piercing shots.
@@ -103,10 +107,10 @@ In a standard **20-Min Run**, each hero starts equipped with a **Magic 2-link St
 
 | ID | Hero & Title | HP | Speed | Starter Weapon (`Magic`, 2-Link) | Starter Main Ability | Signature Effect | Starter Hat | Tagline |
 |---|---|---|---|---|---|---|---|---|
-| `shiba` | **Mochi the Shiba**<br>*Acorn Ranger* | `135` | `8.6` | *Mochi's Acorn Wand* (`G=G`) | *Acorn Barrage* (`ACRN`) | `zoomies_on_kill` (*Kills -> Speed Burst*) | `ribbon_hood` | Fast pup bursting with speed after every kill |
-| `bunny` | **Pip the Bunny**<br>*Starlight Mage* | `120` | `9.0` | *Pip's Star Staff* (`B=G`) | *Starlight Orbs* (`STAR`) | `orbit_shield` (*Hit -> Star Shield*) | `wizard_hat` | Swift bunny summoning swirling star blades |
-| `bear` | **Bramble the Bear**<br>*Honey Paladin* | `155` | `8.0` | *Bramble's Honey Hammer* (`R=B`) | *Honey Slam* (`SLAM`) | `stride_honey_nova` (*Moving -> Honey Nova*) | `leaf_crown` | Sturdy bear pulsing honey novas while marching |
-| `cat` | **Nori the Cat**<br>*Storm Whisker* | `125` | `8.9` | *Nori's Spark Claws* (`B=G`) | *Whisker Lightning* (`ZAP`) | `static_sprint` (*Moving -> Zap Sparks*) | `knight_helm` | Zippy cat sparking lightning arcs on the run |
+| `shiba` | **Mochi the Shiba**<br>*Acorn Ranger* | `110` | `6.7` | *Mochi's Acorn Wand* (`G=G`) | *Acorn Barrage* (`ACRN`) | `zoomies_on_kill` (*Kills -> Speed Burst*) | `ribbon_hood` | Fast pup bursting with speed after every kill |
+| `bunny` | **Pip the Bunny**<br>*Starlight Mage* | `95` | `7.0` | *Pip's Star Staff* (`B=G`) | *Starlight Orbs* (`STAR`) | `orbit_shield` (*Hit -> Star Shield*) | `wizard_hat` | Swift bunny summoning swirling star blades |
+| `bear` | **Bramble the Bear**<br>*Honey Paladin* | `130` | `6.2` | *Bramble's Honey Hammer* (`R=B`) | *Honey Slam* (`SLAM`) | `stride_honey_nova` (*Moving -> Honey Nova*) | `leaf_crown` | Sturdy bear pulsing honey novas while marching |
+| `cat` | **Nori the Cat**<br>*Storm Whisker* | `100` | `6.9` | *Nori's Spark Claws* (`B=G`) | *Whisker Lightning* (`ZAP`) | `static_sprint` (*Moving -> Zap Sparks*) | `knight_helm` | Zippy cat sparking lightning arcs on the run |
 
 ### Rework Ideas — Heroes
 - [ ] **Permanent Innate Traits:** Keep a hero's signature trait innate in addition to weapon swaps so *Bramble* always retains melee brawling flavor or *Pip* always hovers lightly over slows.
@@ -137,36 +141,36 @@ Items NEVER roll plain numerical stats like `+12% Damage` or `item_level`. Inste
 
 #### Standard & Tradeoff Global Effects (`18`)
 
-| Effect ID | In-Game Tag | Tradeoff? | Exact Gameplay Behavior |
+| Effect ID | In-Game Tag | Tradeoff? | Exact Gameplay Behavior (`v2.3` `BalanceConfig`) |
 |---|---|---|---|
-| `stride_honey_nova` | **Moving -> Honey Nova** | No | Every `7.0m` traveled unleashes a `4.4m` slowing Honey Nova (`24` dmg) |
-| `cadence_burst` | **4th Cast -> Burst \| Slow** | **Yes** | Every `4th` non-orbit cast erupts a `4.6m` burst (`34` dmg + Chill), at `1.18×` skill cooldowns |
-| `turret_stance` | **Stand Still -> 2x Cast** | **Yes** | Standing still ticks skill cooldowns `2.0×` faster; moving ticks at `0.75×` |
-| `zoomies_on_kill` | **Kills -> Speed Burst** | No | Every critter kill grants `2.0s` of Zoomies (`1.28×` move speed, `1.25×` cast rate) |
+| `stride_honey_nova` | **Moving -> Honey Nova** | No | Every `9.0m` traveled pulses a `3.6m` slowing Honey Nova (`16` dmg) |
+| `cadence_burst` | **4th Cast -> Burst \| Slow** | **Yes** | Every `4th` non-orbit cast erupts a `4.0m` burst (`24` dmg), at `1.20×` skill cooldowns |
+| `turret_stance` | **Stand Still -> 2x Cast** | **Yes** | Standing still ticks skill cooldowns `1.75×` faster; moving ticks at `0.78×` |
+| `zoomies_on_kill` | **Kills -> Speed Burst** | No | Every critter kill grants `1.8s` of Zoomies (`1.18×` move speed, `1.15×` cast rate) |
 | `edge_ricochet` | **Shots Bounce Back** | No | Non-boomerang projectiles bounce back toward nearest enemy once (`0.85×` lifetime) on timeout or arena wall |
-| `short_barrage` | **+2 Shots \| Short Range** | **Yes** | `+2` projectiles/orbiters globally, but projectile lifetime shrinks to `0.55×` |
-| `sniper_focus` | **Pierce +2 \| 1 Fast Shot** | **Yes** | Forces `1` projectile per cast, sets `pierce +2`, `1.55×` projectile speed, `1.45×` damage |
-| `giant_slow_aoe` | **Huge AoE \| Slower Cast** | **Yes** | `AoE` & `Orbit` skills gain `1.65×` radius, at `1.33×` longer cooldown |
-| `ember_corpse` | **Kills -> Fire Pop** | No | Defeated critters detonate in a `3.6m` fiery nova (`24` dmg + Burn) |
-| `frost_shatter` | **Chill Kills -> Ice Ring** | No | Defeating a chilled critter triggers a `4.4m` icy ring (`26` dmg + Chill slow) |
-| `static_sprint` | **Moving -> Zap Sparks** | No | Every `5.5m` traveled zaps up to `2` nearby foes (`20` dmg lightning arcs) |
-| `kill_siphon` | **Kills -> Siphon Heal** | No | Every critter kill restores `+2.5 HP` |
-| `thorns_burst` | **Hit -> Bramble Nova** | No | Taking damage triggers a `4.4m` Bramble Nova (`26` dmg, `1.2s` CD) |
+| `short_barrage` | **+2 Shots \| Short Range** | **Yes** | `+2` projectiles/orbiters globally, but projectile lifetime shrinks to `0.52×` |
+| `sniper_focus` | **Pierce +2 \| 1 Fast Shot** | **Yes** | Forces `1` projectile per cast, sets `pierce +2`, `1.50×` projectile speed, `1.42×` damage |
+| `giant_slow_aoe` | **Huge AoE \| Slower Cast** | **Yes** | `AoE` & `Orbit` skills gain `1.55×` radius, at `1.35×` longer cooldown |
+| `ember_corpse` | **Kills -> Fire Pop** | No | Defeated critters detonate in a `3.0m` fiery nova (`16` dmg + Burn, `0.25s` kill-proc ICD) |
+| `frost_shatter` | **Chill Kills -> Ice Ring** | No | Defeating a chilled critter triggers a `3.6m` icy ring (`16` dmg + Chill, `0.25s` kill-proc ICD) |
+| `static_sprint` | **Moving -> Zap Sparks** | No | Every `7.5m` traveled zaps up to `2` nearby foes (`14` dmg lightning arcs) |
+| `kill_siphon` | **Kills -> Siphon Heal** | No | Critter kills restore `+1.2 HP` (`0.80s` ICD -> max `1.50 HP/s`) |
+| `thorns_burst` | **Hit -> Bramble Nova** | No | Taking damage triggers a `3.8m` Bramble Nova (`18` dmg, `2.0s` CD) |
 | `gravity_slams` | **AoE Pulls Foes In** | No | Player novas, meteors & explosions yank hit critters inward instead of knocking away |
-| `glass_spark` | **Heavy Impact \| Fragile** | **Yes** | All compiled abilities deal `1.75×` damage, but hero takes `1.45×` incoming damage |
-| `fleet_paws` | **Moving -> Speed Ramp** | No | Continuous movement ramps up to `+25%` move speed over `2.0s` |
-| `orbit_shield` | **Hit -> Star Shield** | No | Taking damage activates `3` orbiting star shields (`2.6m`, `22` dmg) for `5.0s` (`6.0s` CD) |
-| `lucky_clover` | **Rarer Loot & Links** | No | Upgrades ground drop & chest rarity weights (`14%` Unique / `40%` Rare) and boosts socket link odds (`+14%`) |
+| `glass_spark` | **Heavy Impact \| Fragile** | **Yes** | All compiled abilities deal `1.62×` damage, but hero takes `1.65×` incoming damage |
+| `fleet_paws` | **Moving -> Speed Ramp** | No | Continuous movement ramps up to `+16%` move speed over `2.2s` |
+| `orbit_shield` | **Hit -> Star Shield** | No | Taking damage activates `3` orbiting star shields (`2.6m`, `14` dmg) for `3.8s` (`8.5s` CD) |
+| `lucky_clover` | **Rarer Loot & Links** | No | Upgrades ground drop & chest rarity weights (`14%` Unique / `40%` Rare), Drop rates (`1.30×`), and socket link odds (`+14%`) |
 
 #### Unique Items & Exclusive Keystones (`6 Uniques`, `5 Unique Effects`)
 
 | Unique Item | Slot | Fixed Sockets | Global Effects | Signature Build Identity |
 |---|---|---|---|---|
 | **Grand Acorn Scepter** | Weapon | `G=G=B=R` (`4L`) | `nova_barrage` (*All Shots Fire 360 Ring*) + `short_barrage` | Turns projectile casts into short-range 360-degree bullet rings |
-| **Prismwhisker Crown** | Helmet | `W=W=W` (`3L`) | `prism_echo` (*Linked Mods Double-Proc*) + `lucky_clover` | Doubles linked Modifier counts (`+2 -> +4` etc.), triggers Double Echo on linked skills & boosts rarity |
-| **Honeycomb Aegis** | Armor | `R=R=B=G` (`4L`) | `aegis_freeze` (*Hit -> Freezing Honey Nova*) + `thorns_burst` | Retaliatory tank chest erupting `5.2m` freezing novas (`32` dmg) + bramble bursts when hit |
-| **Paws of the Comet** | Boots | `G=G=B` (`3L`) | `comet_stride` (*Moving -> Bonus Casts*) + `fleet_paws` | Ramps up to `+25%` move speed while moving and triggers bonus casts of all non-orbit Main Abilities every `8.5m` traveled |
-| **Nine-Lives Bell** | Amulet | `W=B` (`2L`) | `cheat_death` (*Fatal Hit -> Burst Heal*) + `zoomies_on_kill` | Prevents fatal blow (`55%` heal + `1.6s` i-frames, `90s` CD) while chaining kill Zoomies |
+| **Prismwhisker Crown** | Helmet | `W=W=W` (`3L`) | `prism_echo` (*Linked Mods Double-Proc*) + `lucky_clover` | Doubles linked Modifier counts (`+2 -> +4` etc.), triggers Double Echo (`0.80×`) & boosts rarity |
+| **Honeycomb Aegis** | Armor | `R=R=B=G` (`4L`) | `aegis_freeze` (*Hit -> Freezing Honey Nova*) + `thorns_burst` | Retaliatory tank chest erupting `4.4m` freezing novas (`22` dmg, `3.0s` CD) + bramble bursts when hit |
+| **Paws of the Comet** | Boots | `G=G=B` (`3L`) | `comet_stride` (*Moving -> Bonus Casts*) + `fleet_paws` | Ramps up to `+16%` speed and triggers `0.65×` dmg bonus casts of non-orbit Main Abilities every `13.5m` traveled |
+| **Nine-Lives Bell** | Amulet | `W=B` (`2L`) | `cheat_death` (*Fatal Hit -> Burst Heal*) + `zoomies_on_kill` | Prevents fatal blow (`45%` heal + `1.4s` i-frames, `105s` CD) while chaining kill Zoomies |
 | **Starweaver Band** | Ring | `B=G` (`2L`) | `gravity_slams` (*AoE Pulls Foes In*) + `ember_corpse` | Clusters foes into AoEs and chain-detonates kills with Fire Pops |
 
 ### Rework Ideas — Behavioral Items
@@ -179,39 +183,39 @@ Items NEVER roll plain numerical stats like `+12% Damage` or `item_level`. Inste
 
 Only **Main Socket Abilities (`MAIN`)** and **Modifier Abilities (`MODIFIER`)** exist. Gems do not gain XP or have numeric levels — what matters is **how many Main Abilities you load (`Focus Tax`), which Modifiers share a contiguous link group with them, and how item Global Effects reshape them**.
 
-- **Multi-Main Focus Load (`hero_stats.gd`):** Equipping $N \ge 1$ Main Socket Abilities multiplies every Main skill's cooldown by $\text{CD}_{\text{focus}}(N) = 1.0 + 0.25 \cdot (N - 1)$ (`1.00×` for `1` Main, `1.25×` for `2`, `1.50×` for `3`, `1.75×` for `4`). Spreading across extra unlinked skills trades single-target speed for coverage rather than multiplying free DPS.
-- **Same-Volley Shotgun Dampener (`projectile_entity.gd`, `enemy_entity.gd`, `skill_executor.gd`):** When multiple projectiles from the **same cast volley** (`cast_uid`) strike the same enemy, the 1st hit deals **`1.00×`** damage and each extra projectile from that same volley deals **`0.35×`**. (`edge_ricochet` bounce-backs refresh as `-cast_uid` for a clean `1.00×` return hit.)
+- **Multi-Main Focus Load (`hero_stats.gd`):** Equipping $N \ge 1$ Main Socket Abilities multiplies every Main skill's cooldown by $\text{CD}_{\text{focus}}(N) = 1.0 + 0.28 \cdot (N - 1)$ (`1.00×` for `1` Main, `1.28×` for `2`, `1.56×` for `3`, `2.12×` for `5`). Spreading across extra unlinked skills trades single-target speed for coverage rather than multiplying free DPS.
+- **Same-Volley Shotgun Dampener (`projectile_entity.gd`, `enemy_entity.gd`, `skill_executor.gd`):** When multiple projectiles from the **same cast volley** (`cast_uid`) strike the same enemy, the 1st hit deals **`1.00×`** damage and each extra projectile from that same volley deals **`0.30×`**. (`edge_ricochet` bounce-backs refresh as `-cast_uid` for a clean `1.00×` return hit.)
 - **`Prismwhisker Crown` Balance (`hero_stats.gd`):** `prism_echo` grants Double Echo (`0.80×` per cast when `mod_echo` is not already linked) while doubling linked Modifier counts.
 
-### Main Socket Abilities (`10`)
+### Main Socket Abilities (`10`) — Audited `v2.3` Baseline
 
-| ID | Name (`Short`) | Color | Tags | Damage | Cooldown | Base Behavior |
-|---|---|---|---|---|---|---|
-| `acorn_barrage` | **Acorn Barrage** (`ACRN`) | Green | `Proj`, `Phys` | `24` | `0.65s` | Aimed fan of flying acorns (`1` base proj, spd `22`) |
-| `starlight_orb` | **Starlight Orbs** (`STAR`) | Blue | `Spell`, `Orbit`, `AoE` | `21` | `0.45s` | Persistent `2` orbiting star blades (`3.4m` radius, `99` pierce) |
-| `honey_slam` | **Honey Slam** (`SLAM`) | Red | `Melee`, `AoE`, `Phys` | `42` | `1.25s` | Slowing honey shockwave near nearest target (`4.3m` radius) |
-| `whisker_lightning` | **Whisker Lightning** (`ZAP`) | Blue | `Spell`, `Chain`, `Lightning` | `28` | `0.88s` | Instant static arc jumping across `2` base chains |
-| `petal_cyclone` | **Petal Cyclone** (`PETL`) | Green | `AoE`, `Proj`, `Phys` | `17` | `1.08s` | Rotating `6`-petal outward spiral (`1` pierce) |
-| `fireball_berry` | **Fireball Berry** (`FIRE`) | Red | `Proj`, `Spell`, `AoE`, `Fire` | `34` | `1.18s` | Explosive burning berry (`3.2m` splash + Burn DoT) |
-| `frost_nova` | **Frost Nova** (`FRST`) | Blue | `Spell`, `Proj`, `AoE`, `Cold` | `22` | `1.45s` | `4.2m` Chill ring (`0.7×` dmg) + `8` radial ice shards |
-| `boomerang_bone` | **Boomerang Bone** (`BONE`) | Red | `Proj`, `Phys` | `28` | `1.08s` | Heavy `99`-pierce bone flying outward and returning to hero |
-| `meteor_pine` | **Meteor Pinecone** (`PINE`) | Red | `Spell`, `AoE`, `Fire` | `66` | `2.05s` | Drops heavy burning pinecone slam (`4.2m`) on densest critter cluster |
-| `spirit_bees` | **Spirit Bees** (`BEES`) | Green | `Minion`, `Proj`, `Phys` | `20` | `0.98s` | Fires `2` naturally homing bees |
+| ID | Name (`Short`) | Color | Tags | Damage | Cooldown | Audited T0 ST DPS | Base Behavior |
+|---|---|---|---|---|---|---|---|
+| `acorn_barrage` | **Acorn Barrage** (`ACRN`) | Green | `Proj`, `Phys` | `21` | `0.70s` | `31.6` | Aimed fan of flying acorns (`1` base proj, spd `22`) |
+| `starlight_orb` | **Starlight Orbs** (`STAR`) | Blue | `Spell`, `Orbit`, `AoE` | `16` | `0.58s` | `37.7` | Persistent `2` orbiting star blades (`3.4m` radius, `99` pierce) |
+| `honey_slam` | **Honey Slam** (`SLAM`) | Red | `Melee`, `AoE`, `Phys` | `38` | `1.40s` | `28.6` | Slowing honey shockwave near nearest target (`4.0m` radius) |
+| `whisker_lightning` | **Whisker Lightning** (`ZAP`) | Blue | `Spell`, `Chain`, `Lightning` | `24` | `0.92s` | `27.4` | Instant static arc jumping across `2` base chains |
+| `petal_cyclone` | **Petal Cyclone** (`PETL`) | Green | `AoE`, `Proj`, `Phys` | `14` | `1.15s` | `12.8` | Rotating `6`-petal outward spiral (`1` pierce) |
+| `fireball_berry` | **Fireball Berry** (`FIRE`) | Red | `Proj`, `Spell`, `AoE`, `Fire` | `30` | `1.28s` | `31.6` | Explosive burning berry (`3.0m` splash + `22%` Burn DoT) |
+| `frost_nova` | **Frost Nova** (`FRST`) | Blue | `Spell`, `Proj`, `AoE`, `Cold` | `19` | `1.55s` | `12.9` | `4.0m` Chill ring (`0.7×` dmg) + `8` radial ice shards |
+| `boomerang_bone` | **Boomerang Bone** (`BONE`) | Red | `Proj`, `Phys` | `22` | `1.20s` | `19.3` | Heavy `99`-pierce bone flying outward and returning to hero |
+| `meteor_pine` | **Meteor Pinecone** (`PINE`) | Red | `Spell`, `AoE`, `Fire` | `56` | `2.25s` | `39.1` | Drops heavy burning pinecone slam (`4.0m`) on densest critter cluster |
+| `spirit_bees` | **Spirit Bees** (`BEES`) | Green | `Minion`, `Proj`, `Phys` | `17` | `1.05s` | `22.1` | Fires `2` naturally homing bees |
 
 ### Modifier Abilities (`10`)
 
 | ID | Name (`Short`) | Color | Required Tags | Linked Mutation |
 |---|---|---|---|---|
-| `mod_multishot` | **Multi-Shot** (`MULT`) | Green | `Proj` or `Orbit` | `+2` projectiles/orbiters (`0.80×` dmg per hit) |
-| `mod_chain` | **Chain Bounce** (`CHN`) | Green | `Proj` or `Chain` | Bounces `+2` additional targets |
-| `mod_fork` | **Twin Fork** (`FORK`) | Green | `Proj` | Projectiles split into `2` angled projectiles on first hit |
+| `mod_multishot` | **Multi-Shot** (`MULT`) | Green | `Proj` or `Orbit` | `+2` projectiles/orbiters (`0.78×` dmg per hit) |
+| `mod_chain` | **Chain Bounce** (`CHN`) | Green | `Proj` or `Chain` | Bounces `+2` additional targets (`0.92×` dmg per hit) |
+| `mod_fork` | **Twin Fork** (`FORK`) | Green | `Proj` | Projectiles split into `2` angled projectiles on first hit (`0.90×` dmg) |
 | `mod_pierce` | **Deep Pierce** (`PRCE`) | Green | `Proj` | Pierces `+3` targets |
-| `mod_homing` | **Homing Seekers** (`HOME`) | Green | `Proj` | Smooth steering toward nearest enemies + `1.15×` projectile speed |
-| `mod_echo` | **Double Echo** (`ECHO`) | Blue | *Any Main* | Triggers a delayed echo cast (`0.16s` later) / `+1` orbiter (`0.78×` dmg/hit) |
-| `mod_nova_area` | **Giant Blast** (`WIDE`) | Blue | `AoE` or `Orbit` | Expands AoE/Orbit radius (`1.55×`) |
-| `mod_ignite` | **Blazing Burn** (`BURN`) | Red | *Any Main* | Hits ignite critters (`25–28%` DPS Burn for `3.0s`) |
-| `mod_chill` | **Frost Chill** (`CHIL`) | Blue | *Any Main* | Hits apply `2.5s` Chill slow (combos with *Frost Shatter*) |
-| `mod_leech` | **Life Siphon** (`HEAL`) | Red | *Any Main* | Heals hero for `5.5%` of linked skill damage dealt |
+| `mod_homing` | **Homing Seekers** (`HOME`) | Green | `Proj` | Smooth steering toward nearest enemies (`1.12×` speed, `0.95×` dmg) |
+| `mod_echo` | **Double Echo** (`ECHO`) | Blue | *Any Main* | Delayed echo cast (`0.16s` later) / `+1` orbiter (`0.72×` dmg/hit) |
+| `mod_nova_area` | **Giant Blast** (`WIDE`) | Blue | `AoE` or `Orbit` | Expands AoE/Orbit radius (`1.45×`) |
+| `mod_ignite` | **Blazing Burn** (`BURN`) | Red | *Any Main* | Hits ignite critters (`22%` DPS Burn for `3.0s`) |
+| `mod_chill` | **Frost Chill** (`CHIL`) | Blue | *Any Main* | Hits apply `2.2s` Chill (`74%` enemy speed; triggers *Frost Shatter*) |
+| `mod_leech` | **Life Siphon** (`HEAL`) | Red | *Any Main* | Heals hero for `2.2%` hit dmg (`max 2.5 HP/proc`, `0.35s` ICD) |
 
 ---
 
@@ -233,53 +237,51 @@ Launchable directly via **`TUTORIAL`** on the Title Screen. The player starts co
 Only **3 collectible types** + **Acorn Treasure Chests** spawn on the meadow floor (`2.6m` pickup radius for Items/Main/Mod, `2.8m` for Chests; no XP shards, hearts, or dust pickups). Because swarm density climbs `~5.94×` from `00:00` (`2 / 0.95s`) to `17:30+` (`5 / 0.40s`), regular enemy drop odds are **time-normalized** against spawn intensity and gated by cooldowns + dry-streak pity so drops stay exciting rather than flooding the bag:
 
 1. **Wave Spawn Intensity $S(t)$:**
-   $$S(t) = \max\!\left(1.0,\; \frac{\text{batch}(t)\,/\,\text{interval}(t)}{2\,/\,0.95}\right)$$
-   - `00:00`: $S = 1.00$ · `04:20`: $S = 2.19$ · `10:40`: $S = 3.80$ · `17:30`: $S = 5.94$
+   $$S(t) = \max\!\left(1.0,\; \frac{\text{batch}(t)\,/\,\text{interval}(t)}{3\,/\,0.85}\right)$$
+   - `00:00`: $S = 1.00$ · `04:20`: $S = 1.95$ · `10:40`: $S = 3.22$ · `17:30`: $S = 4.72$
 2. **Regular Enemy Drop Probabilities (checked only after minimum cooldown elapsed):**
    - **Item Chance** (gate $\Delta t \ge 16.0\text{s}$, or `12.5s` with `lucky_clover`):
      $$P_{\text{item}}(t, L, k_i) = \text{clamp}\!\left(\frac{0.018 \cdot (1.30 \text{ if } L \text{ else } 1.0)}{S(t)^{0.75}} + \max(0,\, k_i - 65) \cdot 0.0015,\;\; 0.002,\;\; 0.12\right)$$
    - **Ability Gem Chance** (gate $\Delta t \ge 24.0\text{s}$, or `19.0s` with `lucky_clover`):
      $$P_{\text{gem}}(t, L, k_g) = \text{clamp}\!\left(\frac{0.011 \cdot (1.30 \text{ if } L \text{ else } 1.0)}{S(t)^{0.75}} + \max(0,\, k_g - 95) \cdot 0.0012,\;\; 0.0015,\;\; 0.09\right)$$
-   - Dry counters $k_i, k_g$ increment per regular kill and reset to `0` on drop (`k_i` Grace `65`, `k_g` Grace `95`). Opening rates start at `1.8%` Item / `1.1%` Gem (`2.34%` / `1.43%` Lucky) and taper to `0.47%` / `0.29%` at `17:30`.
+   - Dry counters $k_i, k_g$ increment per regular kill and reset to `0` on drop (`k_i` Grace `65`, `k_g` Grace `95`).
 3. **Structured Drop Sources & Expected 20-Minute Run Budget:**
    - **Regular Critters (cooldown-gated):** `~18–26` Items (`~1.0–1.5/min`) and `~12–18` Ability gems.
-   - **Elite Critter** *(initial `65s`, repeat every `80s`, `~14` per run)*: `65%` (`80%` Lucky) Item (`42%`/`60%` Rare else Magic) · `40%` (`55%` Lucky) Ability gem · `+18 HP` heal.
-   - **Acorn Treasure Chest** *(initial `55s`, repeat every `95s`, `~12` per run, `16–26m` away)*: `100%` Item (`52%`/`72%` Lucky Rare else Magic) · `50%` (`68%` Lucky) Ability gem · `+35 HP` heal.
-   - **Boss (`3` per Run):** `1` Unique Item + `1` Rare Item + `1` Main Ability + `1` Modifier Ability + `+50 HP` heal.
+   - **Elite Critter** *(initial `65s`, repeat every `80s`, `~14` per run)*: `65%` (`80%` Lucky) Item (`42%`/`60%` Rare else Magic) · `40%` (`55%` Lucky) Ability gem · `+12 HP` heal.
+   - **Acorn Treasure Chest** *(initial `55s`, repeat every `95s`, `~12` per run, `16–26m` away)*: `100%` Item (`52%`/`72%` Lucky Rare else Magic) · `50%` (`68%` Lucky) Ability gem · `+20 HP` heal.
+   - **Boss (`3` per Run):** `1` Unique Item + `1` Rare Item + `1` Main Ability + `1` Modifier Ability + `+35 HP` heal.
 
-### Theoretical Single-Ability Maxed-Support DPS Ceiling & Enemy HP Baseline
-Baseline critical factor across all heroes is $\mathbb{E}[\text{crit}] = 1 + 0.08 \times (1.65 - 1) = 1.052$. Because additional equipped Main Abilities increase all cooldowns by `+25%` per extra skill ($\text{CD}(N) = 1 + 0.25(N - 1)$), peak single-target boss DPS comes from funneling a **single Main Ability (`N = 1`)** into a 4-link with top behavioral Uniques/Tradeoffs:
+### Theoretical Single-Ability Maxed-Support DPS Ceiling & Enemy HP Baseline (`balance_audit.gd`)
+Baseline critical factor across all heroes is $\mathbb{E}[\text{crit}] = 1 + 0.08 \times (1.65 - 1) = 1.052$. Because additional equipped Main Abilities increase all cooldowns by `+28%` per extra skill ($\text{CD}(N) = 1 + 0.28(N - 1)$), peak single-target boss DPS comes from funneling a **single Main Ability (`N = 1`)** into a 4-link with top behavioral Uniques/Tradeoffs:
 
-| Maxed Single-Ability Archetype (`N = 1`, 4-Link BiS) | Stack Formula (Single Target) | Stationary Peak DPS | Kiting / Mixed DPS | Role & Tradeoff |
-|---|---|---|---|---|
-| **Acorn Barrage Sniper** (`sniper_focus` + `glass_spark` + `prism_echo` `0.80×` + `turret_stance` + `mod_ignite`) | $24 \times 1.45 \times 1.75 \times 0.80 \times 1.052 = 51.3/\text{hit}$; `2` casts/`0.65s` | **`328 DPS`** *(w/ burn)* | **`~190–290 DPS`** | Best pure boss-killer (`+45%` incoming dmg taken) |
-| **Spirit Bees Homing** (`mod_multishot` `0.80×` -> `6` bees, `0.35×` shotgun weight `= 2.75×/volley` + `glass_spark` + `prism_echo` + `turret_stance`) | $20 \times 0.80 \times 1.75 \times 0.80 \times 1.052 \times 2.75 = 64.8/\text{volley}$; `2` volleys/`0.98s` | **`265–337 DPS`** *(w/ adds Zoomies)* | **`~165–240 DPS`** | Reliable auto-tracking while dodging |
-| **Meteor Pinecone AoE** (`mod_nova_area` + `glass_spark` + `prism_echo` `0.80×` + `turret_stance` + `comet_stride`) | $66 \times 1.75 \times 0.80 \times 1.052 = 97.2/\text{hit}$; `2` hits/`2.05s` (`+24.3` Burn) | **`214 DPS`** *(+`~90` stride casts)* | **`~210–300 DPS`** | Massive AoE pack + add clear |
+| Build Archetype (`balance_audit.gd`) | Stack Formula / Condition | Audited DPS | Boss / Endgame Matchup |
+|---|---|---|---|
+| **T1 Early Acorn Sniper** (`06:30`) | `Acorn Barrage` + `sniper_focus` (`1.42×`) + `mod_pierce` | **`44.8 DPS`** | **06:30 Grizzle (`2,000 HP`) = `44.6s`** |
+| **T2 Mid Acorn + Crown** (`13:00`) | + `Prismwhisker Crown` (`prism_echo` `0.80×` × 2) + `mod_homing` (`0.95×`) | **`68.1 DPS`** | **13:00 Whiskers (`4,500 HP`) = `66.1s`** |
+| **T3 Solid Acorn + Crown** (No Glass) | + `mod_ignite` (`+22%` Burn DoT) | **`73.4 DPS`** | **19:30 Bandit (`645 HP`) = `8.8s`** (`Bramblehorn = 129.5s`) |
+| **T3 Max Acorn Sniper** (`N = 1` BiS) | + `glass_spark` (`1.62×` dmg / `1.65×` taken) + `turret_stance` (`1.75×` still / `0.78×` move) | **`201.6` still / `94.6` moving** | **19:30 Bramblehorn (`9,500 HP`) = `47.1s`** still |
+| **T3 Max Spirit Bees** (`6` homing bees) | `mod_multishot` (`0.78×`, `0.30×` volley rule -> `2.50×` weight) + `glass` + `prism_echo` + `turret` | **`146.9` still / `67.6` moving** | Reliable homing pressure while weaving |
+| **T3 Max Meteor Pinecone** | `56` dmg + `mod_nova_area` + `glass` + `prism_echo` + `turret` | **`135.6` still** | Massive AoE pack + boss hybrid |
+| **Random `5`-Main Unlinked Spam** (`N = 5`) | `5` random unlinked Main gems (`Focus CD = 2.12×`) | **`70.3 DPS` total** | Loses decisively (`< 35%` of focused BiS!) |
 
-- **Target Boss & Elite Baseline Against Practical Ceiling (`~240–330 DPS` Maxed / `~110–180 DPS` Mid-Run):**
-  - **`06:30` Sir Grizzle:** **`3,000 HP`** -> `~20–28s` duel at `110–150 DPS`.
-  - **`13:00` Lady Whiskers:** **`7,000 HP`** -> `~30–40s` duel at `175–230 DPS`.
-  - **`19:30` King Bramblehorn:** **`15,000 HP`** -> `~45–60s` finale duel at `250–330 DPS` (no longer dies in `5–10s` to un-dampened projectile shotgunning).
-  - **Elite `Bandit Raccoon` at Twilight (`17:30+`, `96 × 6.0 × 3.6 = 2,074 HP`):** `~7–10s` late-game mini-boss threat.
+### Wave Pacing & Lethality (`enemy_database.gd`, `wave_director.gd`)
+Calibrated `hp_scale` (`1.00× -> 4.30×`), `dmg_scale` (`1.00× -> 1.72×`), `speed_scale` (`1.00× -> 1.28×`), and Boss HP (`2,000` / `4,500` / `9,500`) so swarms outrun slow movement and bosses 2-shot mistakes (`1`-shot with `glass_spark`):
 
-### Wave Pacing (`enemy_database.gd`, `wave_director.gd`)
-Rebalanced `hp_scale` (`1.00× -> 6.00×`) and boss HP (`3000`, `7000`, `15000`) to stay tense against maxed 4-link + Unique builds:
-
-| Time Window | Biome Phase | Enemy Pool | Spawn Int | Batch | HP Scale | Dmg Scale | Max Active (Desk / Web) |
-|---|---|---|---|---|---|---|---|
-| `00:00–02:00` | Sunny Meadow | Frog, Hedgehog | `0.95s` | `2` | `1.00×` | `1.00×` | `42` / `30` |
-| `02:00–04:20` | Sunny Meadow | Frog, Hedgehog, Owl-Bat | `0.78s` | `3` | `1.30×` | `1.10×` | `62` / `44` |
-| `04:20–07:00` | Sunny Meadow | Hedgehog, Owl-Bat, Boar, Frog | `0.65s` | `3` | `1.75×` | `1.22×` | `80` / `57` |
-| `07:00–10:40` | Golden Sunset | Owl-Bat, Boar, Gloom Fox, Hedgehog | `0.56s` | `4` | `2.45×` | `1.42×` | `96` / `69` |
-| `10:40–14:00` | Golden Sunset | Boar, Gloom Fox, Bandit, Shroom-Toad | `0.50s` | `4` | `3.40×` | `1.65×` | `112` / `80` |
-| `14:00–17:30` | Twilight Grove | Fox, Bandit, Toad, Boar, Owl-Bat | `0.44s` | `5` | `4.60×` | `1.90×` | `124` / `89` |
-| `17:30–20:00` | Twilight Finale | Bandit, Toad, Gloom Fox, Boar | `0.40s` | `5` | `6.00×` | `2.20×` | `135` / `97` |
+| Time Window | Biome Phase | Enemy Pool | Spawn Int | Batch | HP Scale | Dmg Scale | Speed Scale | Max Active (Desk / Web) |
+|---|---|---|---|---|---|---|---|---|
+| `00:00–02:00` | Sunny Meadow | Frog (`42`), Hedgehog (`58`) | `0.85s` | `3` | `1.00×` | `1.00×` | `1.00×` | `48` / `34` |
+| `02:00–04:20` | Sunny Meadow | Frog, Hedgehog, Owl-Bat (`50`) | `0.72s` | `3` | `1.25×` | `1.10×` | `1.04×` | `68` / `48` |
+| `04:20–07:00` | Sunny Meadow | Hedgehog, Owl-Bat, Boar (`125`), Frog | `0.58s` | `4` | `1.60×` | `1.22×` | `1.08×` | `88` / `63` |
+| `07:00–10:40` | Golden Sunset | Owl-Bat, Boar, Gloom Fox (`84`), Hedgehog | `0.50s` | `4` | `2.15×` | `1.35×` | `1.12×` | `106` / `76` |
+| `10:40–14:00` | Golden Sunset | Boar, Gloom Fox, Bandit (`150`), Shroom-Toad (`105`) | `0.44s` | `5` | `2.80×` | `1.48×` | `1.17×` | `120` / `86` |
+| `14:00–17:30` | Twilight Grove | Fox, Bandit, Toad, Boar, Owl-Bat | `0.39s` | `5` | `3.55×` | `1.60×` | `1.22×` | `134` / `96` |
+| `17:30–20:00` | Twilight Finale | Bandit, Toad, Gloom Fox, Boar | `0.36s` | `6` | `4.30×` | `1.72×` | `1.28×` | `145` / `104` |
 
 - **Swarm Surges:** `04:00`, `09:30`, `15:30`, and `18:00` (`12` Web / `14` Desktop critters).
 - **Scripted Bosses (`enemy_entity.gd`):**
-  - `06:30` (**Sir Grizzle**, `3,000 HP`, `24 dmg`) — Honey Slam (`5.4m`) & Dash Charge (`3.4×` spd); spawns `4x` `acorn_boar` <= `50%` HP.
-  - `13:00` (**Lady Whiskers**, `7,000 HP`, `30 dmg`) — `7`-way (`9` enraged) projectile fans, `5x` meteor rings, `12`-orb radial volley.
-  - `19:30` (**King Bramblehorn**, `15,000 HP`, `38 dmg`) — `12`-way (`16` enraged) spiral volley, `4x` meteors, cross nova, spawns `3x` `gloom_fox` <= `50%` HP.
+  - `06:30` (**Sir Grizzle**, `2,000 HP`, `25 dmg`, `4.8 spd`) — Honey Slam (`5.6m`, `1.50×` dmg, `0.90s` windup) & Dash Charge (`3.4×` spd); spawns `4x` `acorn_boar` <= `50%` HP.
+  - `13:00` (**Lady Whiskers**, `4,500 HP`, `30 dmg`, `5.1 spd`) — `7`-way (`9` enraged) projectile fans (`13.0` spd), `5x` meteor rings (`0.92s` windup, `1.40×` dmg), `12`-orb radial volley.
+  - `19:30` (**King Bramblehorn**, `9,500 HP`, `33 dmg`, `5.5 spd`) — `12`-way (`16` enraged) spiral volley (`13.0` spd), `4x` meteors (`1.45×` dmg), cross nova (`1.65×` dmg = `93.7` slam -> 2-shots standard Mochi, 1-shots Glass), spawns `3x` `gloom_fox` <= `50%` HP.
 
 ---
 
@@ -319,10 +321,12 @@ Rebalanced `hp_scale` (`1.00× -> 6.00×`) and boss HP (`3000`, `7000`, `15000`)
 ```bash
 "/Applications/Godot 2.app/Contents/MacOS/Godot" --headless --path /Users/normanmahendra/Documents/CardThrone --import
 "/Applications/Godot 2.app/Contents/MacOS/Godot" --headless --path /Users/normanmahendra/Documents/CardThrone --script res://tests/verify_game.gd
+"/Applications/Godot 2.app/Contents/MacOS/Godot" --headless --path /Users/normanmahendra/Documents/CardThrone --script res://tests/balance_audit.gd
 ./scripts/build_all.sh
 ```
 
 ### Change Log
-- **`2026-11-25 (v2.2 Balance, Equip UX & Stripped Web):** Fixed Satchel item/socket tapping (`MOUSE_FILTER_STOP`, `DRAG_THRESHOLD = 14px`, `<18px` tap window), added direct per-row emerald `Equip` buttons, auto-selection of bag Relic #0 with confirmation feedback, and `Focus Load` indicator. Added spawn-normalized Loot Drop-Rate Formula + dry-streak pity + cooldown gates (`~35–48` Items per 20-min run vs swarm spam), Multi-Main Focus Tax (`+25%` CD per extra Main Ability), Same-Volley `0.35×` Shotgun Dampener, `prism_echo` `0.80×` balancing, and calibrated `hp_scale` (`1.0× -> 6.0×`) + Boss HP (`3,000` / `7,000` / `15,000`) against maxed single-ability DPS math (`~240–330` practical DPS). Added trimmed Web export, PWA Service Worker caching, `<link rel="preload">`, `build/web_custom.py`, and `.github/workflows/web-release.yml` stripped-WASM CI pipeline. Verified all checks green via headless `tests/verify_game.gd`.
+- **`2026-11-25 (v2.3 Difficulty Rebalance, Balance System & Catalog Doc):** Created centralized `BalanceConfig` (`scripts/data/balance_config.gd`) and automated `tests/balance_audit.gd` verification harness auditing all 10 Main Abilities' T0 DPS (`[12.8, 39.1]`), focused single-ability BiS vs 5-Main random spam (`201.6` vs `70.3` DPS), Boss/Elite TTKs, hero lethality (`2`-shot non-Glass / `1`-shot Glass Boss 3 slams; `3`-hit late Bandits), capped sustain (`8.89 HP/s` total across Leech + Kill Siphon + Regen), and late enemy chase speed (`107%` of Bear). Rebalanced hero HP/speed (`95–130 HP`, `6.2–7.0` spd), Boss HP (`2,000` / `4,500` / `9,500`), wave speed/damage/HP scaling, and Boss attack cadence. Published full standalone GitHub catalog [docs/ITEMS_AND_SKILLS.md](https://github.com/normandra/paw-and-prism/blob/main/docs/ITEMS_AND_SKILLS.md) and fixed `target=template_release` in `.github/workflows/web-release.yml`.
+- **`2026-11-25 (v2.2 Balance, Equip UX & Stripped Web):** Fixed Satchel item/socket tapping (`MOUSE_FILTER_STOP`, `DRAG_THRESHOLD = 14px`, `<18px` tap window), added direct per-row emerald `Equip` buttons, auto-selection of bag Relic #0 with confirmation feedback, and `Focus Load` indicator. Added spawn-normalized Loot Drop-Rate Formula + dry-streak pity + cooldown gates (`~35–48` Items per 20-min run vs swarm spam), Multi-Main Focus Tax, Same-Volley Shotgun Dampener, `prism_echo` `0.80×` balancing, trimmed Web export, PWA Service Worker caching, `<link rel="preload">`, `build/web_custom.py`, and `.github/workflows/web-release.yml`.
 - **`2026-11-25 (v2.1 Mobile & Android Release):** Removed Hop-Dash completely across input/physics/HUD/TouchControls and replaced the 5 dash effects with movement/cadence effects (`stride_honey_nova`, `cadence_burst`, `kill_siphon`, `fleet_paws`, `comet_stride`). Overhauled portrait mobile readability (`2.75×` phone `content_scale_factor`, portrait-tuned Title/HUD/EndScreen, 4-tab single-column mobile Satchel) and added `TouchScrollContainer` momentum drag-scrolling with release-tap guards across Satchel and EndScreen. Added portrait ARM64 Android preset (`export_presets.cfg`) and automated signed APK GitHub Release workflow (`.github/workflows/android-release.yml`). Verified via `tests/verify_game.gd`, Web/Desktop builds, and Chrome portrait (`390×844`) & desktop (`1280×720`) screenshots.
 - **`2026-11-24 (v2.0 Revamp):** Replaced XP/leveling, `LevelUpModal`, Passive gems, Heart/Dust ground drops, and Prism Forge crafting with pure behavioral Item Effects & Tradeoffs, strictly 3 ground loot types (`Items`, `Main Abilities`, `Modifier Abilities`) with fixed sockets/links, a 3-beat PoE-style playable Tutorial (`TutorialDirector`), and streamlined icon-first HUD/Title/Satchel (`Tradeoff Comparison Card`). Verified all checks green via headless `tests/verify_game.gd` and rebuilt Web/macOS/Windows/Linux targets.
