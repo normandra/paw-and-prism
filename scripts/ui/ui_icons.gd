@@ -8,7 +8,7 @@ static func _from_svg(key: String, svg_str: String, scale_factor: float = 2.0) -
 	var img: Image = Image.new()
 	var err: int = img.load_svg_from_string(svg_str, scale_factor)
 	if err != OK or img.is_empty():
-		img = Image.create(32, 32, false, Image.FORMAT_RGBA8)
+		img = Image.create_empty(32, 32, false, Image.FORMAT_RGBA8)
 		img.fill(Color(1.0, 0.85, 0.35, 1.0))
 	var tex: ImageTexture = ImageTexture.create_from_image(img)
 	_cache[key] = tex

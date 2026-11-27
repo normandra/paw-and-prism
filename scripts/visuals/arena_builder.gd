@@ -90,7 +90,7 @@ func _build_ground(parent: Node3D) -> void:
 	parent.add_child(plaza)
 
 func _generate_meadow_texture() -> ImageTexture:
-	var img: Image = Image.create(128, 128, false, Image.FORMAT_RGBA8)
+	var img: Image = Image.create_empty(128, 128, false, Image.FORMAT_RGBA8)
 	var rng: RandomNumberGenerator = RandomNumberGenerator.new()
 	rng.seed = 42077
 	for y in range(128):
@@ -110,7 +110,7 @@ func _generate_meadow_texture() -> ImageTexture:
 
 func _generate_plaza_texture() -> ImageTexture:
 	var sz: int = 192
-	var img: Image = Image.create(sz, sz, false, Image.FORMAT_RGBA8)
+	var img: Image = Image.create_empty(sz, sz, false, Image.FORMAT_RGBA8)
 	var rng: RandomNumberGenerator = RandomNumberGenerator.new()
 	rng.seed = 77112
 	var half: float = float(sz) * 0.5
