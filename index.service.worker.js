@@ -4,7 +4,7 @@
 // Incrementing CACHE_VERSION will kick off the install event and force
 // previously cached resources to be updated from the network.
 /** @type {string} */
-const CACHE_VERSION = '1795870915|1858797';
+const CACHE_VERSION = '1795875226|1816863';
 /** @type {string} */
 const CACHE_PREFIX = 'Paw & Prism-sw-cache-';
 const CACHE_NAME = CACHE_PREFIX + CACHE_VERSION;
