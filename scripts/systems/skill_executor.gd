@@ -2,7 +2,7 @@ class_name SkillExecutor
 extends Node
 
 signal damage_dealt(pos: Vector3, amount: float, is_crit: bool, is_fire: bool, is_cold: bool, leech_amount: float)
-signal skill_casted(skill_id: String)
+signal skill_casted(card_id: String)
 
 var world_root: Node3D = null
 var grid: SpatialGrid = null
@@ -11,18 +11,18 @@ var stats: HeroStats = null
 var _projs: Array[ProjectileEntity] = []
 var _areas: Array[AreaEffectEntity] = []
 var _cooldowns: Dictionary = {}
+var _card_cast_counts: Dictionary = {}
 var _echo_queue: Array[Dictionary] = []
 
-# Orbiting stars managed per active starlight_orb config uid
+# Orbiting stars managed per active starlight_orb card uid
 var _orbit_groups: Dictionary = {} # uid -> {"nodes": Array[MeshInstance3D], "angle": float, "hit_cd": Dictionary}
 var _spiral_phase: float = 0.0
 
-# Temporary star shield triggered by orbit_shield global effect
+# Temporary star shield triggered by Star Shield add-on
 var _shield_orbit_timer: float = 0.0
 var _shield_orbit_nodes: Array[MeshInstance3D] = []
 var _shield_orbit_angle: float = 0.0
 var _shield_orbit_hit_cd: Dictionary = {}
-var _cast_counter: int = 0
 var _next_cast_uid: int = 1
 var _kill_proc_icd: float = 0.0
 var _leech_icd: float = 0.0
@@ -43,6 +43,7 @@ func clear_all() -> void:
 			a.queue_free()
 	_areas.clear()
 	_cooldowns.clear()
+	_card_cast_counts.clear()
 	_echo_queue.clear()
 	for k in _orbit_groups.keys():
 		var grp: Dictionary = _orbit_groups[k]
@@ -51,7 +52,6 @@ func clear_all() -> void:
 				n.queue_free()
 	_orbit_groups.clear()
 	_shield_orbit_timer = 0.0
-	_cast_counter = 0
 	_next_cast_uid = 1
 	_kill_proc_icd = 0.0
 	_leech_icd = 0.0
@@ -61,13 +61,13 @@ func clear_all() -> void:
 			n.queue_free()
 	_shield_orbit_nodes.clear()
 
-func get_cooldown_fraction(skill_uid: int) -> float:
+func get_cooldown_fraction(card_uid: int) -> float:
 	if stats == null:
 		return 1.0
 	for cfg in stats.active_skill_configs:
-		if int(cfg["uid"]) == skill_uid:
+		if int(cfg["uid"]) == card_uid:
 			var cd_max: float = maxf(0.1, float(cfg["cooldown"]))
-			var rem: float = float(_cooldowns.get(skill_uid, 0.0))
+			var rem: float = float(_cooldowns.get(card_uid, 0.0))
 			return clampf(1.0 - rem / cd_max, 0.0, 1.0)
 	return 1.0
 
@@ -88,29 +88,34 @@ func step(delta: float, player_pos: Vector3, player_ctrl: PlayerController) -> v
 			_echo_queue.remove_at(i)
 			_trigger_skill(cfg, player_pos, true)
 
-	# Manage Orbit skills & trigger Active Skills
-	var cd_rate: float = 1.0
-	if stats.has_turret_stance and player_ctrl != null:
-		cd_rate *= (BalanceConfig.TURRET_MOVE_RATE if player_ctrl.is_moving else BalanceConfig.TURRET_STILL_RATE)
-	if player_ctrl != null and player_ctrl.has_zoomies_active():
-		cd_rate *= BalanceConfig.ZOOMIES_CAST_RATE
+	var is_moving: bool = player_ctrl != null and player_ctrl.is_moving
+	var zoomies_rate: float = 1.0
+	if player_ctrl != null and player_ctrl.has_zoomies_active() and stats.zoomies_stacks > 0:
+		zoomies_rate = BalanceConfig.ZOOMIES_CAST_RATE + BalanceConfig.ZOOMIES_CAST_STACK * float(stats.zoomies_stacks - 1)
 
 	var active_orbit_uids: Dictionary = {}
 	for cfg in stats.active_skill_configs:
 		var uid: int = int(cfg["uid"])
-		var gid: String = String(cfg["gem_id"])
-		if gid == "starlight_orb":
+		var cid: String = String(cfg["card_id"])
+		if cid == "starlight_orb":
 			active_orbit_uids[uid] = true
 			_step_orbit_skill(cfg, delta, player_pos)
 			continue
 
-		var rem: float = float(_cooldowns.get(uid, 0.0)) - delta * cd_rate
+		var card_rate: float = zoomies_rate
+		var still_mult: float = float(cfg.get("turret_still_mult", 1.0))
+		var move_mult: float = float(cfg.get("turret_move_mult", 1.0))
+		if still_mult > 1.01 or move_mult < 0.99:
+			card_rate *= (move_mult if is_moving else still_mult)
+
+		var rem: float = float(_cooldowns.get(uid, 0.0)) - delta * card_rate
 		if rem <= 0.0:
 			var fired: bool = _trigger_skill(cfg, player_pos, false)
 			if fired:
 				_cooldowns[uid] = float(cfg["cooldown"])
-				if bool(cfg.get("echo", false)):
-					_echo_queue.append({"delay": 0.16, "cfg": cfg})
+				var e_cnt: int = int(cfg.get("echo_count", 0))
+				for e_idx in range(e_cnt):
+					_echo_queue.append({"delay": 0.16 * float(e_idx + 1), "cfg": cfg})
 			else:
 				_cooldowns[uid] = 0.15
 		else:
@@ -175,13 +180,6 @@ func trigger_reactive_nova(kind: String, pos: Vector3, dmg: float, radius: float
 	var p_cold: bool = false
 	var p_slow: bool = false
 	match kind:
-		"aegis_freeze":
-			col = Color(0.52, 0.92, 1.0)
-			p_cold = true
-			p_slow = true
-		"stride_honey_nova":
-			col = Color(1.0, 0.78, 0.22)
-			p_slow = true
 		"cadence_burst":
 			col = Color(0.55, 0.90, 1.0)
 			p_slow = false
@@ -202,44 +200,20 @@ func trigger_reactive_nova(kind: String, pos: Vector3, dmg: float, radius: float
 	world_root.add_child(a)
 	_areas.append(a)
 
-func trigger_all_skills_bonus(player_pos: Vector3) -> void:
-	if stats == null or not stats.has_comet_stride or world_root == null:
-		return
-	for cfg in stats.active_skill_configs:
-		if String(cfg["gem_id"]) == "starlight_orb":
-			continue
-		var cfg_copy: Dictionary = cfg.duplicate()
-		cfg_copy["damage"] = float(cfg["damage"]) * BalanceConfig.COMET_STRIDE_DMG_MULT
-		_trigger_skill(cfg_copy, player_pos, true)
-
 func trigger_kill_effects(pos: Vector3, was_chilled_flag: bool) -> void:
 	if stats == null or world_root == null or _kill_proc_icd > 0.0:
 		return
 	var triggered: bool = false
 	if stats.has_ember_corpse:
-		trigger_reactive_nova("ember_corpse", pos, BalanceConfig.EMBER_CORPSE_DMG, BalanceConfig.EMBER_CORPSE_RADIUS)
+		var edmg: float = BalanceConfig.EMBER_CORPSE_DMG + BalanceConfig.EMBER_CORPSE_STACK * float(maxi(0, stats.ember_corpse_stacks - 1))
+		trigger_reactive_nova("ember_corpse", pos, edmg, BalanceConfig.EMBER_CORPSE_RADIUS)
 		triggered = true
 	if stats.has_frost_shatter and was_chilled_flag:
-		trigger_reactive_nova("frost_shatter", pos, BalanceConfig.FROST_SHATTER_DMG, BalanceConfig.FROST_SHATTER_RADIUS)
+		var fdmg: float = BalanceConfig.FROST_SHATTER_DMG + BalanceConfig.FROST_SHATTER_STACK * float(maxi(0, stats.frost_shatter_stacks - 1))
+		trigger_reactive_nova("frost_shatter", pos, fdmg, BalanceConfig.FROST_SHATTER_RADIUS)
 		triggered = true
 	if triggered:
 		_kill_proc_icd = BalanceConfig.KILL_PROC_ICD_SEC
-
-func trigger_static_spark(pos: Vector3) -> void:
-	if stats == null or world_root == null or grid == null:
-		return
-	var first_t: Node3D = grid.find_nearest(pos, 13.0)
-	if first_t == null:
-		return
-	var hit_map: Dictionary = {first_t.get_instance_id(): true}
-	_spawn_lightning_visual(pos, first_t.global_position, Color(0.55, 0.92, 1.0))
-	first_t.take_damage(BalanceConfig.STATIC_SPRINT_DMG, Vector3.ZERO)
-	_emit_damage(first_t.global_position, BalanceConfig.STATIC_SPRINT_DMG, false, false, false, 0.0)
-	var second_t: Node3D = grid.find_nearest(first_t.global_position, 8.0, hit_map)
-	if second_t != null:
-		_spawn_lightning_visual(first_t.global_position, second_t.global_position, Color(0.55, 0.92, 1.0))
-		second_t.take_damage(BalanceConfig.STATIC_SPRINT_DMG, Vector3.ZERO)
-		_emit_damage(second_t.global_position, BalanceConfig.STATIC_SPRINT_DMG, false, false, false, 0.0)
 
 func activate_orbit_shield() -> void:
 	_shield_orbit_timer = BalanceConfig.ORBIT_SHIELD_DUR
@@ -272,6 +246,7 @@ func _step_temp_orbit_shield(delta: float, player_pos: Vector3) -> void:
 			_shield_orbit_hit_cd.erase(eid)
 		else:
 			_shield_orbit_hit_cd[eid] = t
+	var shield_dmg: float = BalanceConfig.ORBIT_SHIELD_DMG + BalanceConfig.ORBIT_SHIELD_STACK * float(maxi(0, stats.orbit_shield_stacks - 1))
 	for idx in range(_shield_orbit_nodes.size()):
 		var star_node: MeshInstance3D = _shield_orbit_nodes[idx]
 		var a: float = _shield_orbit_angle + float(idx) * (TAU / 3.0)
@@ -288,12 +263,12 @@ func _step_temp_orbit_shield(delta: float, player_pos: Vector3) -> void:
 			_shield_orbit_hit_cd[eid] = 0.4
 			var kb: Vector3 = e.global_position - player_pos
 			kb.y = 0.0
-			e.take_damage(BalanceConfig.ORBIT_SHIELD_DMG, kb.normalized() * 3.2 if kb.length_squared() > 0.01 else Vector3.ZERO)
-			_emit_damage(e.global_position, BalanceConfig.ORBIT_SHIELD_DMG, false, false, false, 0.0)
+			e.take_damage(shield_dmg, kb.normalized() * 3.2 if kb.length_squared() > 0.01 else Vector3.ZERO)
+			_emit_damage(e.global_position, shield_dmg, false, false, false, 0.0)
 
 func _step_orbit_skill(cfg: Dictionary, delta: float, player_pos: Vector3) -> void:
 	var uid: int = int(cfg["uid"])
-	var count: int = int(cfg["projectiles"]) + (1 if bool(cfg.get("echo", false)) else 0)
+	var count: int = int(cfg["projectiles"]) + int(cfg.get("echo_count", 0))
 	var orbit_r: float = maxf(2.2, float(cfg["area_radius"]))
 	var angular_spd: float = maxf(1.8, float(cfg.get("proj_speed", 3.4)) * 0.25)
 
@@ -328,6 +303,7 @@ func _step_orbit_skill(cfg: Dictionary, delta: float, player_pos: Vector3) -> vo
 			hit_cd[eid] = t
 
 	var is_fire: bool = bool(cfg.get("ignite", false))
+	var burn_mult: float = float(cfg.get("burn_mult", 1.0))
 	var is_cold: bool = bool(cfg.get("chill", false))
 	var base_dmg: float = float(cfg["damage"])
 	var leech_pct: float = float(cfg.get("leech_pct", 0.0))
@@ -351,7 +327,7 @@ func _step_orbit_skill(cfg: Dictionary, delta: float, player_pos: Vector3) -> vo
 			var is_crit: bool = randf() * 100.0 < float(cfg["crit_chance"])
 			var dmg: float = base_dmg * (float(cfg["crit_mult"]) * 0.01 if is_crit else 1.0)
 			if is_fire and e.has_method("apply_burn"):
-				e.apply_burn(dmg * BalanceConfig.BURN_DPS_RATIO, BalanceConfig.BURN_DURATION)
+				e.apply_burn(dmg * BalanceConfig.BURN_DPS_RATIO * burn_mult, BalanceConfig.BURN_DURATION)
 			if is_cold and e.has_method("apply_chill"):
 				e.apply_chill(BalanceConfig.CHILL_DURATION)
 			var kb: Vector3 = (e.global_position - player_pos)
@@ -360,10 +336,11 @@ func _step_orbit_skill(cfg: Dictionary, delta: float, player_pos: Vector3) -> vo
 			_emit_damage(e.global_position, dmg, is_crit, is_fire, is_cold, leech_pct)
 
 func _trigger_skill(cfg: Dictionary, player_pos: Vector3, is_echo: bool) -> bool:
-	var gid: String = String(cfg["gem_id"])
+	var cid: String = String(cfg["card_id"])
+	var uid: int = int(cfg["uid"])
 	var nearest: Node3D = grid.find_nearest(player_pos, 26.0)
 
-	match gid:
+	match cid:
 		"acorn_barrage":
 			if nearest == null:
 				return false
@@ -395,7 +372,6 @@ func _trigger_skill(cfg: Dictionary, player_pos: Vector3, is_echo: bool) -> bool
 			for i in range(n_ice):
 				var a: float = float(i) * TAU / float(n_ice)
 				_spawn_proj(player_pos, Vector3(cos(a), 0.0, sin(a)), frost_cfg, "icicle")
-			# Also burst cold chill nova right around player
 			var nova: AreaEffectEntity = AreaEffectEntity.new()
 			nova.apply_slow = true
 			nova.pull_inward = bool(cfg.get("pull_inward", false))
@@ -432,11 +408,14 @@ func _trigger_skill(cfg: Dictionary, player_pos: Vector3, is_echo: bool) -> bool
 			_areas.append(meteor)
 
 	if not is_echo:
-		skill_casted.emit(gid)
-		if stats != null and stats.has_cadence_burst:
-			_cast_counter += 1
-			if _cast_counter % BalanceConfig.CADENCE_EVERY_N == 0:
-				trigger_reactive_nova("cadence_burst", player_pos, BalanceConfig.CADENCE_DMG, BalanceConfig.CADENCE_RADIUS)
+		skill_casted.emit(cid)
+		var cad_stacks: int = int(cfg.get("cadence_stacks", 0))
+		if cad_stacks > 0:
+			var cnt: int = int(_card_cast_counts.get(uid, 0)) + 1
+			_card_cast_counts[uid] = cnt
+			if cnt % BalanceConfig.CADENCE_EVERY_N == 0:
+				var cdmg: float = BalanceConfig.CADENCE_DMG + BalanceConfig.CADENCE_DMG_STACK * float(cad_stacks - 1)
+				trigger_reactive_nova("cadence_burst", player_pos, cdmg, BalanceConfig.CADENCE_RADIUS)
 	return true
 
 func _fire_fan(origin: Vector3, target: Vector3, cfg: Dictionary, style: String, spread_step: float) -> void:
@@ -445,7 +424,7 @@ func _fire_fan(origin: Vector3, target: Vector3, cfg: Dictionary, style: String,
 	_next_cast_uid += 1
 	var count: int = int(volley_cfg["projectiles"])
 	if bool(volley_cfg.get("nova_360", false)):
-		var ring_count: int = maxi(count, 6)
+		var ring_count: int = maxi(count, int(volley_cfg.get("nova_min_proj", 6)))
 		for i in range(ring_count):
 			var a: float = float(i) * (TAU / float(ring_count))
 			_spawn_proj(origin, Vector3(cos(a), 0.0, sin(a)), volley_cfg, style)
@@ -478,6 +457,7 @@ func _cast_chain_lightning(origin: Vector3, first_target: Node3D, cfg: Dictionar
 	var curr: Node3D = first_target
 	var base_dmg: float = float(cfg["damage"])
 	var is_fire: bool = bool(cfg.get("ignite", false))
+	var burn_mult: float = float(cfg.get("burn_mult", 1.0))
 	var is_cold: bool = bool(cfg.get("chill", false))
 	var leech_pct: float = float(cfg.get("leech_pct", 0.0))
 
@@ -489,7 +469,7 @@ func _cast_chain_lightning(origin: Vector3, first_target: Node3D, cfg: Dictionar
 		var is_crit: bool = randf() * 100.0 < float(cfg["crit_chance"])
 		var dmg: float = base_dmg * (float(cfg["crit_mult"]) * 0.01 if is_crit else 1.0)
 		if is_fire and curr.has_method("apply_burn"):
-			curr.apply_burn(dmg * BalanceConfig.BURN_DPS_RATIO, BalanceConfig.BURN_DURATION)
+			curr.apply_burn(dmg * BalanceConfig.BURN_DPS_RATIO * burn_mult, BalanceConfig.BURN_DURATION)
 		if is_cold and curr.has_method("apply_chill"):
 			curr.apply_chill(BalanceConfig.CHILL_DURATION)
 		curr.take_damage(dmg, Vector3.ZERO)
@@ -509,7 +489,7 @@ func _on_chain_arc_requested(from_p: Vector3, to_p: Vector3, col: Color) -> void
 
 func _on_fork_requested(pos: Vector3, dir: Vector3, cfg: Dictionary, hit_ids: Dictionary) -> void:
 	var fork_cfg: Dictionary = cfg.duplicate()
-	fork_cfg["forks"] = 0
+	fork_cfg["forks"] = maxi(0, int(cfg.get("forks", 1)) - 1)
 	var base_ang: float = atan2(dir.z, dir.x)
 	for offset in [-0.48, 0.48]:
 		var d: Vector3 = Vector3(cos(base_ang + offset), 0.0, sin(base_ang + offset))

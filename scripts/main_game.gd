@@ -103,18 +103,6 @@ func _ready() -> void:
 		if skill_executor != null:
 			skill_executor.trigger_reactive_nova(kind, pos, dmg, radius)
 	)
-	player.static_spark_requested.connect(func(pos: Vector3) -> void:
-		if skill_executor != null:
-			skill_executor.trigger_static_spark(pos)
-	)
-	player.stride_honey_requested.connect(func(pos: Vector3) -> void:
-		if skill_executor != null:
-			skill_executor.trigger_reactive_nova("stride_honey_nova", pos, BalanceConfig.STRIDE_HONEY_DMG, BalanceConfig.STRIDE_HONEY_RADIUS)
-	)
-	player.comet_stride_requested.connect(func(pos: Vector3) -> void:
-		if skill_executor != null:
-			skill_executor.trigger_all_skills_bonus(pos)
-	)
 	player.orbit_shield_requested.connect(func() -> void:
 		if skill_executor != null:
 			skill_executor.activate_orbit_shield()
@@ -134,11 +122,10 @@ func _ready() -> void:
 		hud.spawn_damage_popup(player.global_position, amt, false, false, false, true)
 		sfx.play("loot_common")
 	)
-	loot_manager.item_looted.connect(_on_item_looted)
-	loot_manager.gem_looted.connect(_on_gem_looted)
+	loot_manager.card_looted.connect(_on_card_looted)
 	loot_manager.loot_bag_full.connect(func(msg: String) -> void: hud.push_toast(msg, Color(1.0, 0.55, 0.40)))
 	loot_manager.chest_opened.connect(func() -> void:
-		hud.show_banner("Acorn Treasure Chest Opened!", Color(1.0, 0.88, 0.30))
+		hud.show_banner("Acorn Card Chest Opened!", Color(1.0, 0.88, 0.30))
 		sfx.play("loot_rare")
 	)
 	world_root.add_child(loot_manager)
@@ -211,9 +198,8 @@ func _build_ui() -> void:
 	add_child(ui_layer)
 
 	title_screen = TitleScreen.new()
-	title_screen.hero_selected.connect(_on_title_hero_selected)
-	title_screen.start_requested.connect(start_new_run)
-	title_screen.tutorial_requested.connect(start_tutorial)
+	title_screen.start_requested.connect(func(_hid: String) -> void: start_new_run())
+	title_screen.tutorial_requested.connect(func(_hid: String) -> void: start_tutorial())
 	ui_layer.add_child(title_screen)
 	title_screen.set_mobile_mode(_is_mobile_touch)
 
@@ -227,7 +213,7 @@ func _build_ui() -> void:
 
 	inventory_panel = InventoryPanel.new()
 	inventory_panel.closed.connect(_close_inventory)
-	inventory_panel.gear_changed.connect(_on_gear_or_gems_changed)
+	inventory_panel.deck_changed.connect(_on_deck_changed)
 	inventory_panel.sfx_requested.connect(func(sname: String) -> void: sfx.play(sname))
 	ui_layer.add_child(inventory_panel)
 
@@ -235,11 +221,11 @@ func _build_ui() -> void:
 	end_screen.resume_requested.connect(_resume_from_pause)
 	end_screen.play_again_requested.connect(func() -> void:
 		if _is_tutorial:
-			start_tutorial(_selected_hero_id)
+			start_tutorial()
 		else:
-			start_new_run(_selected_hero_id)
+			start_new_run()
 	)
-	end_screen.tutorial_start_run_requested.connect(func() -> void: start_new_run(_selected_hero_id))
+	end_screen.tutorial_start_run_requested.connect(func() -> void: start_new_run())
 	end_screen.title_menu_requested.connect(_enter_title_state)
 	ui_layer.add_child(end_screen)
 
@@ -264,22 +250,18 @@ func _enter_title_state() -> void:
 	inventory_panel.set_tutorial_hint("")
 	end_screen.visible = false
 	arena_builder.update_biome_lighting(0.0, 10.0)
-	_on_title_hero_selected(_selected_hero_id)
+	_spawn_title_showcase()
 
-func _on_title_hero_selected(hero_id: String) -> void:
-	_selected_hero_id = hero_id
+func _spawn_title_showcase() -> void:
 	if _showcase_rig != null:
 		_showcase_rig.queue_free()
-	_showcase_rig = ChibiMeshFactory.build_hero_rig(hero_id)
-	var hdef: Dictionary = HeroDatabase.get_hero(hero_id)
-	ChibiMeshFactory.update_hero_visual_gear(_showcase_rig, String(hdef["starter_weapon_style"]), String(hdef["starter_helmet_style"]))
+	_showcase_rig = ChibiMeshFactory.build_hero_rig("shiba")
 	_showcase_rig.position = Vector3(0.0, 0.0, 0.0)
 	_showcase_rig.scale = Vector3(1.35, 1.35, 1.35)
 	world_root.add_child(_showcase_rig)
-	sfx.play("ui_click")
 
-func start_new_run(hero_id: String) -> void:
-	_selected_hero_id = hero_id
+func start_new_run(_hero_id: String = "shiba") -> void:
+	_selected_hero_id = "shiba"
 	_is_tutorial = false
 	if _showcase_rig != null:
 		_showcase_rig.queue_free()
@@ -290,7 +272,7 @@ func start_new_run(hero_id: String) -> void:
 	_shake_trauma = 0.0
 
 	tutorial_director.reset()
-	stats = HeroStats.new(hero_id)
+	stats = HeroStats.new("shiba")
 	player.visible = true
 	player.global_position = Vector3.ZERO
 	player.setup(stats)
@@ -317,17 +299,17 @@ func start_new_run(hero_id: String) -> void:
 	inventory_panel.set_tutorial_hint("")
 	end_screen.visible = false
 	hud.visible = true
-	hud.reset_hud(_selected_hero_id)
+	hud.reset_hud("shiba")
 	hud.set_tutorial_objective(false)
 	hud.set_fps_visible(_review_mode)
 	hud.set_mobile_mode(_is_mobile_touch, _allow_mouse_touch)
 	hud.reset_touch_input()
 	hud.rebuild_skill_bar(stats)
-	hud.show_banner("Survive 20 Minutes & Defeat All 3 Bosses!", Color(1.0, 0.90, 0.42))
+	hud.show_banner("Survive 20 Minutes · Forge 3 Mighty Cards!", Color(1.0, 0.90, 0.42))
 	sfx.play("socket_chime")
 
-func start_tutorial(hero_id: String) -> void:
-	_selected_hero_id = hero_id
+func start_tutorial(_hero_id: String = "shiba") -> void:
+	_selected_hero_id = "shiba"
 	_is_tutorial = true
 	if _showcase_rig != null:
 		_showcase_rig.queue_free()
@@ -337,8 +319,8 @@ func start_tutorial(hero_id: String) -> void:
 	state = GameState.PLAYING
 	_shake_trauma = 0.0
 
-	stats = HeroStats.new(hero_id)
-	stats.init_bare_for_tutorial(hero_id)
+	stats = HeroStats.new("shiba")
+	stats.init_bare_for_tutorial("shiba")
 	player.visible = true
 	player.global_position = Vector3.ZERO
 	player.setup(stats)
@@ -365,7 +347,7 @@ func start_tutorial(hero_id: String) -> void:
 	inventory_panel.visible = false
 	end_screen.visible = false
 	hud.visible = true
-	hud.reset_hud(_selected_hero_id)
+	hud.reset_hud("shiba")
 	hud.set_fps_visible(_review_mode)
 	hud.set_mobile_mode(_is_mobile_touch, _allow_mouse_touch)
 	hud.reset_touch_input()
@@ -452,13 +434,13 @@ func _resume_from_pause() -> void:
 	get_tree().paused = false
 	sfx.play("ui_click")
 
-func _on_gear_or_gems_changed() -> void:
+func _on_deck_changed() -> void:
 	if player != null:
-		player.refresh_equipment_visuals()
+		player.refresh_card_auras()
 	if hud != null and stats != null:
 		hud.rebuild_skill_bar(stats)
 	if _is_tutorial and tutorial_director != null:
-		tutorial_director.notify_gear_changed()
+		tutorial_director.notify_deck_changed()
 
 func _process(delta: float) -> void:
 	if state == GameState.TITLE:
@@ -523,41 +505,36 @@ func _on_player_hurt(dmg: float, _hp_after: float) -> void:
 	if hud != null:
 		hud.spawn_damage_popup(player.global_position, dmg, false, false, false, false)
 
-func _on_item_looted(item: ItemInstance) -> void:
+func _on_card_looted(card: CardInstance) -> void:
+	if card == null:
+		return
 	hud.add_unread_loot()
-	var col: Color = GameEnums.rarity_color(item.rarity)
-	hud.push_toast("[%s] %s (%s)" % [GameEnums.rarity_label(item.rarity), item.item_name, item.get_socket_summary_text()], col, UiIcons.get_slot_icon(item.equip_slot))
-	if item.rarity >= GameEnums.Rarity.UNIQUE:
+	var col: Color = GameEnums.rarity_color(card.rarity)
+	var kind_tag: String = GameEnums.rarity_label(card.rarity) if card.is_template() else "Add-on"
+	hud.push_toast("[%s] %s" % [kind_tag, card.get_card_name()], col, UiIcons.get_card_art(card.card_id))
+	if card.is_template() and card.rarity >= GameEnums.Rarity.LEGENDARY:
 		sfx.play("loot_unique")
-		hud.show_banner("UNIQUE: %s!" % item.item_name, col)
-	elif item.rarity >= GameEnums.Rarity.RARE:
+		hud.show_banner("LEGENDARY CARD: %s!" % card.get_card_name(), col)
+	elif card.is_template() and card.rarity >= GameEnums.Rarity.RARE:
 		sfx.play("loot_rare")
+	elif card.is_addon():
+		sfx.play("gem_drop")
 	else:
 		sfx.play("loot_common")
 	if _is_tutorial and tutorial_director != null:
-		tutorial_director.notify_item_looted(item)
-
-func _on_gem_looted(gem: GemInstance) -> void:
-	hud.add_unread_loot()
-	var col: Color = GameEnums.gem_color_value(gem.get_gem_color())
-	var gtype: int = gem.get_gem_type()
-	var gtex: Texture2D = UiIcons.get_skill_icon(gem.gem_id) if gtype == GameEnums.GemType.MAIN else UiIcons.get_gem_icon(GameEnums.GemType.MODIFIER, gem.get_gem_color())
-	hud.push_toast("[%s] %s" % [GameEnums.gem_type_label(gtype), gem.get_gem_name()], col, gtex)
-	sfx.play("gem_drop")
-	if _is_tutorial and tutorial_director != null:
-		tutorial_director.notify_gem_looted(gem)
+		tutorial_director.notify_card_looted(card)
 
 func _seed_review_loot() -> void:
 	if stats == null:
 		return
-	if stats.item_bag.is_empty():
-		stats.item_bag.append(ItemDatabase.create_unique_item("unique_acorn_scepter"))
-		stats.item_bag.append(ItemDatabase.generate_item(GameEnums.Rarity.RARE, false, GameEnums.EquipSlot.HELMET, _rng))
-		stats.item_bag.append(ItemDatabase.generate_item(GameEnums.Rarity.MAGIC, false, GameEnums.EquipSlot.RING, _rng))
-	if stats.gem_pouch.is_empty():
-		stats.gem_pouch.append(GemInstance.new("petal_cyclone"))
-		stats.gem_pouch.append(GemInstance.new("mod_multishot"))
-		stats.gem_pouch.append(GemInstance.new("mod_chain"))
+	if stats.template_inventory.is_empty():
+		stats.template_inventory.append(CardInstance.new("meteor_pine", GameEnums.Rarity.RARE))
+		stats.template_inventory.append(CardInstance.new("starlight_orb", GameEnums.Rarity.LEGENDARY))
+	if stats.addon_inventory.is_empty():
+		stats.addon_inventory.append(CardInstance.new("addon_multishot"))
+		stats.addon_inventory.append(CardInstance.new("addon_echo"))
+		stats.addon_inventory.append(CardInstance.new("addon_sniper_focus"))
+		stats.addon_inventory.append(CardInstance.new("addon_frost_shatter"))
 	if inventory_panel != null and inventory_panel.visible:
 		inventory_panel.refresh()
 

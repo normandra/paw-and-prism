@@ -342,9 +342,9 @@ func _build_hud() -> void:
 	inv_h.add_theme_constant_override("separation", 6)
 	inv_h.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	inv_cc.add_child(inv_h)
-	inv_h.add_child(UiHelper.make_icon_rect(UiIcons.get_ui_icon("bag"), 19))
+	inv_h.add_child(UiHelper.make_icon_rect(UiIcons.get_ui_icon("deck_cards"), 19))
 	_inv_lbl = Label.new()
-	_inv_lbl.text = "Satchel [Tab]"
+	_inv_lbl.text = "Deck [Tab]"
 	_inv_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	UiHelper.apply_display_font(_inv_lbl, 14, UiHelper.TEXT_CREAM, 2)
 	inv_h.add_child(_inv_lbl)
@@ -505,7 +505,7 @@ func _apply_responsive_layout() -> void:
 		_toast_vbox.offset_left = -260 if is_portrait else -350
 		_toast_vbox.offset_right = -10 if is_portrait else -18
 	if _inv_lbl != null and _unread_loot == 0:
-		_inv_lbl.text = "Satchel" if _is_mobile_mode else "Satchel [Tab]"
+		_inv_lbl.text = "Deck" if _is_mobile_mode else "Deck [Tab]"
 	if touch_controls != null:
 		touch_controls.queue_redraw()
 
@@ -586,13 +586,18 @@ func rebuild_skill_bar(stats: HeroStats) -> void:
 		ch.queue_free()
 	_skill_cards.clear()
 
+	var n_cards: int = stats.active_skill_configs.size()
+	var card_w: int = 74 if n_cards <= 5 else 60
+	_skills_hbox.add_theme_constant_override("separation", 8 if n_cards <= 5 else 5)
+
 	for cfg in stats.active_skill_configs:
 		var uid: int = int(cfg["uid"])
-		var gid: String = String(cfg["gem_id"])
-		var gcol: Color = GameEnums.gem_color_value(int(cfg["color"]))
+		var cid: String = String(cfg["card_id"])
+		var card_obj: CardInstance = cfg["card"]
+		var r_col: Color = GameEnums.rarity_color(card_obj.rarity)
 		var card: PanelContainer = PanelContainer.new()
-		card.custom_minimum_size = Vector2(74, 72)
-		card.add_theme_stylebox_override("panel", UiHelper.make_panel_box(UiHelper.BG_WALNUT, gcol, 11, 2, 5))
+		card.custom_minimum_size = Vector2(card_w, 74)
+		card.add_theme_stylebox_override("panel", UiHelper.make_panel_box(UiHelper.BG_WALNUT, r_col, 10, 2, 5))
 
 		var v: VBoxContainer = VBoxContainer.new()
 		v.alignment = BoxContainer.ALIGNMENT_CENTER
@@ -602,12 +607,13 @@ func rebuild_skill_bar(stats: HeroStats) -> void:
 		var well_center: CenterContainer = CenterContainer.new()
 		v.add_child(well_center)
 		var well: PanelContainer = PanelContainer.new()
-		well.add_theme_stylebox_override("panel", UiHelper.make_panel_box(UiHelper.BG_WELL, gcol.darkened(0.25), 7, 1, 3, false))
-		well.add_child(UiHelper.make_icon_rect(UiIcons.get_skill_icon(gid), 28))
+		well.add_theme_stylebox_override("panel", UiHelper.make_panel_box(UiHelper.BG_WELL, r_col.darkened(0.25), 6, 1, 2, false))
+		well.add_child(UiHelper.make_icon_rect(UiIcons.get_card_art(cid), 28))
 		well_center.add_child(well)
 
 		var name_lbl: Label = Label.new()
-		name_lbl.text = String(cfg["short"])
+		var f_cnt: int = card_obj.get_forge_count()
+		name_lbl.text = "%s%s" % [String(cfg["short"]), ("+%d" % f_cnt) if f_cnt > 0 else ""]
 		name_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		name_lbl.add_theme_font_size_override("font_size", 11)
 		name_lbl.add_theme_font_override("font", UiHelper.get_bold_font())
@@ -616,27 +622,16 @@ func rebuild_skill_bar(stats: HeroStats) -> void:
 		name_lbl.add_theme_constant_override("outline_size", 2)
 		v.add_child(name_lbl)
 
-		var pip_row: HBoxContainer = HBoxContainer.new()
-		pip_row.alignment = BoxContainer.ALIGNMENT_CENTER
-		pip_row.custom_minimum_size = Vector2(0, 12)
-		pip_row.add_theme_constant_override("separation", 3)
-		v.add_child(pip_row)
-		var mod_cols: Array = cfg.get("linked_mod_colors", [])
-		if mod_cols.is_empty():
-			var unl: Label = Label.new()
-			unl.text = "·"
-			unl.add_theme_font_size_override("font_size", 10)
-			unl.add_theme_color_override("font_color", Color(0.55, 0.50, 0.45))
-			pip_row.add_child(unl)
-		else:
-			for mc in mod_cols:
-				pip_row.add_child(UiHelper.make_icon_rect(UiIcons.get_gem_icon(GameEnums.GemType.MODIFIER, int(mc)), 12))
+		var pip_center: CenterContainer = CenterContainer.new()
+		pip_center.custom_minimum_size = Vector2(0, 10)
+		v.add_child(pip_center)
+		pip_center.add_child(UiHelper.make_forge_pips_row(f_cnt, card_obj.get_max_forges(), r_col, 7))
 
 		var cd_bar: ProgressBar = ProgressBar.new()
 		cd_bar.show_percentage = false
 		cd_bar.custom_minimum_size = Vector2(0, 5)
 		cd_bar.max_value = 1.0
-		UiHelper.style_progress_bar(cd_bar, gcol, UiHelper.BG_WELL, 3)
+		UiHelper.style_progress_bar(cd_bar, r_col, UiHelper.BG_WELL, 3)
 		v.add_child(cd_bar)
 
 		_skills_hbox.add_child(card)
@@ -716,8 +711,8 @@ func update_hud(delta: float, stats: HeroStats, player: PlayerController, wave_d
 	_hp_bar.value = player.current_hp
 	_hp_lbl.text = "%d / %d" % [int(ceil(player.current_hp)), int(round(stats.max_hp))]
 
-	var inv_default: String = "Satchel" if _is_mobile_mode else "Satchel [Tab]"
-	var inv_txt: String = "Satchel (%d!)" % _unread_loot if _unread_loot > 0 else inv_default
+	var inv_default: String = "Deck" if _is_mobile_mode else "Deck [Tab]"
+	var inv_txt: String = "Deck (%d!)" % _unread_loot if _unread_loot > 0 else inv_default
 	if inv_txt != _last_inv_text:
 		_last_inv_text = inv_txt
 		_inv_lbl.text = inv_txt

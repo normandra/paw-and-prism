@@ -2,46 +2,34 @@ class_name WorldPickup
 extends Node3D
 
 enum Kind {
-	ITEM,
-	MAIN_ABILITY,
-	MODIFIER_ABILITY,
+	TEMPLATE_CARD,
+	ADDON_CARD,
 	CHEST,
 }
 
-var kind: int = Kind.ITEM
-var item_data: ItemInstance = null
-var gem_data: GemInstance = null
+var kind: int = Kind.TEMPLATE_CARD
+var card_data: CardInstance = null
 
 var _spin_pivot: Node3D = null
 var _vel_y: float = 5.5
 var _vel_xz: Vector3 = Vector3.ZERO
 var _age: float = 0.0
 
-func setup_item(p_pos: Vector3, item: ItemInstance) -> void:
-	kind = Kind.ITEM
-	item_data = item
+func setup_card(p_pos: Vector3, card: CardInstance) -> void:
+	card_data = card
 	position = p_pos
-	_attach_visual("item", GameEnums.rarity_color(item.rarity), item.rarity)
-	_launch_pop(4.0)
-
-func setup_main_ability(p_pos: Vector3, gem: GemInstance) -> void:
-	kind = Kind.MAIN_ABILITY
-	gem_data = gem
-	position = p_pos
-	_attach_visual("main_gem", GameEnums.gem_color_value(gem.get_gem_color()), 2)
-	_launch_pop(4.0)
-
-func setup_modifier_ability(p_pos: Vector3, gem: GemInstance) -> void:
-	kind = Kind.MODIFIER_ABILITY
-	gem_data = gem
-	position = p_pos
-	_attach_visual("mod_gem", GameEnums.gem_color_value(gem.get_gem_color()), 1)
+	if card.is_template():
+		kind = Kind.TEMPLATE_CARD
+		_attach_visual("template_card", GameEnums.rarity_color(card.rarity), card.rarity)
+	else:
+		kind = Kind.ADDON_CARD
+		_attach_visual("addon_card", GameEnums.rarity_color(card.rarity), card.rarity)
 	_launch_pop(4.0)
 
 func setup_chest(p_pos: Vector3) -> void:
 	kind = Kind.CHEST
 	position = p_pos
-	_attach_visual("chest", Color(1.0, 0.85, 0.25), 2)
+	_attach_visual("chest", Color(1.0, 0.85, 0.25), GameEnums.Rarity.RARE)
 	_vel_y = 0.0
 	_vel_xz = Vector3.ZERO
 
@@ -56,21 +44,17 @@ func _launch_pop(strength: float) -> void:
 	_vel_y = randf_range(4.2, 6.0)
 
 func get_label_text() -> String:
-	if kind == Kind.ITEM and item_data != null:
-		return item_data.item_name
-	if kind == Kind.MAIN_ABILITY and gem_data != null:
-		return "[Main] %s" % gem_data.get_gem_name()
-	if kind == Kind.MODIFIER_ABILITY and gem_data != null:
-		return "[Mod] %s" % gem_data.get_gem_name()
+	if card_data != null:
+		if kind == Kind.TEMPLATE_CARD:
+			return "[%s Card] %s" % [GameEnums.rarity_label(card_data.rarity), card_data.get_card_name()]
+		return "[Add-on] %s" % card_data.get_card_name()
 	if kind == Kind.CHEST:
 		return "Acorn Chest"
 	return ""
 
 func get_label_color() -> Color:
-	if kind == Kind.ITEM and item_data != null:
-		return GameEnums.rarity_color(item_data.rarity)
-	if (kind == Kind.MAIN_ABILITY or kind == Kind.MODIFIER_ABILITY) and gem_data != null:
-		return GameEnums.gem_color_value(gem_data.get_gem_color())
+	if card_data != null:
+		return GameEnums.rarity_color(card_data.rarity)
 	return Color(1.0, 0.90, 0.35)
 
 func step(delta: float, player_pos: Vector3) -> bool:

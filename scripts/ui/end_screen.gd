@@ -34,7 +34,7 @@ func _apply_responsive_layout() -> void:
 	if vp.x <= 10.0 or _panel == null:
 		return
 	var is_portrait: bool = vp.x < 750.0
-	_panel.custom_minimum_size = Vector2(minf(vp.x - 20.0, 620.0), minf(vp.y - 32.0, 520.0) if is_portrait else 400.0)
+	_panel.custom_minimum_size = Vector2(minf(vp.x - 20.0, 640.0), minf(vp.y - 32.0, 540.0) if is_portrait else 420.0)
 
 func _build_ui() -> void:
 	var dim: ColorRect = ColorRect.new()
@@ -47,7 +47,7 @@ func _build_ui() -> void:
 	add_child(center)
 
 	_panel = PanelContainer.new()
-	_panel.custom_minimum_size = Vector2(620, 400)
+	_panel.custom_minimum_size = Vector2(640, 420)
 	_panel.add_theme_stylebox_override("panel", UiHelper.make_panel_box(UiHelper.BG_WOOD_DEEP, UiHelper.BORDER_GOLD, 16, 3, 18))
 	center.add_child(_panel)
 
@@ -160,7 +160,7 @@ func show_pause(stats: HeroStats, wave_dir: WaveDirector) -> void:
 	_hdr_banner.add_theme_stylebox_override("panel", UiHelper.make_panel_box(Color(0.14, 0.19, 0.28), Color(0.54, 0.84, 1.0), 12, 2, 10, false))
 	_title_lbl.text = "RUN PAUSED"
 	_title_lbl.add_theme_color_override("font_color", Color(0.70, 0.92, 1.0))
-	_fill_summary(stats, wave_dir, "Press [Tab] anytime to compare looted Relics and link Abilities.")
+	_fill_summary(stats, wave_dir, "Press [Tab] anytime to equip Template Cards and permanently forge Add-ons.")
 	visible = true
 
 func show_end(victory: bool, stats: HeroStats, wave_dir: WaveDirector) -> void:
@@ -178,7 +178,7 @@ func show_end(victory: bool, stats: HeroStats, wave_dir: WaveDirector) -> void:
 		_hdr_banner.add_theme_stylebox_override("panel", UiHelper.make_panel_box(Color(0.26, 0.10, 0.11), Color(0.94, 0.44, 0.44), 12, 2, 10, false))
 		_title_lbl.text = "DEFEATED..."
 		_title_lbl.add_theme_color_override("font_color", Color(1.0, 0.48, 0.48))
-		_fill_summary(stats, wave_dir, "Your little hero fought bravely against the critter horde!")
+		_fill_summary(stats, wave_dir, "Mochi fought bravely against the critter horde!")
 	visible = true
 
 func show_tutorial_complete(stats: HeroStats, wave_dir: WaveDirector) -> void:
@@ -189,7 +189,7 @@ func show_tutorial_complete(stats: HeroStats, wave_dir: WaveDirector) -> void:
 	_hdr_banner.add_theme_stylebox_override("panel", UiHelper.make_panel_box(Color(0.14, 0.28, 0.16), Color(0.48, 0.94, 0.56), 12, 2, 10, false))
 	_title_lbl.text = "TUTORIAL COMPLETE!"
 	_title_lbl.add_theme_color_override("font_color", Color(0.68, 1.0, 0.72))
-	_fill_summary(stats, wave_dir, "Equipped Relic -> Socketed Main Ability -> Linked Modifier!")
+	_fill_summary(stats, wave_dir, "Equipped Template Card -> Forged Permanent Add-on!")
 	visible = true
 
 func _fill_summary(stats: HeroStats, wave_dir: WaveDirector, intro: String) -> void:
@@ -203,10 +203,10 @@ func _fill_summary(stats: HeroStats, wave_dir: WaveDirector, intro: String) -> v
 	var secs: int = int(wave_dir.elapsed_time) % 60 if wave_dir != null else 0
 	var kills: int = wave_dir.kills_count if wave_dir != null else 0
 	var bosses: int = wave_dir.bosses_defeated_count if wave_dir != null else 0
-	var hdef: Dictionary = HeroDatabase.get_hero(stats.hero_id)
+	var hdef: Dictionary = HeroDatabase.get_hero("shiba")
 
 	var stat_items: Array[Dictionary] = [
-		{"icon": UiIcons.get_hero_portrait(stats.hero_id), "label": "Hero", "val": String(hdef["hero_name"])},
+		{"icon": UiIcons.get_hero_portrait("shiba"), "label": "Hero", "val": String(hdef["hero_name"])},
 		{"icon": UiIcons.get_ui_icon("sun_meadow"), "label": "Time", "val": "%02d:%02d / 20:00" % [mins, secs]},
 		{"icon": UiIcons.get_ui_icon("boss_crown"), "label": "Bosses", "val": "%d / 3" % bosses},
 		{"icon": UiIcons.get_ui_icon("skull"), "label": "Critters", "val": "%d" % kills},
@@ -234,45 +234,32 @@ func _fill_summary(stats: HeroStats, wave_dir: WaveDirector, intro: String) -> v
 		_stat_cards_grid.add_child(c)
 
 	var act_hdr: Label = Label.new()
-	act_hdr.text = "Linked Abilities"
+	act_hdr.text = "Active Forged Deck (%d Equipped)" % stats.equipped_cards.size()
 	act_hdr.add_theme_font_override("font", UiHelper.get_bold_font())
 	act_hdr.add_theme_font_size_override("font_size", 13)
 	act_hdr.add_theme_color_override("font_color", Color(1.0, 0.85, 0.40))
 	_build_vbox.add_child(act_hdr)
 
-	if stats.active_skill_configs.is_empty():
+	if stats.equipped_cards.is_empty():
 		var none_lbl: Label = Label.new()
-		none_lbl.text = "None socketed"
+		none_lbl.text = "No cards equipped"
 		none_lbl.add_theme_font_size_override("font_size", 12)
 		none_lbl.add_theme_color_override("font_color", UiHelper.TEXT_PARCHMENT)
 		_build_vbox.add_child(none_lbl)
 	else:
-		for cfg in stats.active_skill_configs:
+		for card in stats.equipped_cards:
+			var r_col: Color = GameEnums.rarity_color(card.rarity)
 			var row: HBoxContainer = HBoxContainer.new()
 			row.add_theme_constant_override("separation", 8)
 			_build_vbox.add_child(row)
-			row.add_child(UiHelper.make_icon_rect(UiIcons.get_skill_icon(String(cfg["gem_id"])), 22))
+			row.add_child(UiHelper.make_icon_rect(UiIcons.get_card_art(card.card_id), 24))
 			var slbl: Label = Label.new()
-			slbl.text = String(cfg["gem_name"])
+			slbl.text = "%s (%d/%d)" % [card.get_display_title(), card.get_forge_count(), card.get_max_forges()]
 			slbl.add_theme_font_override("font", UiHelper.get_bold_font())
 			slbl.add_theme_font_size_override("font_size", 13)
-			slbl.add_theme_color_override("font_color", UiHelper.TEXT_CREAM)
+			slbl.add_theme_color_override("font_color", r_col.lightened(0.25))
 			row.add_child(slbl)
-			var mods: Array = cfg.get("linked_mod_names", [])
-			for mod_s in mods:
-				row.add_child(UiHelper.make_badge_pill(String(mod_s), UiHelper.BG_WALNUT, UiHelper.BORDER_GOLD, Color(1.0, 0.90, 0.50), 10))
-
-	if not stats.active_effect_list.is_empty():
-		var eff_hdr: Label = Label.new()
-		eff_hdr.text = "Global Effects"
-		eff_hdr.add_theme_font_override("font", UiHelper.get_bold_font())
-		eff_hdr.add_theme_font_size_override("font_size", 13)
-		eff_hdr.add_theme_color_override("font_color", Color(0.66, 0.94, 0.70))
-		_build_vbox.add_child(eff_hdr)
-
-		var eff_row: HFlowContainer = HFlowContainer.new()
-		eff_row.add_theme_constant_override("h_separation", 6)
-		eff_row.add_theme_constant_override("v_separation", 4)
-		_build_vbox.add_child(eff_row)
-		for eid in stats.active_effect_list:
-			eff_row.add_child(UiHelper.make_effect_chip(String(eid), true))
+			for entry in card.get_forged_summary_counts():
+				var cnt: int = int(entry["count"])
+				var txt: String = "%s%s" % [String(entry["name"]), (" x%d" % cnt) if cnt > 1 else ""]
+				row.add_child(UiHelper.make_badge_pill(txt, UiHelper.BG_WALNUT, UiHelper.BORDER_GOLD, Color(1.0, 0.90, 0.50), 10))

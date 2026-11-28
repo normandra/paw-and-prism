@@ -2,45 +2,46 @@ class_name InventoryPanel
 extends Control
 
 signal closed()
-signal gear_changed()
+signal deck_changed()
 signal sfx_requested(sfx_name: String)
 
 var _stats: HeroStats = null
 
 var _frame: PanelContainer = null
 var _title_lbl: Label = null
+var _focus_pill_lbl: Label = null
+var _focus_pill: PanelContainer = null
 var _close_btn: Button = null
+
 var _tut_banner_panel: PanelContainer = null
 var _tut_banner_lbl: Label = null
 var _feedback_panel: PanelContainer = null
 var _feedback_lbl: Label = null
+var _forge_mode_panel: PanelContainer = null
+var _forge_mode_icon: TextureRect = null
+var _forge_mode_lbl: Label = null
+var _forge_cancel_btn: Button = null
 
 var _mobile_tabs_row: HBoxContainer = null
-var _m_tab_gear_btn: Button = null
-var _m_tab_items_btn: Button = null
-var _m_tab_skills_btn: Button = null
-var _m_tab_build_btn: Button = null
+var _m_tab_active_btn: Button = null
+var _m_tab_tpl_btn: Button = null
+var _m_tab_add_btn: Button = null
 
 var _cols: BoxContainer = null
 var _left_box: PanelContainer = null
-var _left_build_vbox: VBoxContainer = null
-var _center_box: PanelContainer = null
-var _pending_gem_bar: PanelContainer = null
-var _pending_gem_lbl: Label = null
-var _center_slots_vbox: VBoxContainer = null
+var _active_hdr_lbl: Label = null
+var _active_grid: GridContainer = null
+
 var _right_box: PanelContainer = null
 var _right_tab_row: HBoxContainer = null
-
-var _tab_items_btn: Button = null
-var _tab_main_btn: Button = null
-var _tab_mods_btn: Button = null
-var _right_content_vbox: VBoxContainer = null
+var _tab_tpl_btn: Button = null
+var _tab_add_btn: Button = null
+var _collection_grid: GridContainer = null
 
 var _is_mobile_layout: bool = false
-var _mobile_tab: String = "gear" # gear | items | skills | build
-var _active_right_tab: String = "items" # items | main | mods
-var _selected_bag_idx: int = -1
-var _selected_pouch_idx: int = -1
+var _mobile_tab: String = "active" # active | templates | addons
+var _active_right_tab: String = "templates" # templates | addons
+var _forging_addon_idx: int = -1
 var _tutorial_hint: String = ""
 
 func _ready() -> void:
@@ -60,15 +61,12 @@ func set_tutorial_hint(hint: String) -> void:
 	if _tut_banner_panel != null and _tut_banner_lbl != null:
 		_tut_banner_panel.visible = not hint.is_empty()
 		_tut_banner_lbl.text = hint
-	if hint.begins_with("Main tab"):
-		_active_right_tab = "main"
-		_mobile_tab = "skills"
-	elif hint.begins_with("Mods tab"):
-		_active_right_tab = "mods"
-		_mobile_tab = "skills"
-	elif hint.begins_with("Items tab"):
-		_active_right_tab = "items"
-		_mobile_tab = "items"
+	if hint.begins_with("Templates tab"):
+		_active_right_tab = "templates"
+		_mobile_tab = "templates"
+	elif hint.begins_with("Add-ons tab"):
+		_active_right_tab = "addons"
+		_mobile_tab = "addons"
 
 func _clamp_frame_size() -> void:
 	if _frame == null:
@@ -79,26 +77,31 @@ func _clamp_frame_size() -> void:
 	_is_mobile_layout = vp.x < 900.0
 	if _is_mobile_layout:
 		_frame.custom_minimum_size = Vector2(vp.x - 16.0, vp.y - 24.0)
-		if _cols != null:
-			_cols.vertical = false
 		if _mobile_tabs_row != null:
 			_mobile_tabs_row.visible = true
 		if _title_lbl != null:
-			_title_lbl.text = "SATCHEL"
+			_title_lbl.text = "CARD DECK"
 		if _close_btn != null:
 			_close_btn.text = "Resume"
-			_close_btn.custom_minimum_size = Vector2(112, 44)
+			_close_btn.custom_minimum_size = Vector2(106, 42)
+		var grid_cols: int = 1 if vp.x < 430.0 else 2
+		if _active_grid != null:
+			_active_grid.columns = grid_cols
+		if _collection_grid != null:
+			_collection_grid.columns = grid_cols
 	else:
-		_frame.custom_minimum_size = Vector2(minf(vp.x - 48.0, 1220.0), minf(vp.y - 40.0, 680.0))
-		if _cols != null:
-			_cols.vertical = false
+		_frame.custom_minimum_size = Vector2(minf(vp.x - 40.0, 1240.0), minf(vp.y - 36.0, 690.0))
 		if _mobile_tabs_row != null:
 			_mobile_tabs_row.visible = false
 		if _title_lbl != null:
-			_title_lbl.text = "HERO SATCHEL"
+			_title_lbl.text = "CARD DECK & FORGE"
 		if _close_btn != null:
 			_close_btn.text = "Resume [Tab / Esc]"
-			_close_btn.custom_minimum_size = Vector2(175, 40)
+			_close_btn.custom_minimum_size = Vector2(175, 42)
+		if _active_grid != null:
+			_active_grid.columns = 2
+		if _collection_grid != null:
+			_collection_grid.columns = 2
 
 	if visible and _stats != null:
 		_apply_column_visibility()
@@ -106,26 +109,19 @@ func _clamp_frame_size() -> void:
 func _apply_column_visibility() -> void:
 	if _is_mobile_layout:
 		if _left_box != null:
-			_left_box.visible = false
-		if _center_box != null:
-			_center_box.visible = (_mobile_tab == "gear")
+			_left_box.visible = (_mobile_tab == "active")
 		if _right_box != null:
-			_right_box.visible = (_mobile_tab != "gear")
+			_right_box.visible = (_mobile_tab != "active")
 		if _right_tab_row != null:
-			_right_tab_row.visible = (_mobile_tab == "skills")
-		if _tab_items_btn != null:
-			_tab_items_btn.visible = false
+			_right_tab_row.visible = false
+		_active_right_tab = "addons" if _mobile_tab == "addons" else "templates"
 	else:
 		if _left_box != null:
 			_left_box.visible = true
-		if _center_box != null:
-			_center_box.visible = true
 		if _right_box != null:
 			_right_box.visible = true
 		if _right_tab_row != null:
 			_right_tab_row.visible = true
-		if _tab_items_btn != null:
-			_tab_items_btn.visible = true
 
 func _build_shell() -> void:
 	var dim: ColorRect = ColorRect.new()
@@ -150,14 +146,24 @@ func _build_shell() -> void:
 	hdr.add_theme_constant_override("separation", 10)
 	root_v.add_child(hdr)
 
-	hdr.add_child(UiHelper.make_icon_rect(UiIcons.get_ui_icon("paw_prism_crest"), 30))
+	hdr.add_child(UiHelper.make_icon_rect(UiIcons.get_ui_icon("deck_cards"), 30))
 
 	_title_lbl = Label.new()
-	_title_lbl.text = "HERO SATCHEL"
+	_title_lbl.text = "CARD DECK & FORGE"
 	UiHelper.apply_display_font(_title_lbl, 22, UiHelper.BORDER_GOLD, 3)
 	_title_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_title_lbl.clip_text = true
 	hdr.add_child(_title_lbl)
+
+	_focus_pill = PanelContainer.new()
+	_focus_pill.add_theme_stylebox_override("panel", UiHelper.make_panel_box(UiHelper.BG_WELL, UiHelper.BORDER_BRASS, 8, 1, 6, false))
+	hdr.add_child(_focus_pill)
+	_focus_pill_lbl = Label.new()
+	_focus_pill_lbl.text = "Active: 1 Card · 100% Cast Rate"
+	_focus_pill_lbl.add_theme_font_override("font", UiHelper.get_bold_font())
+	_focus_pill_lbl.add_theme_font_size_override("font_size", 12)
+	_focus_pill_lbl.add_theme_color_override("font_color", Color(0.64, 0.96, 0.72))
+	_focus_pill.add_child(_focus_pill_lbl)
 
 	_close_btn = Button.new()
 	_close_btn.text = "Resume [Tab / Esc]"
@@ -168,7 +174,7 @@ func _build_shell() -> void:
 	_close_btn.pressed.connect(func() -> void: close_panel())
 	hdr.add_child(_close_btn)
 
-	# Optional Tutorial Step Banner
+	# Tutorial Hint Banner
 	_tut_banner_panel = PanelContainer.new()
 	_tut_banner_panel.visible = false
 	_tut_banner_panel.add_theme_stylebox_override("panel", UiHelper.make_panel_box(Color(0.28, 0.20, 0.08), UiHelper.BORDER_GOLD, 10, 2, 8, false))
@@ -185,7 +191,7 @@ func _build_shell() -> void:
 	_tut_banner_lbl.add_theme_color_override("font_color", Color(1.0, 0.92, 0.45))
 	tb_h.add_child(_tut_banner_lbl)
 
-	# Equip / Socket Action Confirmation Strip
+	# Confirmation Strip
 	_feedback_panel = PanelContainer.new()
 	_feedback_panel.visible = false
 	_feedback_panel.add_theme_stylebox_override("panel", UiHelper.make_panel_box(Color(0.11, 0.28, 0.17), UiHelper.CTA_EMERALD_RIM, 8, 1, 6, false))
@@ -197,34 +203,65 @@ func _build_shell() -> void:
 	_feedback_lbl.add_theme_color_override("font_color", Color(0.68, 1.0, 0.78))
 	_feedback_panel.add_child(_feedback_lbl)
 
-	# Mobile Single-Column Primary Tabs (Gear | Items | Skills | Build)
+	# Active Forge Mode Banner
+	_forge_mode_panel = PanelContainer.new()
+	_forge_mode_panel.visible = false
+	_forge_mode_panel.add_theme_stylebox_override("panel", UiHelper.make_panel_box(Color(0.16, 0.24, 0.36), UiHelper.BORDER_GOLD, 10, 2, 8, false))
+	root_v.add_child(_forge_mode_panel)
+	var fm_h: HBoxContainer = HBoxContainer.new()
+	fm_h.add_theme_constant_override("separation", 8)
+	_forge_mode_panel.add_child(fm_h)
+	_forge_mode_icon = UiHelper.make_icon_rect(UiIcons.get_ui_icon("anvil_forge"), 28)
+	fm_h.add_child(_forge_mode_icon)
+	_forge_mode_lbl = Label.new()
+	_forge_mode_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_forge_mode_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_forge_mode_lbl.add_theme_font_override("font", UiHelper.get_bold_font())
+	_forge_mode_lbl.add_theme_font_size_override("font_size", 13)
+	_forge_mode_lbl.add_theme_color_override("font_color", Color(1.0, 0.92, 0.50))
+	fm_h.add_child(_forge_mode_lbl)
+	_forge_cancel_btn = Button.new()
+	_forge_cancel_btn.text = "Cancel"
+	_forge_cancel_btn.custom_minimum_size = Vector2(90, 34)
+	_forge_cancel_btn.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	UiHelper.style_button(_forge_cancel_btn, UiHelper.CTA_RUBY, UiHelper.CTA_RUBY_RIM, 8, 4)
+	_forge_cancel_btn.pressed.connect(func() -> void: cancel_forge())
+	fm_h.add_child(_forge_cancel_btn)
+
+	# Mobile Single-Column Tabs (Active | Templates | Add-ons)
 	_mobile_tabs_row = HBoxContainer.new()
 	_mobile_tabs_row.visible = false
 	_mobile_tabs_row.add_theme_constant_override("separation", 6)
 	root_v.add_child(_mobile_tabs_row)
+	_m_tab_active_btn = _make_tab_button("Active", true, func() -> void:
+		_mobile_tab = "active"
+		refresh()
+	)
+	_m_tab_tpl_btn = _make_tab_button("Templates", true, func() -> void:
+		_mobile_tab = "templates"
+		_active_right_tab = "templates"
+		refresh()
+	)
+	_m_tab_add_btn = _make_tab_button("Add-ons", true, func() -> void:
+		_mobile_tab = "addons"
+		_active_right_tab = "addons"
+		refresh()
+	)
+	_mobile_tabs_row.add_child(_m_tab_active_btn)
+	_mobile_tabs_row.add_child(_m_tab_tpl_btn)
+	_mobile_tabs_row.add_child(_m_tab_add_btn)
 
-	_m_tab_gear_btn = _make_mobile_tab_btn("Gear", "gear")
-	_mobile_tabs_row.add_child(_m_tab_gear_btn)
-	_m_tab_items_btn = _make_mobile_tab_btn("Items", "items")
-	_mobile_tabs_row.add_child(_m_tab_items_btn)
-	_m_tab_skills_btn = _make_mobile_tab_btn("Skills", "skills")
-	_mobile_tabs_row.add_child(_m_tab_skills_btn)
-	_m_tab_build_btn = _make_mobile_tab_btn("Build", "build")
-	_mobile_tabs_row.add_child(_m_tab_build_btn)
-
-	# Body Columns
+	# Desktop 2-Pane Split (Left: Active Deck | Right: Templates & Add-ons)
 	_cols = BoxContainer.new()
 	_cols.vertical = false
 	_cols.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	_cols.add_theme_constant_override("separation", 12)
 	root_v.add_child(_cols)
 
-	# === LEFT COLUMN: Active Build (Desktop) ===
+	# LEFT PANE: Active Equipped Deck
 	_left_box = PanelContainer.new()
-	_left_box.custom_minimum_size = Vector2(290, 0)
 	_left_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_left_box.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	_left_box.size_flags_stretch_ratio = 0.88
 	_left_box.add_theme_stylebox_override("panel", UiHelper.make_panel_box(UiHelper.BG_WALNUT, UiHelper.BORDER_SUBTLE, 12, 1, 10, false))
 	_cols.add_child(_left_box)
 
@@ -232,78 +269,26 @@ func _build_shell() -> void:
 	left_v.add_theme_constant_override("separation", 8)
 	_left_box.add_child(left_v)
 
-	var lh_lbl: Label = Label.new()
-	lh_lbl.text = "Active Build"
-	UiHelper.apply_display_font(lh_lbl, 16, UiHelper.BORDER_GOLD, 2)
-	left_v.add_child(lh_lbl)
+	_active_hdr_lbl = Label.new()
+	_active_hdr_lbl.text = "ACTIVE DECK (Unlimited Slots)"
+	UiHelper.apply_display_font(_active_hdr_lbl, 16, UiHelper.BORDER_GOLD, 2)
+	left_v.add_child(_active_hdr_lbl)
 
-	var left_scroll: TouchScrollContainer = TouchScrollContainer.new()
-	left_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	left_v.add_child(left_scroll)
+	var active_scroll: TouchScrollContainer = TouchScrollContainer.new()
+	active_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	left_v.add_child(active_scroll)
 
-	_left_build_vbox = VBoxContainer.new()
-	_left_build_vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_left_build_vbox.add_theme_constant_override("separation", 8)
-	left_scroll.add_child(_left_build_vbox)
+	_active_grid = GridContainer.new()
+	_active_grid.columns = 2
+	_active_grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_active_grid.add_theme_constant_override("h_separation", 8)
+	_active_grid.add_theme_constant_override("v_separation", 8)
+	active_scroll.add_child(_active_grid)
 
-	# === CENTER COLUMN: 6 Equipment Slots + Linked Sockets ===
-	_center_box = PanelContainer.new()
-	_center_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_center_box.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	_center_box.size_flags_stretch_ratio = 1.25
-	_center_box.add_theme_stylebox_override("panel", UiHelper.make_panel_box(UiHelper.BG_WALNUT, UiHelper.BORDER_SUBTLE, 12, 1, 10, false))
-	_cols.add_child(_center_box)
-
-	var center_v: VBoxContainer = VBoxContainer.new()
-	center_v.add_theme_constant_override("separation", 7)
-	_center_box.add_child(center_v)
-
-	_pending_gem_bar = PanelContainer.new()
-	_pending_gem_bar.visible = false
-	_pending_gem_bar.add_theme_stylebox_override("panel", UiHelper.make_panel_box(Color(0.28, 0.21, 0.08), UiHelper.BORDER_GOLD, 9, 2, 7, false))
-	center_v.add_child(_pending_gem_bar)
-	var pg_h: HBoxContainer = HBoxContainer.new()
-	pg_h.add_theme_constant_override("separation", 8)
-	_pending_gem_bar.add_child(pg_h)
-	_pending_gem_lbl = Label.new()
-	_pending_gem_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_pending_gem_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_pending_gem_lbl.add_theme_font_override("font", UiHelper.get_bold_font())
-	_pending_gem_lbl.add_theme_font_size_override("font_size", 13)
-	_pending_gem_lbl.add_theme_color_override("font_color", Color(1.0, 0.92, 0.48))
-	pg_h.add_child(_pending_gem_lbl)
-	var cancel_pg_btn: Button = Button.new()
-	cancel_pg_btn.text = "Cancel"
-	cancel_pg_btn.custom_minimum_size = Vector2(78, 34)
-	cancel_pg_btn.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
-	UiHelper.style_button(cancel_pg_btn, UiHelper.CTA_RUBY, UiHelper.CTA_RUBY_RIM, 8, 5)
-	cancel_pg_btn.pressed.connect(func() -> void:
-		_selected_pouch_idx = -1
-		refresh()
-	)
-	pg_h.add_child(cancel_pg_btn)
-
-	var center_hint: Label = Label.new()
-	center_hint.text = "Tap a pulsing socket to insert  |  Tap filled socket to remove"
-	center_hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	center_hint.add_theme_font_size_override("font_size", 12)
-	center_hint.add_theme_color_override("font_color", UiHelper.TEXT_PARCHMENT)
-	center_v.add_child(center_hint)
-
-	var slots_scroll: TouchScrollContainer = TouchScrollContainer.new()
-	slots_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	center_v.add_child(slots_scroll)
-
-	_center_slots_vbox = VBoxContainer.new()
-	_center_slots_vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_center_slots_vbox.add_theme_constant_override("separation", 8)
-	slots_scroll.add_child(_center_slots_vbox)
-
-	# === RIGHT COLUMN: Items / Main / Mods (+ Build when mobile) ===
+	# RIGHT PANE: Card Collection (Templates & Add-ons)
 	_right_box = PanelContainer.new()
 	_right_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_right_box.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	_right_box.size_flags_stretch_ratio = 1.15
 	_right_box.add_theme_stylebox_override("panel", UiHelper.make_panel_box(UiHelper.BG_WALNUT, UiHelper.BORDER_SUBTLE, 12, 1, 10, false))
 	_cols.add_child(_right_box)
 
@@ -315,729 +300,322 @@ func _build_shell() -> void:
 	_right_tab_row.add_theme_constant_override("separation", 6)
 	right_v.add_child(_right_tab_row)
 
-	_tab_items_btn = _make_tab_button("items")
-	_right_tab_row.add_child(_tab_items_btn)
-	_tab_main_btn = _make_tab_button("main")
-	_right_tab_row.add_child(_tab_main_btn)
-	_tab_mods_btn = _make_tab_button("mods")
-	_right_tab_row.add_child(_tab_mods_btn)
-
-	_right_content_vbox = VBoxContainer.new()
-	_right_content_vbox.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	_right_content_vbox.add_theme_constant_override("separation", 8)
-	right_v.add_child(_right_content_vbox)
-
-func _make_mobile_tab_btn(lbl: String, tab_key: String) -> Button:
-	var btn: Button = Button.new()
-	btn.text = lbl
-	btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	btn.custom_minimum_size = Vector2(0, 42)
-	btn.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
-	btn.add_theme_font_size_override("font_size", 14)
-	btn.pressed.connect(func() -> void:
-		_mobile_tab = tab_key
-		if tab_key == "items":
-			_active_right_tab = "items"
-		elif tab_key == "skills" and _active_right_tab == "items":
-			_active_right_tab = "main"
-		if _feedback_panel != null:
-			_feedback_panel.visible = false
-		sfx_requested.emit("ui_click")
+	_tab_tpl_btn = _make_tab_button("Template Cards", false, func() -> void:
+		_active_right_tab = "templates"
 		refresh()
 	)
-	return btn
-
-func _make_tab_button(tab_key: String) -> Button:
-	var btn: Button = Button.new()
-	btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	btn.custom_minimum_size = Vector2(0, 40)
-	btn.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
-	btn.add_theme_font_size_override("font_size", 14)
-	btn.pressed.connect(func() -> void:
-		_active_right_tab = tab_key
-		_selected_bag_idx = -1
-		_selected_pouch_idx = -1
-		if _feedback_panel != null:
-			_feedback_panel.visible = false
-		sfx_requested.emit("ui_click")
+	_tab_add_btn = _make_tab_button("Add-on Cards", false, func() -> void:
+		_active_right_tab = "addons"
 		refresh()
 	)
+	_right_tab_row.add_child(_tab_tpl_btn)
+	_right_tab_row.add_child(_tab_add_btn)
+
+	var col_scroll: TouchScrollContainer = TouchScrollContainer.new()
+	col_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	right_v.add_child(col_scroll)
+
+	_collection_grid = GridContainer.new()
+	_collection_grid.columns = 2
+	_collection_grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_collection_grid.add_theme_constant_override("h_separation", 8)
+	_collection_grid.add_theme_constant_override("v_separation", 8)
+	col_scroll.add_child(_collection_grid)
+
+func _make_tab_button(label_txt: String, is_mobile_bar: bool, on_press: Callable) -> Button:
+	var btn: Button = Button.new()
+	btn.text = label_txt
+	btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	btn.custom_minimum_size = Vector2(0, 42 if is_mobile_bar else 36)
+	btn.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	btn.add_theme_font_size_override("font_size", 13 if is_mobile_bar else 14)
+	btn.pressed.connect(on_press)
 	return btn
 
-func _show_feedback(msg: String) -> void:
-	if _feedback_panel != null and _feedback_lbl != null:
-		_feedback_lbl.text = msg
-		_feedback_panel.visible = not msg.is_empty()
-
-func _equip_item_at(bag_idx: int) -> void:
-	if _stats == null or bag_idx < 0 or bag_idx >= _stats.item_bag.size():
-		return
-	var res: Dictionary = _stats.equip_item_from_bag(bag_idx)
-	if bool(res.get("ok", false)):
-		var eq_item: ItemInstance = res.get("equipped_item", null)
-		_selected_bag_idx = 0 if not _stats.item_bag.is_empty() else -1
-		if eq_item != null:
-			_show_feedback("Equipped %s!" % eq_item.item_name)
-		sfx_requested.emit("equip_snap")
-		gear_changed.emit()
-		refresh()
-
-func _connect_tap(card: Control, callback: Callable) -> void:
-	card.mouse_filter = Control.MOUSE_FILTER_STOP
-	card.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
-	var st: Dictionary = {"down": false, "pos": Vector2.ZERO}
-	card.gui_input.connect(func(ev: InputEvent) -> void:
+func _connect_tap(ctrl: Control, callback: Callable) -> void:
+	ctrl.gui_input.connect(func(ev: InputEvent) -> void:
 		if ev is InputEventMouseButton and ev.button_index == MOUSE_BUTTON_LEFT:
-			var mb: InputEventMouseButton = ev
-			if mb.pressed:
-				st["down"] = true
-				st["pos"] = mb.position
-				card.accept_event()
-			elif bool(st["down"]):
-				st["down"] = false
-				card.accept_event()
-				if mb.position.distance_to(st["pos"]) < 18.0 and not TouchScrollContainer.was_recent_drag():
+			if ev.pressed:
+				ctrl.set_meta("_tap_origin", ev.global_position)
+			elif ctrl.has_meta("_tap_origin"):
+				var origin: Vector2 = ctrl.get_meta("_tap_origin")
+				ctrl.remove_meta("_tap_origin")
+				if origin.distance_to(ev.global_position) <= 18.0:
+					ctrl.accept_event()
 					callback.call()
 	)
 
+func _show_feedback(msg: String) -> void:
+	if _feedback_panel == null or _feedback_lbl == null:
+		return
+	_feedback_lbl.text = msg
+	_feedback_panel.visible = not msg.is_empty()
+
 func open_panel(stats: HeroStats) -> void:
 	_stats = stats
-	_selected_bag_idx = 0 if (stats != null and not stats.item_bag.is_empty()) else -1
-	_selected_pouch_idx = -1
+	_forging_addon_idx = -1
 	_show_feedback("")
+	if not _tutorial_hint.is_empty():
+		set_tutorial_hint(_tutorial_hint)
 	visible = true
-	set_tutorial_hint(_tutorial_hint)
 	_clamp_frame_size()
 	refresh()
 
 func close_panel() -> void:
+	_forging_addon_idx = -1
 	visible = false
-	_selected_pouch_idx = -1
 	closed.emit()
+
+func cancel_forge() -> void:
+	_forging_addon_idx = -1
+	refresh()
+
+func start_forge_addon_at(addon_idx: int) -> void:
+	if _stats == null or addon_idx < 0 or addon_idx >= _stats.addon_inventory.size():
+		return
+	_forging_addon_idx = addon_idx
+	if _is_mobile_layout:
+		_mobile_tab = "active"
+	sfx_requested.emit("ui_click")
+	refresh()
+
+func equip_template_at(inv_idx: int) -> bool:
+	if _stats == null:
+		return false
+	var res: Dictionary = _stats.equip_template_from_inventory(inv_idx)
+	if not bool(res.get("ok", false)):
+		return false
+	var card: CardInstance = res["card"]
+	_show_feedback("Equipped %s into Active Deck!" % card.get_display_title())
+	sfx_requested.emit("equip_snap")
+	deck_changed.emit()
+	refresh()
+	return true
+
+func unequip_card_at(eq_idx: int) -> bool:
+	if _stats == null:
+		return false
+	var res: Dictionary = _stats.unequip_template_card(eq_idx)
+	if not bool(res.get("ok", false)):
+		return false
+	var card: CardInstance = res["card"]
+	_show_feedback("Moved %s to Template Collection." % card.get_display_title())
+	sfx_requested.emit("ui_click")
+	deck_changed.emit()
+	refresh()
+	return true
+
+func confirm_forge_onto_card(target_card: CardInstance) -> bool:
+	if _stats == null or _forging_addon_idx < 0 or target_card == null:
+		return false
+	var res: Dictionary = _stats.forge_addon_onto_card(_forging_addon_idx, target_card)
+	if not bool(res.get("ok", false)):
+		_show_feedback(String(res.get("reason", "Cannot forge Add-on here")))
+		return false
+	var addon_name: String = String(res.get("addon_name", "Add-on"))
+	_forging_addon_idx = -1
+	_show_feedback("Forged %s onto %s (%d/%d)!" % [
+		addon_name,
+		target_card.get_card_name(),
+		target_card.get_forge_count(),
+		target_card.get_max_forges(),
+	])
+	sfx_requested.emit("socket_chime")
+	deck_changed.emit()
+	refresh()
+	return true
+
+func confirm_forge_onto_equipped(eq_idx: int) -> bool:
+	if _stats == null or eq_idx < 0 or eq_idx >= _stats.equipped_cards.size():
+		return false
+	return confirm_forge_onto_card(_stats.equipped_cards[eq_idx])
+
+func confirm_forge_onto_inventory_template(inv_idx: int) -> bool:
+	if _stats == null or inv_idx < 0 or inv_idx >= _stats.template_inventory.size():
+		return false
+	return confirm_forge_onto_card(_stats.template_inventory[inv_idx])
 
 func refresh() -> void:
 	if _stats == null:
 		return
-	var main_count: int = _stats.get_pouch_gems(GameEnums.GemType.MAIN).size()
-	var mod_count: int = _stats.get_pouch_gems(GameEnums.GemType.MODIFIER).size()
-	var skill_total: int = main_count + mod_count
-
-	_tab_items_btn.text = "Items (%d)" % _stats.item_bag.size()
-	_tab_main_btn.text = "Main (%d)" % main_count
-	_tab_mods_btn.text = "Mods (%d)" % mod_count
-
-	if _m_tab_items_btn != null:
-		_m_tab_items_btn.text = "Items (%d)" % _stats.item_bag.size()
-	if _m_tab_skills_btn != null:
-		_m_tab_skills_btn.text = "Skills (%d)" % skill_total
-
-	for pair in [[_tab_items_btn, "items"], [_tab_main_btn, "main"], [_tab_mods_btn, "mods"]]:
-		var btn: Button = pair[0]
-		var key: String = pair[1]
-		UiHelper.style_button(
-			btn,
-			UiHelper.BG_OAK_CARD if _active_right_tab == key else UiHelper.BG_WELL,
-			UiHelper.BORDER_GOLD if _active_right_tab == key else UiHelper.BORDER_BRASS,
-			9,
-			6
-		)
-
-	for mpair in [[_m_tab_gear_btn, "gear"], [_m_tab_items_btn, "items"], [_m_tab_skills_btn, "skills"], [_m_tab_build_btn, "build"]]:
-		var mbtn: Button = mpair[0]
-		var mkey: String = mpair[1]
-		if mbtn != null:
-			UiHelper.style_button(
-				mbtn,
-				UiHelper.BG_OAK_CARD if _mobile_tab == mkey else UiHelper.BG_WELL,
-				UiHelper.BORDER_GOLD if _mobile_tab == mkey else UiHelper.BORDER_BRASS,
-				9,
-				6
-			)
+	if _forging_addon_idx >= _stats.addon_inventory.size():
+		_forging_addon_idx = -1
 
 	_apply_column_visibility()
-	_refresh_left_build()
-	_refresh_center_slots()
-	_refresh_right_column()
+	_refresh_focus_header()
+	_refresh_forge_banner()
+	_refresh_tab_buttons()
+	_rebuild_active_grid()
+	_rebuild_collection_grid()
 
-func _refresh_left_build() -> void:
-	for ch in _left_build_vbox.get_children():
-		ch.queue_free()
-	_populate_build_vbox(_left_build_vbox)
+func _refresh_focus_header() -> void:
+	var n: int = _stats.equipped_card_count
+	var rate_pct: int = int(round((1.0 / maxf(0.1, _stats.deck_cd_mult)) * 100.0))
+	var tag: String = "Focused" if n <= 2 else ("Sweet Spot" if n == 3 else "Deck Tax x%.2f" % _stats.deck_cd_mult)
+	_focus_pill_lbl.text = "Active: %d Card%s · %d%% Rate (%s)" % [n, "" if n == 1 else "s", rate_pct, tag]
+	var col: Color = Color(0.64, 0.96, 0.72) if n <= 3 else Color(1.0, 0.78, 0.36)
+	_focus_pill_lbl.add_theme_color_override("font_color", col)
+	_active_hdr_lbl.text = "ACTIVE DECK (%d Equipped · Any Limit)" % n
 
-func _populate_build_vbox(container: VBoxContainer) -> void:
-	var s: HeroStats = _stats
-	var hdef: Dictionary = HeroDatabase.get_hero(s.hero_id)
-	var fs_title: int = 15 if _is_mobile_layout else 13
-	var fs_sub: int = 13 if _is_mobile_layout else 11
-
-	var hero_card: PanelContainer = PanelContainer.new()
-	hero_card.add_theme_stylebox_override("panel", UiHelper.make_panel_box(UiHelper.BG_WELL, UiHelper.BORDER_BRASS, 10, 1, 8, false))
-	container.add_child(hero_card)
-	var hh: HBoxContainer = HBoxContainer.new()
-	hh.add_theme_constant_override("separation", 10)
-	hero_card.add_child(hh)
-	hh.add_child(UiHelper.make_icon_rect(UiIcons.get_hero_portrait(s.hero_id), 44 if _is_mobile_layout else 40))
-	var hv: VBoxContainer = VBoxContainer.new()
-	hv.add_theme_constant_override("separation", 4)
-	hh.add_child(hv)
-	var hn: Label = Label.new()
-	hn.text = String(hdef["hero_name"])
-	UiHelper.apply_display_font(hn, 16 if _is_mobile_layout else 15, Color(1.0, 0.88, 0.42), 2)
-	hv.add_child(hn)
-
-	var vitals_h: HBoxContainer = HBoxContainer.new()
-	vitals_h.add_theme_constant_override("separation", 12)
-	hv.add_child(vitals_h)
-	for pair in [["heart", "%d HP" % int(round(s.max_hp))], ["star_upgrade", "%.1f Spd" % s.move_speed]]:
-		var vp_box: HBoxContainer = HBoxContainer.new()
-		vp_box.add_theme_constant_override("separation", 4)
-		vp_box.add_child(UiHelper.make_icon_rect(UiIcons.get_ui_icon(pair[0]), 16))
-		var vl: Label = Label.new()
-		vl.text = pair[1]
-		vl.add_theme_font_size_override("font_size", 13 if _is_mobile_layout else 12)
-		vl.add_theme_color_override("font_color", UiHelper.TEXT_CREAM)
-		vp_box.add_child(vl)
-		vitals_h.add_child(vp_box)
-
-	var focus_txt: String = "Focus: 1 Main (1.00x CD)" if s.equipped_main_count <= 1 else ("Focus: %d Mains (%.2fx CD)" % [s.equipped_main_count, s.multi_skill_cd_mult])
-	var focus_col: Color = Color(0.56, 0.94, 0.68) if s.equipped_main_count <= 1 else Color(1.0, 0.78, 0.36)
-	var focus_pill: PanelContainer = UiHelper.make_badge_pill(focus_txt, focus_col.darkened(0.68), focus_col, UiHelper.TEXT_CREAM, 11)
-	hv.add_child(focus_pill)
-
-	# Linked Active Skills
-	var sk_hdr: Label = Label.new()
-	sk_hdr.text = "ACTIVE ABILITIES (%d)" % s.active_skill_configs.size()
-	sk_hdr.add_theme_font_override("font", UiHelper.get_bold_font())
-	sk_hdr.add_theme_font_size_override("font_size", fs_sub + 1)
-	sk_hdr.add_theme_color_override("font_color", Color(0.56, 0.90, 1.0))
-	container.add_child(sk_hdr)
-
-	if s.active_skill_configs.is_empty():
-		var emp_s: Label = Label.new()
-		emp_s.text = "None socketed yet."
-		emp_s.add_theme_font_size_override("font_size", fs_sub + 1)
-		emp_s.add_theme_color_override("font_color", UiHelper.TEXT_PARCHMENT)
-		container.add_child(emp_s)
+func _refresh_forge_banner() -> void:
+	if _forging_addon_idx >= 0 and _forging_addon_idx < _stats.addon_inventory.size():
+		var addon: CardInstance = _stats.addon_inventory[_forging_addon_idx]
+		_forge_mode_icon.texture = UiIcons.get_card_art(addon.card_id)
+		_forge_mode_lbl.text = "FORGE MODE: %s (%s) — Tap [+ Forge Here] on any compatible Template Card! (Consumes Add-on)" % [
+			addon.get_card_name(),
+			CardDatabase.get_compatibility_text(addon.card_id),
+		]
+		_forge_mode_panel.visible = true
 	else:
-		for cfg in s.active_skill_configs:
-			var gcol: Color = GameEnums.gem_color_value(int(cfg["color"]))
-			var sc: PanelContainer = PanelContainer.new()
-			sc.add_theme_stylebox_override("panel", UiHelper.make_panel_box(UiHelper.BG_WELL, gcol.darkened(0.2), 9, 1, 8, false))
-			container.add_child(sc)
-			var sv: VBoxContainer = VBoxContainer.new()
-			sv.add_theme_constant_override("separation", 4)
-			sc.add_child(sv)
-			var sh: HBoxContainer = HBoxContainer.new()
-			sh.add_theme_constant_override("separation", 8)
-			sv.add_child(sh)
-			sh.add_child(UiHelper.make_icon_rect(UiIcons.get_skill_icon(String(cfg["gem_id"])), 26))
-			var sn: Label = Label.new()
-			sn.text = String(cfg["gem_name"])
-			sn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-			sn.add_theme_font_override("font", UiHelper.get_bold_font())
-			sn.add_theme_font_size_override("font_size", fs_title)
-			sn.add_theme_color_override("font_color", UiHelper.TEXT_CREAM)
-			sh.add_child(sn)
-			var stats_p: Label = Label.new()
-			stats_p.text = "%.0f | %.2fs" % [float(cfg["damage"]), float(cfg["cooldown"])]
-			stats_p.add_theme_font_size_override("font_size", fs_sub)
-			stats_p.add_theme_color_override("font_color", UiHelper.TEXT_PARCHMENT)
-			sh.add_child(stats_p)
+		_forge_mode_panel.visible = false
 
-			var mod_names: Array = cfg.get("linked_mod_names", [])
-			var mod_cols: Array = cfg.get("linked_mod_colors", [])
-			if not mod_names.is_empty():
-				var mr: HFlowContainer = HFlowContainer.new()
-				mr.add_theme_constant_override("h_separation", 4)
-				mr.add_theme_constant_override("v_separation", 4)
-				sv.add_child(mr)
-				for k in range(mod_names.size()):
-					var mcol: Color = GameEnums.gem_color_value(int(mod_cols[k]))
-					mr.add_child(UiHelper.make_badge_pill(String(mod_names[k]), mcol.darkened(0.65), mcol, UiHelper.TEXT_CREAM, 11))
+func _refresh_tab_buttons() -> void:
+	var n_act: int = _stats.equipped_cards.size()
+	var n_tpl: int = _stats.template_inventory.size()
+	var n_add: int = _stats.addon_inventory.size()
 
-	# Global Effects
-	var ef_hdr: Label = Label.new()
-	ef_hdr.text = "GLOBAL EFFECTS (%d)" % s.active_effect_list.size()
-	ef_hdr.add_theme_font_override("font", UiHelper.get_bold_font())
-	ef_hdr.add_theme_font_size_override("font_size", fs_sub + 1)
-	ef_hdr.add_theme_color_override("font_color", Color(1.0, 0.86, 0.44))
-	container.add_child(ef_hdr)
+	_tab_tpl_btn.text = "Templates (%d)" % n_tpl
+	_tab_add_btn.text = "Add-ons (%d)" % n_add
+	_m_tab_active_btn.text = "Active (%d)" % n_act
+	_m_tab_tpl_btn.text = "Tpl (%d)" % n_tpl
+	_m_tab_add_btn.text = "Add-on (%d)" % n_add
 
-	if s.active_effect_list.is_empty():
-		var emp_e: Label = Label.new()
-		emp_e.text = "Equip Relics to gain Global Effects."
-		emp_e.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		emp_e.add_theme_font_size_override("font_size", fs_sub + 1)
-		emp_e.add_theme_color_override("font_color", UiHelper.TEXT_PARCHMENT)
-		container.add_child(emp_e)
-	else:
-		var ef_list: VBoxContainer = VBoxContainer.new()
-		ef_list.add_theme_constant_override("separation", 5)
-		container.add_child(ef_list)
-		for eid in s.active_effect_list:
-			var chip: PanelContainer = UiHelper.make_effect_chip(String(eid), false)
-			chip.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
-			ef_list.add_child(chip)
+	UiHelper.style_button(_tab_tpl_btn, UiHelper.CTA_SAPPHIRE if _active_right_tab == "templates" else UiHelper.BG_OAK_CARD, UiHelper.BORDER_GOLD if _active_right_tab == "templates" else UiHelper.BORDER_BRASS, 8, 5)
+	UiHelper.style_button(_tab_add_btn, UiHelper.CTA_SAPPHIRE if _active_right_tab == "addons" else UiHelper.BG_OAK_CARD, UiHelper.BORDER_GOLD if _active_right_tab == "addons" else UiHelper.BORDER_BRASS, 8, 5)
 
-func _refresh_center_slots() -> void:
-	for ch in _center_slots_vbox.get_children():
+	var m_btns: Dictionary = {"active": _m_tab_active_btn, "templates": _m_tab_tpl_btn, "addons": _m_tab_add_btn}
+	for k in m_btns.keys():
+		var b: Button = m_btns[k]
+		var active_b: bool = (_mobile_tab == k)
+		UiHelper.style_button(b, UiHelper.CTA_SAPPHIRE if active_b else UiHelper.BG_OAK_CARD, UiHelper.BORDER_GOLD if active_b else UiHelper.BORDER_BRASS, 8, 5)
+
+func _rebuild_active_grid() -> void:
+	for ch in _active_grid.get_children():
 		ch.queue_free()
 
-	var sel_gem: GemInstance = null
-	if _selected_pouch_idx >= 0 and _selected_pouch_idx < _stats.gem_pouch.size():
-		sel_gem = _stats.gem_pouch[_selected_pouch_idx]
-
-	if _pending_gem_bar != null and _pending_gem_lbl != null:
-		_pending_gem_bar.visible = (sel_gem != null)
-		if sel_gem != null:
-			_pending_gem_lbl.text = "Tap a pulsing %s socket to insert %s" % [GameEnums.gem_color_letter(sel_gem.get_gem_color()), sel_gem.get_gem_name()]
-
-	var fs_slot: int = 15 if _is_mobile_layout else 13
-	for slot in [
-		GameEnums.EquipSlot.WEAPON,
-		GameEnums.EquipSlot.HELMET,
-		GameEnums.EquipSlot.ARMOR,
-		GameEnums.EquipSlot.BOOTS,
-		GameEnums.EquipSlot.AMULET,
-		GameEnums.EquipSlot.RING,
-	]:
-		var item: ItemInstance = _stats.equipped.get(slot, null)
-		var b_col: Color = UiHelper.rarity_border_color(item.rarity) if item != null else UiHelper.BORDER_SUBTLE
-		var r_col: Color = GameEnums.rarity_color(item.rarity) if item != null else Color(0.55, 0.50, 0.45)
-
-		var card: PanelContainer = PanelContainer.new()
-		card.mouse_filter = Control.MOUSE_FILTER_PASS
-		card.add_theme_stylebox_override("panel", UiHelper.make_panel_box(UiHelper.BG_WELL, b_col, 10, 1, 8, false))
-		_center_slots_vbox.add_child(card)
-
-		var cv: VBoxContainer = VBoxContainer.new()
-		cv.mouse_filter = Control.MOUSE_FILTER_PASS
-		cv.add_theme_constant_override("separation", 6)
-		card.add_child(cv)
-
-		var hdr_panel: PanelContainer = PanelContainer.new()
-		hdr_panel.mouse_filter = Control.MOUSE_FILTER_PASS
-		hdr_panel.add_theme_stylebox_override("panel", UiHelper.make_accent_card_box(UiHelper.BG_OAK_CARD if item != null else UiHelper.BG_WELL, b_col, 8, 7))
-		cv.add_child(hdr_panel)
-
-		var hh: HBoxContainer = HBoxContainer.new()
-		hh.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		hh.add_theme_constant_override("separation", 8)
-		hdr_panel.add_child(hh)
-		hh.add_child(UiHelper.make_icon_rect(UiIcons.get_slot_icon(slot), 26 if _is_mobile_layout else 24))
-
-		var hv: VBoxContainer = VBoxContainer.new()
-		hv.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		hv.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		hv.add_theme_constant_override("separation", 4)
-		hh.add_child(hv)
-
-		var top_r: HBoxContainer = HBoxContainer.new()
-		top_r.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		top_r.add_theme_constant_override("separation", 6)
-		hv.add_child(top_r)
-
-		var name_lbl: Label = Label.new()
-		name_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		name_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		name_lbl.add_theme_font_override("font", UiHelper.get_bold_font())
-		name_lbl.add_theme_font_size_override("font_size", fs_slot)
-		name_lbl.add_theme_color_override("font_color", r_col)
-		name_lbl.text = ("%s: Empty" % GameEnums.slot_label(slot)) if item == null else item.item_name
-		top_r.add_child(name_lbl)
-
-		if item != null:
-			top_r.add_child(UiHelper.make_badge_pill(GameEnums.rarity_label(item.rarity), r_col.darkened(0.68), r_col, UiHelper.TEXT_CREAM, 11))
-			if not item.effects.is_empty():
-				var ef_flow: HFlowContainer = HFlowContainer.new()
-				ef_flow.mouse_filter = Control.MOUSE_FILTER_IGNORE
-				ef_flow.add_theme_constant_override("h_separation", 5)
-				ef_flow.add_theme_constant_override("v_separation", 4)
-				hv.add_child(ef_flow)
-				for eid in item.effects:
-					ef_flow.add_child(UiHelper.make_effect_chip(String(eid), not _is_mobile_layout))
-
-		if item != null:
-			var sock_widget: PoESocketWidget = PoESocketWidget.new()
-			sock_widget.configure(slot, item, sel_gem)
-			sock_widget.socket_clicked.connect(_on_socket_clicked)
-			cv.add_child(sock_widget)
-
-func _refresh_right_column() -> void:
-	for ch in _right_content_vbox.get_children():
-		ch.queue_free()
-
-	if _is_mobile_layout:
-		if _mobile_tab == "build":
-			_build_mobile_build_tab()
-			return
-		elif _mobile_tab == "items":
-			_build_items_tab()
-			return
-		elif _mobile_tab == "skills":
-			_build_gems_tab(GameEnums.GemType.MODIFIER if _active_right_tab == "mods" else GameEnums.GemType.MAIN)
-			return
-
-	match _active_right_tab:
-		"items":
-			_build_items_tab()
-		"main":
-			_build_gems_tab(GameEnums.GemType.MAIN)
-		"mods":
-			_build_gems_tab(GameEnums.GemType.MODIFIER)
-
-func _build_mobile_build_tab() -> void:
-	var b_well: PanelContainer = PanelContainer.new()
-	b_well.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	b_well.add_theme_stylebox_override("panel", UiHelper.make_panel_box(UiHelper.BG_WELL, UiHelper.BORDER_SUBTLE, 10, 1, 10, false))
-	_right_content_vbox.add_child(b_well)
-	var b_scroll: TouchScrollContainer = TouchScrollContainer.new()
-	b_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	b_well.add_child(b_scroll)
-	var bv: VBoxContainer = VBoxContainer.new()
-	bv.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	bv.add_theme_constant_override("separation", 8)
-	b_scroll.add_child(bv)
-	_populate_build_vbox(bv)
-
-func _build_items_tab() -> void:
-	if not _stats.item_bag.is_empty() and (_selected_bag_idx < 0 or _selected_bag_idx >= _stats.item_bag.size()):
-		_selected_bag_idx = 0
-
-	var fs_item: int = 15 if _is_mobile_layout else 13
-	if not _stats.item_bag.is_empty():
-		var bag_hint: Label = Label.new()
-		bag_hint.text = "Tap Equip to wear, or tap a Relic to compare below."
-		bag_hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		bag_hint.add_theme_font_size_override("font_size", 12 if _is_mobile_layout else 11)
-		bag_hint.add_theme_color_override("font_color", UiHelper.TEXT_PARCHMENT)
-		_right_content_vbox.add_child(bag_hint)
-
-	var scroll: TouchScrollContainer = TouchScrollContainer.new()
-	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	_right_content_vbox.add_child(scroll)
-
-	var list_v: VBoxContainer = VBoxContainer.new()
-	list_v.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	list_v.mouse_filter = Control.MOUSE_FILTER_PASS
-	list_v.add_theme_constant_override("separation", 7)
-	scroll.add_child(list_v)
-
-	if _stats.item_bag.is_empty():
-		var emp_box: PanelContainer = PanelContainer.new()
-		emp_box.add_theme_stylebox_override("panel", UiHelper.make_panel_box(UiHelper.BG_WELL, UiHelper.BORDER_SUBTLE, 10, 1, 14, false))
-		var emp: Label = Label.new()
-		emp.text = "No Relics in bag yet."
-		emp.add_theme_font_size_override("font_size", fs_item)
-		emp.add_theme_color_override("font_color", UiHelper.TEXT_PARCHMENT)
-		emp_box.add_child(emp)
-		list_v.add_child(emp_box)
-	else:
-		for i in range(_stats.item_bag.size()):
-			var it: ItemInstance = _stats.item_bag[i]
-			var r_col: Color = GameEnums.rarity_color(it.rarity)
-			var b_col: Color = UiHelper.rarity_border_color(it.rarity)
-			var is_sel: bool = (i == _selected_bag_idx)
-
-			var row_card: PanelContainer = PanelContainer.new()
-			row_card.add_theme_stylebox_override(
-				"panel",
-				UiHelper.make_accent_card_box(UiHelper.BG_OAK_CARD if not is_sel else Color(0.30, 0.23, 0.16), Color(1.0, 0.90, 0.36) if is_sel else b_col, 8, 9)
-			)
-			var idx_cap: int = i
-			_connect_tap(row_card, func() -> void:
-				_selected_bag_idx = idx_cap
-				sfx_requested.emit("ui_click")
-				refresh()
-			)
-			list_v.add_child(row_card)
-
-			var rv: VBoxContainer = VBoxContainer.new()
-			rv.add_theme_constant_override("separation", 5)
-			rv.mouse_filter = Control.MOUSE_FILTER_IGNORE
-			row_card.add_child(rv)
-
-			var top_h: HBoxContainer = HBoxContainer.new()
-			top_h.add_theme_constant_override("separation", 8)
-			top_h.mouse_filter = Control.MOUSE_FILTER_IGNORE
-			rv.add_child(top_h)
-			top_h.add_child(UiHelper.make_icon_rect(UiIcons.get_slot_icon(it.equip_slot), 24))
-			var nl: Label = Label.new()
-			nl.text = it.item_name
-			nl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-			nl.mouse_filter = Control.MOUSE_FILTER_IGNORE
-			nl.add_theme_font_override("font", UiHelper.get_bold_font())
-			nl.add_theme_font_size_override("font_size", fs_item)
-			nl.add_theme_color_override("font_color", r_col)
-			top_h.add_child(nl)
-
-			var mini_sw: PoESocketWidget = PoESocketWidget.new()
-			mini_sw.configure_mini(it)
-			top_h.add_child(mini_sw)
-
-			var row_eq_btn: Button = Button.new()
-			row_eq_btn.text = "Equip"
-			row_eq_btn.custom_minimum_size = Vector2(68 if _is_mobile_layout else 62, 32 if _is_mobile_layout else 26)
-			row_eq_btn.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
-			UiHelper.style_button(row_eq_btn, UiHelper.CTA_EMERALD, UiHelper.CTA_EMERALD_RIM, 7, 4)
-			row_eq_btn.add_theme_font_size_override("font_size", 13 if _is_mobile_layout else 11)
-			row_eq_btn.pressed.connect(func() -> void:
-				if not TouchScrollContainer.was_recent_drag():
-					_equip_item_at(idx_cap)
-			)
-			top_h.add_child(row_eq_btn)
-
-			if not it.effects.is_empty():
-				var ef_row: HFlowContainer = HFlowContainer.new()
-				ef_row.add_theme_constant_override("h_separation", 4)
-				ef_row.add_theme_constant_override("v_separation", 4)
-				ef_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
-				rv.add_child(ef_row)
-				for eid in it.effects:
-					ef_row.add_child(UiHelper.make_effect_chip(String(eid), not _is_mobile_layout))
-
-	# Selected Item Visual Tradeoff Inspector
-	if _selected_bag_idx >= 0 and _selected_bag_idx < _stats.item_bag.size():
-		var sel_item: ItemInstance = _stats.item_bag[_selected_bag_idx]
-		var cur_item: ItemInstance = _stats.equipped.get(sel_item.equip_slot, null)
-		var r_col: Color = GameEnums.rarity_color(sel_item.rarity)
-
-		var cmp_box: PanelContainer = PanelContainer.new()
-		cmp_box.add_theme_stylebox_override("panel", UiHelper.make_panel_box(UiHelper.BG_WELL, r_col, 10, 2, 10, false))
-		_right_content_vbox.add_child(cmp_box)
-
-		var cmp_v: VBoxContainer = VBoxContainer.new()
-		cmp_v.add_theme_constant_override("separation", 6)
-		cmp_box.add_child(cmp_v)
-
-		var new_n: Label = Label.new()
-		new_n.text = "%s (%s)" % [sel_item.item_name, sel_item.get_socket_summary_text()]
-		new_n.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		new_n.add_theme_font_override("font", UiHelper.get_bold_font())
-		new_n.add_theme_font_size_override("font_size", 15 if _is_mobile_layout else 13)
-		new_n.add_theme_color_override("font_color", r_col)
-		cmp_v.add_child(new_n)
-
-		var cur_txt: String = "vs Empty" if cur_item == null else ("vs %s (%s)" % [cur_item.item_name, cur_item.get_socket_summary_text()])
-		var vs_lbl: Label = Label.new()
-		vs_lbl.text = cur_txt
-		vs_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		vs_lbl.add_theme_font_size_override("font_size", 12 if _is_mobile_layout else 11)
-		vs_lbl.add_theme_color_override("font_color", UiHelper.TEXT_PARCHMENT)
-		cmp_v.add_child(vs_lbl)
-
-		var diff_flow: HFlowContainer = HFlowContainer.new()
-		diff_flow.add_theme_constant_override("h_separation", 5)
-		diff_flow.add_theme_constant_override("v_separation", 5)
-		cmp_v.add_child(diff_flow)
-
-		var cur_effects: Array[String] = cur_item.effects if cur_item != null else []
-		for eid in sel_item.effects:
-			if eid in cur_effects:
-				diff_flow.add_child(UiHelper.make_effect_chip(eid, not _is_mobile_layout, "= "))
-			else:
-				diff_flow.add_child(UiHelper.make_effect_chip(eid, not _is_mobile_layout, "+ ", Color(0.40, 0.94, 0.56)))
-		for eid in cur_effects:
-			if not (eid in sel_item.effects):
-				diff_flow.add_child(UiHelper.make_effect_chip(eid, not _is_mobile_layout, "- ", Color(0.96, 0.44, 0.44)))
-
-		var btns_h: HBoxContainer = HBoxContainer.new()
-		btns_h.add_theme_constant_override("separation", 8)
-		cmp_v.add_child(btns_h)
-
-		var btn_h: int = 44 if _is_mobile_layout else 36
-		var eq_btn: Button = Button.new()
-		eq_btn.text = "Equip"
-		eq_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		eq_btn.custom_minimum_size = Vector2(0, btn_h)
-		eq_btn.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
-		UiHelper.style_button(eq_btn, UiHelper.CTA_EMERALD, UiHelper.CTA_EMERALD_RIM, 8, 6)
-		eq_btn.add_theme_font_size_override("font_size", 15 if _is_mobile_layout else 13)
-		eq_btn.pressed.connect(func() -> void:
-			_equip_item_at(_selected_bag_idx)
-		)
-		btns_h.add_child(eq_btn)
-
-		var drop_btn: Button = Button.new()
-		drop_btn.text = "Drop"
-		drop_btn.custom_minimum_size = Vector2(96, btn_h)
-		drop_btn.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
-		UiHelper.style_button(drop_btn, UiHelper.CTA_RUBY, UiHelper.CTA_RUBY_RIM, 8, 6)
-		drop_btn.add_theme_font_size_override("font_size", 15 if _is_mobile_layout else 13)
-		drop_btn.pressed.connect(func() -> void:
-			_stats.discard_bag_item(_selected_bag_idx)
-			_selected_bag_idx = -1
-			sfx_requested.emit("ui_click")
-			gear_changed.emit()
-			refresh()
-		)
-		btns_h.add_child(drop_btn)
-
-func _build_gems_tab(filter_gtype: int) -> void:
-	var scroll: TouchScrollContainer = TouchScrollContainer.new()
-	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	_right_content_vbox.add_child(scroll)
-
-	var list_v: VBoxContainer = VBoxContainer.new()
-	list_v.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	list_v.mouse_filter = Control.MOUSE_FILTER_PASS
-	list_v.add_theme_constant_override("separation", 7)
-	scroll.add_child(list_v)
-
-	var fs_title: int = 15 if _is_mobile_layout else 13
-	var fs_desc: int = 13 if _is_mobile_layout else 11
-	var shown_count: int = 0
-	for i in range(_stats.gem_pouch.size()):
-		var g: GemInstance = _stats.gem_pouch[i]
-		var gtype: int = g.get_gem_type()
-		if gtype != filter_gtype:
-			continue
-		shown_count += 1
-		var gcol: Color = GameEnums.gem_color_value(g.get_gem_color())
-		var is_sel: bool = (i == _selected_pouch_idx)
-
-		var card: PanelContainer = PanelContainer.new()
-		card.add_theme_stylebox_override(
-			"panel",
-			UiHelper.make_accent_card_box(UiHelper.BG_OAK_CARD if not is_sel else Color(0.28, 0.22, 0.16), Color(1.0, 0.90, 0.36) if is_sel else gcol, 8, 9)
-		)
-		var pouch_idx: int = i
-		_connect_tap(card, func() -> void:
-			_selected_pouch_idx = -1 if _selected_pouch_idx == pouch_idx else pouch_idx
-			sfx_requested.emit("ui_click")
-			refresh()
-		)
-		list_v.add_child(card)
-
-		var gh: HBoxContainer = HBoxContainer.new()
-		gh.add_theme_constant_override("separation", 9)
-		gh.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		card.add_child(gh)
-
-		var gtex: Texture2D = UiIcons.get_skill_icon(g.gem_id) if gtype == GameEnums.GemType.MAIN else UiIcons.get_gem_icon(GameEnums.GemType.MODIFIER, g.get_gem_color())
-		gh.add_child(UiHelper.make_icon_rect(gtex, 32 if _is_mobile_layout else 28))
-
-		var gv: VBoxContainer = VBoxContainer.new()
-		gv.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		gv.add_theme_constant_override("separation", 3)
-		gv.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		gh.add_child(gv)
-
-		var row_top: HBoxContainer = HBoxContainer.new()
-		row_top.add_theme_constant_override("separation", 6)
-		row_top.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		gv.add_child(row_top)
-
-		var gn: Label = Label.new()
-		gn.text = g.get_gem_name()
-		gn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		gn.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		gn.add_theme_font_override("font", UiHelper.get_bold_font())
-		gn.add_theme_font_size_override("font_size", fs_title)
-		gn.add_theme_color_override("font_color", gcol.lightened(0.25))
-		row_top.add_child(gn)
-
-		row_top.add_child(UiHelper.make_badge_pill(GameEnums.gem_color_letter(g.get_gem_color()), gcol.darkened(0.68), gcol, UiHelper.TEXT_CREAM, 11))
-
-		var d_lbl: Label = Label.new()
-		d_lbl.text = g.get_short_desc()
-		d_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		d_lbl.add_theme_font_size_override("font_size", fs_desc)
-		d_lbl.add_theme_color_override("font_color", UiHelper.TEXT_PARCHMENT)
-		gv.add_child(d_lbl)
-
-	if shown_count == 0:
-		var emp_g: PanelContainer = PanelContainer.new()
-		emp_g.add_theme_stylebox_override("panel", UiHelper.make_panel_box(UiHelper.BG_WELL, UiHelper.BORDER_SUBTLE, 10, 1, 12, false))
-		var el: Label = Label.new()
-		el.text = "No %s abilities in pouch." % ("Main" if filter_gtype == GameEnums.GemType.MAIN else "Modifier")
-		el.add_theme_font_size_override("font_size", fs_title)
-		el.add_theme_color_override("font_color", UiHelper.TEXT_PARCHMENT)
-		emp_g.add_child(el)
-		list_v.add_child(emp_g)
-
-	# Selected Ability Inspector
-	if _selected_pouch_idx >= 0 and _selected_pouch_idx < _stats.gem_pouch.size():
-		var sel_gem: GemInstance = _stats.gem_pouch[_selected_pouch_idx]
-		var gcol: Color = GameEnums.gem_color_value(sel_gem.get_gem_color())
-		var g_box: PanelContainer = PanelContainer.new()
-		g_box.add_theme_stylebox_override("panel", UiHelper.make_panel_box(UiHelper.BG_WELL, gcol, 10, 2, 10, false))
-		_right_content_vbox.add_child(g_box)
-
-		var g_v: VBoxContainer = VBoxContainer.new()
-		g_v.add_theme_constant_override("separation", 6)
-		g_box.add_child(g_v)
-
-		var gh_sel: HBoxContainer = HBoxContainer.new()
-		gh_sel.add_theme_constant_override("separation", 8)
-		g_v.add_child(gh_sel)
-		var sel_tex: Texture2D = UiIcons.get_skill_icon(sel_gem.gem_id) if sel_gem.get_gem_type() == GameEnums.GemType.MAIN else UiIcons.get_gem_icon(GameEnums.GemType.MODIFIER, sel_gem.get_gem_color())
-		gh_sel.add_child(UiHelper.make_icon_rect(sel_tex, 26))
-		var sel_title: Label = Label.new()
-		sel_title.text = "%s — %s" % [sel_gem.get_gem_name(), sel_gem.get_short_desc()]
-		sel_title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		sel_title.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-		sel_title.add_theme_font_override("font", UiHelper.get_bold_font())
-		sel_title.add_theme_font_size_override("font_size", 14 if _is_mobile_layout else 12)
-		sel_title.add_theme_color_override("font_color", gcol.lightened(0.25))
-		gh_sel.add_child(sel_title)
-
-		var hint_l: Label = Label.new()
-		hint_l.text = "Tap a pulsing %s socket to insert." % GameEnums.gem_color_letter(sel_gem.get_gem_color())
-		hint_l.add_theme_font_size_override("font_size", 12 if _is_mobile_layout else 11)
-		hint_l.add_theme_color_override("font_color", Color(1.0, 0.90, 0.44))
-		g_v.add_child(hint_l)
-
-		var action_h: HBoxContainer = HBoxContainer.new()
-		action_h.add_theme_constant_override("separation", 8)
-		g_v.add_child(action_h)
-
-		if _is_mobile_layout:
-			var go_gear_btn: Button = Button.new()
-			go_gear_btn.text = "Socket in Gear ->"
-			go_gear_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-			go_gear_btn.custom_minimum_size = Vector2(0, 42)
-			go_gear_btn.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
-			UiHelper.style_button(go_gear_btn, UiHelper.CTA_EMERALD, UiHelper.CTA_EMERALD_RIM, 8, 5)
-			go_gear_btn.add_theme_font_size_override("font_size", 14)
-			go_gear_btn.pressed.connect(func() -> void:
-				_mobile_tab = "gear"
-				sfx_requested.emit("ui_click")
-				refresh()
-			)
-			action_h.add_child(go_gear_btn)
-
-		var drop_g_btn: Button = Button.new()
-		drop_g_btn.text = "Drop"
-		drop_g_btn.custom_minimum_size = Vector2(96 if _is_mobile_layout else 0, 42 if _is_mobile_layout else 34)
-		if not _is_mobile_layout:
-			drop_g_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		drop_g_btn.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
-		UiHelper.style_button(drop_g_btn, UiHelper.CTA_RUBY, UiHelper.CTA_RUBY_RIM, 8, 5)
-		drop_g_btn.add_theme_font_size_override("font_size", 14 if _is_mobile_layout else 13)
-		drop_g_btn.pressed.connect(func() -> void:
-			_stats.discard_gem_from_pouch(_selected_pouch_idx)
-			_selected_pouch_idx = -1
-			sfx_requested.emit("ui_click")
-			gear_changed.emit()
-			refresh()
-		)
-		action_h.add_child(drop_g_btn)
-
-func _on_socket_clicked(slot: int, socket_idx: int) -> void:
-	if _stats == null:
+	if _stats.equipped_cards.is_empty():
+		var empty_lbl: Label = Label.new()
+		empty_lbl.text = "No active cards equipped.\nEquip a Template Card to start casting!"
+		empty_lbl.add_theme_font_size_override("font_size", 14)
+		empty_lbl.add_theme_color_override("font_color", UiHelper.TEXT_PARCHMENT)
+		_active_grid.add_child(empty_lbl)
 		return
-	if _selected_pouch_idx >= 0 and _selected_pouch_idx < _stats.gem_pouch.size():
-		if _stats.socket_gem_into_equipped(slot, socket_idx, _selected_pouch_idx):
-			_selected_pouch_idx = -1
-			sfx_requested.emit("socket_chime")
-			gear_changed.emit()
-			refresh()
+
+	var pending_addon: CardInstance = _stats.addon_inventory[_forging_addon_idx] if (_forging_addon_idx >= 0 and _forging_addon_idx < _stats.addon_inventory.size()) else null
+
+	for idx in range(_stats.equipped_cards.size()):
+		var card: CardInstance = _stats.equipped_cards[idx]
+		var forge_check: Dictionary = card.can_accept_addon(pending_addon) if pending_addon != null else {"ok": false, "reason": ""}
+		var cw: CardWidget = CardWidget.new()
+		cw.setup_card(card, {
+			"deck_cd_mult": _stats.deck_cd_mult,
+			"forge_target_mode": pending_addon != null,
+			"can_forge_here": bool(forge_check.get("ok", false)),
+			"forge_reason": String(forge_check.get("reason", "")),
+			"compact_mobile": _is_mobile_layout,
+		})
+
+		var eq_i: int = idx
+		if pending_addon != null:
+			if bool(forge_check.get("ok", false)):
+				var f_btn: Button = _make_card_btn("+ Forge Here", UiHelper.CTA_EMERALD, UiHelper.CTA_EMERALD_RIM, func() -> void: confirm_forge_onto_equipped(eq_i))
+				cw.action_row.add_child(f_btn)
+				_connect_tap(cw, func() -> void: confirm_forge_onto_equipped(eq_i))
 		else:
-			sfx_requested.emit("player_hurt")
+			var u_btn: Button = _make_card_btn("Unequip", UiHelper.BG_OAK_CARD, UiHelper.BORDER_BRASS, func() -> void: unequip_card_at(eq_i))
+			cw.action_row.add_child(u_btn)
+
+		_active_grid.add_child(cw)
+
+func _rebuild_collection_grid() -> void:
+	for ch in _collection_grid.get_children():
+		ch.queue_free()
+
+	if _active_right_tab == "templates":
+		if _stats.template_inventory.is_empty():
+			var e_tpl: Label = Label.new()
+			e_tpl.text = "No spare Template Cards in collection.\nDefeat critters, Elites, and Bosses to loot more!"
+			e_tpl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+			e_tpl.add_theme_font_size_override("font_size", 14)
+			e_tpl.add_theme_color_override("font_color", UiHelper.TEXT_PARCHMENT)
+			_collection_grid.add_child(e_tpl)
+			return
+
+		var pending_addon: CardInstance = _stats.addon_inventory[_forging_addon_idx] if (_forging_addon_idx >= 0 and _forging_addon_idx < _stats.addon_inventory.size()) else null
+		for idx in range(_stats.template_inventory.size()):
+			var card: CardInstance = _stats.template_inventory[idx]
+			var forge_check: Dictionary = card.can_accept_addon(pending_addon) if pending_addon != null else {"ok": false, "reason": ""}
+			var cw: CardWidget = CardWidget.new()
+			cw.setup_card(card, {
+				"deck_cd_mult": _stats.deck_cd_mult,
+				"forge_target_mode": pending_addon != null,
+				"can_forge_here": bool(forge_check.get("ok", false)),
+				"forge_reason": String(forge_check.get("reason", "")),
+				"compact_mobile": _is_mobile_layout,
+			})
+
+			var tpl_i: int = idx
+			if pending_addon != null:
+				if bool(forge_check.get("ok", false)):
+					var f_btn: Button = _make_card_btn("+ Forge Here", UiHelper.CTA_EMERALD, UiHelper.CTA_EMERALD_RIM, func() -> void: confirm_forge_onto_inventory_template(tpl_i))
+					cw.action_row.add_child(f_btn)
+					_connect_tap(cw, func() -> void: confirm_forge_onto_inventory_template(tpl_i))
+			else:
+				var eq_btn: Button = _make_card_btn("Equip", UiHelper.CTA_EMERALD, UiHelper.CTA_EMERALD_RIM, func() -> void: equip_template_at(tpl_i))
+				cw.action_row.add_child(eq_btn)
+				var del_btn: Button = _make_card_btn("Drop", UiHelper.CTA_RUBY, UiHelper.CTA_RUBY_RIM, func() -> void:
+					_stats.discard_template(tpl_i)
+					_show_feedback("Discarded Template Card.")
+					refresh()
+				, true)
+				cw.action_row.add_child(del_btn)
+			_collection_grid.add_child(cw)
 	else:
-		var removed: GemInstance = _stats.unsocket_gem_from_equipped(slot, socket_idx)
-		if removed != null:
-			sfx_requested.emit("ui_click")
-			gear_changed.emit()
-			refresh()
+		if _stats.addon_inventory.is_empty():
+			var e_add: Label = Label.new()
+			e_add.text = "No Add-on Cards in pouch.\nHunt critters & Chests for permanent upgrades!"
+			e_add.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+			e_add.add_theme_font_size_override("font_size", 14)
+			e_add.add_theme_color_override("font_color", UiHelper.TEXT_PARCHMENT)
+			_collection_grid.add_child(e_add)
+			return
+
+		for idx in range(_stats.addon_inventory.size()):
+			var addon: CardInstance = _stats.addon_inventory[idx]
+			var is_sel: bool = (idx == _forging_addon_idx)
+			var cw: CardWidget = CardWidget.new()
+			cw.setup_card(addon, {
+				"selected": is_sel,
+				"compact_mobile": _is_mobile_layout,
+			})
+			var add_i: int = idx
+			if is_sel:
+				var c_btn: Button = _make_card_btn("Selecting Target...", UiHelper.BORDER_GOLD.darkened(0.45), UiHelper.BORDER_GOLD, func() -> void: cancel_forge())
+				cw.action_row.add_child(c_btn)
+			else:
+				var f_btn: Button = _make_card_btn("Forge onto Card", UiHelper.CTA_SAPPHIRE, UiHelper.CTA_SAPPHIRE_RIM, func() -> void: start_forge_addon_at(add_i))
+				cw.action_row.add_child(f_btn)
+				_connect_tap(cw, func() -> void: start_forge_addon_at(add_i))
+			var del_btn: Button = _make_card_btn("Drop", UiHelper.CTA_RUBY, UiHelper.CTA_RUBY_RIM, func() -> void:
+				if _forging_addon_idx == add_i:
+					_forging_addon_idx = -1
+				elif _forging_addon_idx > add_i:
+					_forging_addon_idx -= 1
+				_stats.discard_addon(add_i)
+				_show_feedback("Discarded Add-on Card.")
+				refresh()
+			, true)
+			cw.action_row.add_child(del_btn)
+			_collection_grid.add_child(cw)
+
+func _make_card_btn(txt: String, bg: Color, border: Color, on_tap: Callable, narrow: bool = false) -> Button:
+	var btn: Button = Button.new()
+	btn.text = txt
+	btn.custom_minimum_size = Vector2(62 if narrow else 0, 38)
+	if not narrow:
+		btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	btn.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+	UiHelper.style_button(btn, bg, border, 8, 5)
+	btn.add_theme_font_size_override("font_size", 13)
+	btn.pressed.connect(on_tap)
+	return btn

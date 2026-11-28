@@ -1,31 +1,28 @@
 class_name LootManager
 extends Node
 
-signal item_looted(item: ItemInstance)
-signal gem_looted(gem: GemInstance)
+signal card_looted(card: CardInstance)
 signal hero_heal_requested(amount: float)
 signal loot_bag_full(label: String)
 signal chest_opened()
 
-const BASE_ITEM_DROP: float = BalanceConfig.BASE_ITEM_DROP
-const BASE_GEM_DROP: float = BalanceConfig.BASE_GEM_DROP
-const PITY_GRACE_ITEM: int = BalanceConfig.PITY_GRACE_ITEM
-const PITY_STEP_ITEM: float = BalanceConfig.PITY_STEP_ITEM
-const PITY_GRACE_GEM: int = BalanceConfig.PITY_GRACE_GEM
-const PITY_STEP_GEM: float = BalanceConfig.PITY_STEP_GEM
-const ITEM_MIN_INTERVAL: float = BalanceConfig.ITEM_MIN_INTERVAL
-const ITEM_MIN_INTERVAL_LUCKY: float = BalanceConfig.ITEM_MIN_INTERVAL_LUCKY
-const GEM_MIN_INTERVAL: float = BalanceConfig.GEM_MIN_INTERVAL
-const GEM_MIN_INTERVAL_LUCKY: float = BalanceConfig.GEM_MIN_INTERVAL_LUCKY
+const BASE_TEMPLATE_DROP: float = BalanceConfig.BASE_TEMPLATE_DROP
+const BASE_ADDON_DROP: float = BalanceConfig.BASE_ADDON_DROP
+const PITY_GRACE_TEMPLATE: int = BalanceConfig.PITY_GRACE_TEMPLATE
+const PITY_STEP_TEMPLATE: float = BalanceConfig.PITY_STEP_TEMPLATE
+const PITY_GRACE_ADDON: int = BalanceConfig.PITY_GRACE_ADDON
+const PITY_STEP_ADDON: float = BalanceConfig.PITY_STEP_ADDON
+const TEMPLATE_MIN_INTERVAL: float = BalanceConfig.TEMPLATE_MIN_INTERVAL
+const ADDON_MIN_INTERVAL: float = BalanceConfig.ADDON_MIN_INTERVAL
 
 var world_root: Node3D = null
 var stats: HeroStats = null
 var pickups: Array[WorldPickup] = []
 var _rng: RandomNumberGenerator = RandomNumberGenerator.new()
-var _kills_since_item: int = 0
-var _kills_since_gem: int = 0
-var _last_reg_item_sec: float = -99.0
-var _last_reg_gem_sec: float = -99.0
+var _kills_since_template: int = 0
+var _kills_since_addon: int = 0
+var _last_reg_tpl_sec: float = -99.0
+var _last_reg_add_sec: float = -99.0
 
 static func compute_spawn_intensity(elapsed_sec: float) -> float:
 	var base_prof: Dictionary = EnemyDatabase.get_wave_profile(0.0)
@@ -34,17 +31,17 @@ static func compute_spawn_intensity(elapsed_sec: float) -> float:
 	var rate: float = float(prof["batch_size"]) / maxf(0.1, float(prof["spawn_interval"]))
 	return maxf(1.0, rate / base_rate)
 
-static func compute_regular_item_chance(elapsed_sec: float, lucky: bool, kills_since_item: int) -> float:
+static func compute_regular_template_chance(elapsed_sec: float, kills_since: int) -> float:
 	var s_t: float = compute_spawn_intensity(elapsed_sec)
-	var base_c: float = (BASE_ITEM_DROP * (1.30 if lucky else 1.0)) / pow(s_t, 0.75)
-	var pity: float = float(maxi(0, kills_since_item - PITY_GRACE_ITEM)) * PITY_STEP_ITEM
+	var base_c: float = BASE_TEMPLATE_DROP / pow(s_t, 0.75)
+	var pity: float = float(maxi(0, kills_since - PITY_GRACE_TEMPLATE)) * PITY_STEP_TEMPLATE
 	return clampf(base_c + pity, 0.002, 0.12)
 
-static func compute_regular_gem_chance(elapsed_sec: float, lucky: bool, kills_since_gem: int) -> float:
+static func compute_regular_addon_chance(elapsed_sec: float, kills_since: int) -> float:
 	var s_t: float = compute_spawn_intensity(elapsed_sec)
-	var base_c: float = (BASE_GEM_DROP * (1.30 if lucky else 1.0)) / pow(s_t, 0.75)
-	var pity: float = float(maxi(0, kills_since_gem - PITY_GRACE_GEM)) * PITY_STEP_GEM
-	return clampf(base_c + pity, 0.0015, 0.09)
+	var base_c: float = BASE_ADDON_DROP / pow(s_t, 0.75)
+	var pity: float = float(maxi(0, kills_since - PITY_GRACE_ADDON)) * PITY_STEP_ADDON
+	return clampf(base_c + pity, 0.002, 0.14)
 
 func setup(p_world: Node3D, p_stats: HeroStats) -> void:
 	world_root = p_world
@@ -57,54 +54,52 @@ func clear_all() -> void:
 		if is_instance_valid(p):
 			p.queue_free()
 	pickups.clear()
-	_kills_since_item = 0
-	_kills_since_gem = 0
-	_last_reg_item_sec = -99.0
-	_last_reg_gem_sec = -99.0
+	_kills_since_template = 0
+	_kills_since_addon = 0
+	_last_reg_tpl_sec = -99.0
+	_last_reg_add_sec = -99.0
 
 func drop_for_enemy(enemy: EnemyEntity, elapsed_sec: float) -> void:
 	if world_root == null or stats == null:
 		return
 	var pos: Vector3 = enemy.global_position
-	var lucky: bool = stats.has_lucky_clover
 
 	if enemy.is_boss:
-		for i in range(2):
-			var r_forced: int = GameEnums.Rarity.UNIQUE if i == 0 else GameEnums.Rarity.RARE
-			var b_item: ItemInstance = ItemDatabase.generate_item(r_forced, lucky, -1, _rng)
-			spawn_specific_item(pos + Vector3(randf_range(-1.5, 1.5), 0.0, randf_range(-1.5, 1.5)), b_item)
-		spawn_specific_gem(pos + Vector3(-1.4, 0.0, 1.2), GemInstance.new(GemDatabase.roll_random_gem_id(_rng, GameEnums.GemType.MAIN)))
-		spawn_specific_gem(pos + Vector3(1.4, 0.0, 1.2), GemInstance.new(GemDatabase.roll_random_gem_id(_rng, GameEnums.GemType.MODIFIER)))
+		var leg_tpl: CardInstance = CardInstance.generate_template(elapsed_sec, _rng, GameEnums.Rarity.LEGENDARY)
+		spawn_specific_card(pos + Vector3(0.0, 0.0, -1.2), leg_tpl)
+		var rar_add: CardInstance = CardInstance.generate_addon(elapsed_sec, _rng, GameEnums.Rarity.RARE)
+		spawn_specific_card(pos + Vector3(-1.4, 0.0, 1.1), rar_add)
+		var bonus_add: CardInstance = CardInstance.generate_addon(elapsed_sec, _rng, GameEnums.Rarity.UNCOMMON)
+		spawn_specific_card(pos + Vector3(1.4, 0.0, 1.1), bonus_add)
 		hero_heal_requested.emit(BalanceConfig.BOSS_HEAL)
 		return
 
 	if enemy.is_elite:
-		if _rng.randf() < (0.80 if lucky else 0.65):
-			var elite_rarity: int = GameEnums.Rarity.RARE if _rng.randf() < (0.60 if lucky else 0.42) else GameEnums.Rarity.MAGIC
-			spawn_specific_item(pos, ItemDatabase.generate_item(elite_rarity, lucky, -1, _rng))
-		if _rng.randf() < (0.55 if lucky else 0.40):
-			spawn_specific_gem(pos + Vector3(0.7, 0.0, 0.4), GemInstance.new(GemDatabase.roll_random_gem_id(_rng)))
+		if _rng.randf() < 0.72:
+			var elite_tpl: CardInstance = CardInstance.generate_template(elapsed_sec, _rng, CardDatabase.roll_template_rarity(elapsed_sec, _rng, GameEnums.Rarity.UNCOMMON))
+			spawn_specific_card(pos + Vector3(-0.6, 0.0, 0.3), elite_tpl)
+		if _rng.randf() < 0.85:
+			var elite_add: CardInstance = CardInstance.generate_addon(elapsed_sec, _rng)
+			spawn_specific_card(pos + Vector3(0.7, 0.0, 0.4), elite_add)
 		hero_heal_requested.emit(BalanceConfig.ELITE_HEAL)
 		return
 
 	# Regular enemy drops: spawn-rate-normalized probability + dry-streak pity + cooldown gate
-	_kills_since_item += 1
-	_kills_since_gem += 1
-	var min_item_dt: float = ITEM_MIN_INTERVAL_LUCKY if lucky else ITEM_MIN_INTERVAL
-	if elapsed_sec - _last_reg_item_sec >= min_item_dt:
-		var item_chance: float = compute_regular_item_chance(elapsed_sec, lucky, _kills_since_item)
-		if _rng.randf() < item_chance:
-			_kills_since_item = 0
-			_last_reg_item_sec = elapsed_sec
-			spawn_specific_item(pos, ItemDatabase.generate_item(-1, lucky, -1, _rng))
+	_kills_since_template += 1
+	_kills_since_addon += 1
+	if elapsed_sec - _last_reg_tpl_sec >= TEMPLATE_MIN_INTERVAL:
+		var tpl_chance: float = compute_regular_template_chance(elapsed_sec, _kills_since_template)
+		if _rng.randf() < tpl_chance:
+			_kills_since_template = 0
+			_last_reg_tpl_sec = elapsed_sec
+			spawn_specific_card(pos, CardInstance.generate_template(elapsed_sec, _rng))
 
-	var min_gem_dt: float = GEM_MIN_INTERVAL_LUCKY if lucky else GEM_MIN_INTERVAL
-	if elapsed_sec - _last_reg_gem_sec >= min_gem_dt:
-		var gem_chance: float = compute_regular_gem_chance(elapsed_sec, lucky, _kills_since_gem)
-		if _rng.randf() < gem_chance:
-			_kills_since_gem = 0
-			_last_reg_gem_sec = elapsed_sec
-			spawn_specific_gem(pos, GemInstance.new(GemDatabase.roll_random_gem_id(_rng)))
+	if elapsed_sec - _last_reg_add_sec >= ADDON_MIN_INTERVAL:
+		var add_chance: float = compute_regular_addon_chance(elapsed_sec, _kills_since_addon)
+		if _rng.randf() < add_chance:
+			_kills_since_addon = 0
+			_last_reg_add_sec = elapsed_sec
+			spawn_specific_card(pos + Vector3(0.4, 0.0, 0.0), CardInstance.generate_addon(elapsed_sec, _rng))
 
 func spawn_treasure_chest(pos: Vector3) -> void:
 	if world_root == null:
@@ -114,28 +109,16 @@ func spawn_treasure_chest(pos: Vector3) -> void:
 	world_root.add_child(p)
 	pickups.append(p)
 
-func spawn_specific_item(pos: Vector3, item: ItemInstance) -> WorldPickup:
-	if world_root == null or item == null:
+func spawn_specific_card(pos: Vector3, card: CardInstance) -> WorldPickup:
+	if world_root == null or card == null:
 		return null
 	var p: WorldPickup = WorldPickup.new()
-	p.setup_item(pos, item)
+	p.setup_card(pos, card)
 	world_root.add_child(p)
 	pickups.append(p)
 	return p
 
-func spawn_specific_gem(pos: Vector3, gem: GemInstance) -> WorldPickup:
-	if world_root == null or gem == null:
-		return null
-	var p: WorldPickup = WorldPickup.new()
-	if gem.get_gem_type() == GameEnums.GemType.MAIN:
-		p.setup_main_ability(pos, gem)
-	else:
-		p.setup_modifier_ability(pos, gem)
-	world_root.add_child(p)
-	pickups.append(p)
-	return p
-
-func step(delta: float, player_pos: Vector3, _elapsed_sec: float) -> void:
+func step(delta: float, player_pos: Vector3, elapsed_sec: float) -> void:
 	if stats == null:
 		return
 	for i in range(pickups.size() - 1, -1, -1):
@@ -144,45 +127,41 @@ func step(delta: float, player_pos: Vector3, _elapsed_sec: float) -> void:
 			pickups.remove_at(i)
 			continue
 		if pk.step(delta, player_pos):
-			var consumed: bool = _collect_pickup(pk)
+			var consumed: bool = _collect_pickup(pk, elapsed_sec)
 			if consumed:
 				pickups.remove_at(i)
 				pk.queue_free()
 
-func _collect_pickup(pk: WorldPickup) -> bool:
+func _collect_pickup(pk: WorldPickup, elapsed_sec: float) -> bool:
 	match pk.kind:
-		WorldPickup.Kind.ITEM:
-			if stats.can_add_item_to_bag():
-				stats.item_bag.append(pk.item_data)
-				item_looted.emit(pk.item_data)
+		WorldPickup.Kind.TEMPLATE_CARD:
+			if stats.can_add_template():
+				stats.template_inventory.append(pk.card_data)
+				card_looted.emit(pk.card_data)
 				return true
-			else:
-				loot_bag_full.emit("Bag Full! Open [Tab] to Drop")
-				return false
-		WorldPickup.Kind.MAIN_ABILITY, WorldPickup.Kind.MODIFIER_ABILITY:
-			if stats.can_add_gem_to_pouch():
-				stats.gem_pouch.append(pk.gem_data)
-				gem_looted.emit(pk.gem_data)
+			loot_bag_full.emit("Template Bag Full! Open [Tab] to Discard")
+			return false
+		WorldPickup.Kind.ADDON_CARD:
+			if stats.can_add_addon():
+				stats.addon_inventory.append(pk.card_data)
+				card_looted.emit(pk.card_data)
 				return true
-			else:
-				loot_bag_full.emit("Pouch Full! Open [Tab] to Drop")
-				return false
+			loot_bag_full.emit("Add-on Bag Full! Open [Tab] to Discard")
+			return false
 		WorldPickup.Kind.CHEST:
-			var lucky: bool = stats.has_lucky_clover
-			var rar: int = GameEnums.Rarity.RARE if _rng.randf() < (0.72 if lucky else 0.52) else GameEnums.Rarity.MAGIC
-			var c_item: ItemInstance = ItemDatabase.generate_item(rar, lucky, -1, _rng)
-			if stats.can_add_item_to_bag():
-				stats.item_bag.append(c_item)
-				item_looted.emit(c_item)
+			var c_rar: int = GameEnums.Rarity.RARE if _rng.randf() < 0.60 else GameEnums.Rarity.UNCOMMON
+			var c_tpl: CardInstance = CardInstance.generate_template(elapsed_sec, _rng, c_rar)
+			if stats.can_add_template():
+				stats.template_inventory.append(c_tpl)
+				card_looted.emit(c_tpl)
 			else:
-				spawn_specific_item(pk.global_position, c_item)
-			if _rng.randf() < (0.68 if lucky else 0.50):
-				var c_gem: GemInstance = GemInstance.new(GemDatabase.roll_random_gem_id(_rng))
-				if stats.can_add_gem_to_pouch():
-					stats.gem_pouch.append(c_gem)
-					gem_looted.emit(c_gem)
-				else:
-					spawn_specific_gem(pk.global_position, c_gem)
+				spawn_specific_card(pk.global_position, c_tpl)
+			var c_add: CardInstance = CardInstance.generate_addon(elapsed_sec, _rng, GameEnums.Rarity.UNCOMMON if _rng.randf() < 0.65 else -1)
+			if stats.can_add_addon():
+				stats.addon_inventory.append(c_add)
+				card_looted.emit(c_add)
+			else:
+				spawn_specific_card(pk.global_position, c_add)
 			hero_heal_requested.emit(BalanceConfig.CHEST_HEAL)
 			chest_opened.emit()
 			return true
@@ -193,11 +172,10 @@ func get_ground_labels() -> Array[Dictionary]:
 	for pk in pickups:
 		if not is_instance_valid(pk):
 			continue
-		if pk.kind == WorldPickup.Kind.ITEM or pk.kind == WorldPickup.Kind.MAIN_ABILITY or pk.kind == WorldPickup.Kind.MODIFIER_ABILITY or pk.kind == WorldPickup.Kind.CHEST:
-			out.append({
-				"pos": pk.global_position + Vector3(0.0, 1.1, 0.0),
-				"text": pk.get_label_text(),
-				"color": pk.get_label_color(),
-				"is_chest": pk.kind == WorldPickup.Kind.CHEST,
-			})
+		out.append({
+			"pos": pk.global_position + Vector3(0.0, 1.1, 0.0),
+			"text": pk.get_label_text(),
+			"color": pk.get_label_color(),
+			"is_chest": pk.kind == WorldPickup.Kind.CHEST,
+		})
 	return out

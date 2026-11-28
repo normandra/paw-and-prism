@@ -5,13 +5,10 @@ signal player_hurt(dmg: float, hp_after: float)
 signal player_died()
 signal cheat_death_triggered()
 signal reactive_nova_requested(kind: String, pos: Vector3, dmg: float, radius: float)
-signal static_spark_requested(pos: Vector3)
-signal stride_honey_requested(pos: Vector3)
-signal comet_stride_requested(pos: Vector3)
 signal orbit_shield_requested()
 
 var stats: HeroStats = null
-var current_hp: float = 135.0
+var current_hp: float = 110.0
 var is_dead: bool = false
 
 var _rig: Node3D = null
@@ -28,18 +25,9 @@ var is_moving: bool = false
 var _walk_phase: float = 0.0
 var _invuln_timer: float = 0.0
 var _cheat_death_cd: float = 0.0
-var _honey_aegis_cd: float = 0.0
 var _thorns_cd: float = 0.0
 var _orbit_shield_cd: float = 0.0
-var _kill_siphon_cd: float = 0.0
 var _zoomies_timer: float = 0.0
-var _static_dist_accum: float = 0.0
-var _honey_dist_accum: float = 0.0
-var _comet_dist_accum: float = 0.0
-var _move_ramp_time: float = 0.0
-
-var _last_weapon_style: String = "__init__"
-var _last_helmet_style: String = "__init__"
 
 func setup(p_stats: HeroStats) -> void:
 	stats = p_stats
@@ -47,17 +35,9 @@ func setup(p_stats: HeroStats) -> void:
 	is_dead = false
 	_invuln_timer = 0.0
 	_cheat_death_cd = 0.0
-	_honey_aegis_cd = 0.0
 	_thorns_cd = 0.0
 	_orbit_shield_cd = 0.0
-	_kill_siphon_cd = 0.0
 	_zoomies_timer = 0.0
-	_static_dist_accum = 0.0
-	_honey_dist_accum = 0.0
-	_comet_dist_accum = 0.0
-	_move_ramp_time = 0.0
-	_last_weapon_style = "__init__"
-	_last_helmet_style = "__init__"
 	external_move_vec = Vector2.ZERO
 
 	if _rig != null:
@@ -75,41 +55,29 @@ func setup(p_stats: HeroStats) -> void:
 		_aura_ring_holder.name = "AuraRings"
 		add_child(_aura_ring_holder)
 
-	refresh_equipment_visuals()
+	refresh_card_auras()
 
-func refresh_equipment_visuals() -> void:
-	if stats == null or _rig == null:
+func refresh_card_auras() -> void:
+	if stats == null:
 		return
 	current_hp = minf(current_hp, stats.max_hp)
-	var w_item: ItemInstance = stats.equipped.get(GameEnums.EquipSlot.WEAPON, null)
-	var h_item: ItemInstance = stats.equipped.get(GameEnums.EquipSlot.HELMET, null)
-	var w_style: String = w_item.visual_style if w_item != null else ""
-	var h_style: String = h_item.visual_style if h_item != null else ""
-	if w_style != _last_weapon_style or h_style != _last_helmet_style:
-		_last_weapon_style = w_style
-		_last_helmet_style = h_style
-		ChibiMeshFactory.update_hero_visual_gear(_rig, w_style, h_style)
-
-	# Rebuild subtle global effect aura rings under hero
-	if _aura_ring_holder != null:
-		for ch in _aura_ring_holder.get_children():
-			ch.queue_free()
-		var idx: int = 0
-		for eff_id in stats.active_effect_list:
-			if idx >= 4:
-				break
-			var edef: Dictionary = ItemDatabase.get_effect_def(eff_id)
-			var col: Color = Color(edef.get("color", Color.WHITE))
-			col.a = 0.32
-			var ring_r: float = 0.78 + float(idx) * 0.22
-			var ring: MeshInstance3D = MeshInstance3D.new()
-			ring.mesh = ChibiMeshFactory._get_torus(ring_r, ring_r + 0.05)
-			ring.material_override = ChibiMeshFactory.get_toon_mat(col, 0.9, 0.5)
-			ring.position = Vector3(0.0, 0.05, 0.0)
-			ring.scale = Vector3(1.0, 0.25, 1.0)
-			ring.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-			_aura_ring_holder.add_child(ring)
-			idx += 1
+	if _aura_ring_holder == null:
+		return
+	for ch in _aura_ring_holder.get_children():
+		ch.queue_free()
+	var count: int = mini(4, stats.equipped_cards.size())
+	for idx in range(count):
+		var c: CardInstance = stats.equipped_cards[idx]
+		var col: Color = GameEnums.rarity_color(c.rarity)
+		col.a = 0.34
+		var ring_r: float = 0.78 + float(idx) * 0.20
+		var ring: MeshInstance3D = MeshInstance3D.new()
+		ring.mesh = ChibiMeshFactory._get_torus(ring_r, ring_r + 0.05)
+		ring.material_override = ChibiMeshFactory.get_toon_mat(col, 0.9, 0.5)
+		ring.position = Vector3(0.0, 0.05, 0.0)
+		ring.scale = Vector3(1.0, 0.25, 1.0)
+		ring.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		_aura_ring_holder.add_child(ring)
 
 func set_touch_move(vec: Vector2) -> void:
 	external_move_vec = vec.limit_length(1.0)
@@ -122,34 +90,25 @@ func notify_kill() -> void:
 		return
 	if stats.has_zoomies_on_kill:
 		_zoomies_timer = BalanceConfig.ZOOMIES_DURATION
-	if stats.has_kill_siphon and _kill_siphon_cd <= 0.0:
-		_kill_siphon_cd = BalanceConfig.KILL_SIPHON_ICD_SEC
-		heal(BalanceConfig.KILL_SIPHON_HEAL)
 
 func step(delta: float) -> void:
 	if is_dead or stats == null:
 		return
 
-	# Cooldowns & Regen
 	if _invuln_timer > 0.0:
 		_invuln_timer -= delta
 	if _cheat_death_cd > 0.0:
 		_cheat_death_cd -= delta
-	if _honey_aegis_cd > 0.0:
-		_honey_aegis_cd -= delta
 	if _thorns_cd > 0.0:
 		_thorns_cd -= delta
 	if _orbit_shield_cd > 0.0:
 		_orbit_shield_cd -= delta
-	if _kill_siphon_cd > 0.0:
-		_kill_siphon_cd -= delta
 	if _zoomies_timer > 0.0:
 		_zoomies_timer -= delta
 
 	if current_hp < stats.max_hp and stats.hp_regen > 0.0:
 		current_hp = minf(stats.max_hp, current_hp + stats.hp_regen * delta)
 
-	# Movement input
 	var move_vec: Vector2 = Vector2.ZERO
 	if Input.is_action_pressed("move_right") or Input.is_key_pressed(KEY_D) or Input.is_key_pressed(KEY_RIGHT):
 		move_vec.x += 1.0
@@ -170,14 +129,10 @@ func step(delta: float) -> void:
 		_facing_dir = input_dir.normalized()
 
 	var moving_input: bool = input_dir.length_squared() > 0.001
-	if moving_input:
-		_move_ramp_time = minf(BalanceConfig.FLEET_PAWS_RAMP_SEC, _move_ramp_time + delta)
-	else:
-		_move_ramp_time = maxf(0.0, _move_ramp_time - delta * 2.5)
-
-	# Apply movement
-	var fleet_mult: float = 1.0 + (BalanceConfig.FLEET_PAWS_MAX_BONUS * (_move_ramp_time / BalanceConfig.FLEET_PAWS_RAMP_SEC) if stats.has_fleet_paws else 0.0)
-	var speed: float = stats.move_speed * fleet_mult * (BalanceConfig.ZOOMIES_SPEED_MULT if _zoomies_timer > 0.0 else 1.0)
+	var zoomies_mult: float = 1.0
+	if _zoomies_timer > 0.0 and stats.zoomies_stacks > 0:
+		zoomies_mult = BalanceConfig.ZOOMIES_SPEED_MULT + BalanceConfig.ZOOMIES_SPEED_STACK * float(stats.zoomies_stacks - 1)
+	var speed: float = stats.move_speed * zoomies_mult
 	var move_delta: Vector3 = input_dir * speed * delta if moving_input else Vector3.ZERO
 
 	global_position += move_delta
@@ -187,22 +142,6 @@ func step(delta: float) -> void:
 
 	var step_dist: float = Vector2(move_delta.x, move_delta.z).length()
 	is_moving = step_dist > 0.002
-	if is_moving:
-		if stats.has_static_sprint:
-			_static_dist_accum += step_dist
-			if _static_dist_accum >= BalanceConfig.STATIC_SPRINT_DIST:
-				_static_dist_accum -= BalanceConfig.STATIC_SPRINT_DIST
-				static_spark_requested.emit(global_position)
-		if stats.has_stride_honey_nova:
-			_honey_dist_accum += step_dist
-			if _honey_dist_accum >= BalanceConfig.STRIDE_HONEY_DIST:
-				_honey_dist_accum -= BalanceConfig.STRIDE_HONEY_DIST
-				stride_honey_requested.emit(global_position)
-		if stats.has_comet_stride:
-			_comet_dist_accum += step_dist
-			if _comet_dist_accum >= BalanceConfig.COMET_STRIDE_DIST:
-				_comet_dist_accum -= BalanceConfig.COMET_STRIDE_DIST
-				comet_stride_requested.emit(global_position)
 
 	_animate_chibi(delta, is_moving)
 
@@ -236,7 +175,6 @@ func _animate_chibi(delta: float, moving_now: bool) -> void:
 	if _tail_pivot != null:
 		_tail_pivot.rotation.y = sin(_walk_phase * 1.4) * 0.35
 
-	# Invulnerability blink
 	if _invuln_timer > 0.0:
 		_rig.visible = int(floor(_invuln_timer * 24.0)) % 2 == 0
 	else:
@@ -258,20 +196,18 @@ func take_damage(raw_dmg: float, bypass_invuln: bool = false) -> float:
 	_invuln_timer = BalanceConfig.HIT_INVULN_SEC
 	current_hp -= final_dmg
 
-	# Reactive Behavioral Item Triggers
-	if stats.has_aegis_freeze and _honey_aegis_cd <= 0.0:
-		_honey_aegis_cd = BalanceConfig.AEGIS_CD
-		reactive_nova_requested.emit("aegis_freeze", global_position, BalanceConfig.AEGIS_DMG, BalanceConfig.AEGIS_RADIUS)
 	if stats.has_thorns_burst and _thorns_cd <= 0.0:
 		_thorns_cd = BalanceConfig.THORNS_CD
-		reactive_nova_requested.emit("thorns_burst", global_position, BalanceConfig.THORNS_DMG, BalanceConfig.THORNS_RADIUS)
+		var tdmg: float = BalanceConfig.THORNS_DMG + BalanceConfig.THORNS_STACK * float(maxi(0, stats.thorns_stacks - 1))
+		reactive_nova_requested.emit("thorns_burst", global_position, tdmg, BalanceConfig.THORNS_RADIUS)
 	if stats.has_orbit_shield and _orbit_shield_cd <= 0.0:
 		_orbit_shield_cd = BalanceConfig.ORBIT_SHIELD_CD
 		orbit_shield_requested.emit()
 
 	if current_hp <= 0.0:
 		if stats.has_cheat_death and _cheat_death_cd <= 0.0:
-			_cheat_death_cd = BalanceConfig.CHEAT_DEATH_CD
+			var cd_red: float = BalanceConfig.CHEAT_DEATH_CD_REDUCTION * float(maxi(0, stats.nine_lives_stacks - 1))
+			_cheat_death_cd = maxf(30.0, BalanceConfig.CHEAT_DEATH_CD - cd_red)
 			current_hp = stats.max_hp * BalanceConfig.CHEAT_DEATH_HEAL_PCT
 			_invuln_timer = BalanceConfig.CHEAT_DEATH_INVULN
 			cheat_death_triggered.emit()

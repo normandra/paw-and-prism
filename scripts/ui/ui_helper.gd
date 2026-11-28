@@ -229,25 +229,23 @@ static func make_badge_pill(text: String, bg: Color, border: Color, text_col: Co
 	p.add_child(lbl)
 	return p
 
-static func make_effect_chip(effect_id: String, compact: bool = false, diff_prefix: String = "", border_override: Color = Color(0.0, 0.0, 0.0, 0.0)) -> PanelContainer:
-	var edef: Dictionary = ItemDatabase.get_effect_def(effect_id)
-	var base_col: Color = Color(edef.get("color", BORDER_GOLD))
-	var border_col: Color = border_override if border_override.a > 0.05 else base_col
-	var p: PanelContainer = PanelContainer.new()
-	p.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	p.add_theme_stylebox_override("panel", make_panel_box(border_col.darkened(0.68), border_col, 7, 1, 4 if compact else 6, false))
-	var h: HBoxContainer = HBoxContainer.new()
-	h.add_theme_constant_override("separation", 5 if compact else 6)
-	h.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	p.add_child(h)
-	h.add_child(make_icon_rect(UiIcons.get_icon(String(edef.get("icon", "star_upgrade"))), 14 if compact else 16))
-	var lbl: Label = Label.new()
-	lbl.text = diff_prefix + String(edef.get("tag", effect_id))
-	lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	lbl.add_theme_font_size_override("font_size", 11 if compact else 12)
-	lbl.add_theme_color_override("font_color", TEXT_CREAM if border_override.a <= 0.05 else border_col.lightened(0.45))
-	var bf: Font = get_bold_font()
-	if bf != null:
-		lbl.add_theme_font_override("font", bf)
-	h.add_child(lbl)
-	return p
+static func make_forge_pips_row(used: int, max_forges: int, accent: Color, pip_size: int = 10) -> HBoxContainer:
+	var row: HBoxContainer = HBoxContainer.new()
+	row.add_theme_constant_override("separation", 3)
+	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	for i in range(max_forges):
+		var pip: Panel = Panel.new()
+		pip.custom_minimum_size = Vector2(pip_size, pip_size)
+		pip.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		var sb: StyleBoxFlat = StyleBoxFlat.new()
+		sb.set_corner_radius_all(3)
+		sb.set_border_width_all(1)
+		if i < used:
+			sb.bg_color = accent
+			sb.border_color = Color(1.0, 0.96, 0.80)
+		else:
+			sb.bg_color = BG_WELL
+			sb.border_color = accent.darkened(0.35)
+		pip.add_theme_stylebox_override("panel", sb)
+		row.add_child(pip)
+	return row

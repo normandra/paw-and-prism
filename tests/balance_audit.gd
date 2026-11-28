@@ -1,6 +1,6 @@
 extends SceneTree
 
-# Automated Paw & Prism v2.3 Balance Audit System
+# Automated Paw & Prism v3.0 Card-Forging Balance Audit System
 # Usage: godot --headless --path . --script res://tests/balance_audit.gd
 
 var _failures: Array[String] = []
@@ -15,99 +15,112 @@ func _check(cond: bool, msg: String) -> void:
 func _initialize() -> void:
 	call_deferred("_run_audit")
 
-func _single_skill_dps(cfg: Dictionary, cd_rate: float = 1.0, extra_target_hits: int = 1) -> float:
+func _card_dps(cfg: Dictionary, cd_rate_mult: float = 1.0, extra_target_hits: int = 1) -> float:
 	var dmg: float = float(cfg.get("damage", 20.0)) * BalanceConfig.expected_crit_mult()
-	var cd: float = maxf(0.18, float(cfg.get("cooldown", 1.0))) / cd_rate
-	var casts: float = 2.0 if bool(cfg.get("echo", false)) else 1.0
+	var still_rate: float = float(cfg.get("turret_still_mult", 1.0))
+	var eff_rate: float = still_rate if cd_rate_mult > 1.0 else cd_rate_mult
+	if cd_rate_mult <= 1.0 and float(cfg.get("turret_move_mult", 1.0)) < 0.99:
+		eff_rate = float(cfg.get("turret_move_mult", 1.0))
+	var cd: float = maxf(0.18, float(cfg.get("cooldown", 1.0))) / maxf(0.25, eff_rate)
+	var echo_n: int = int(cfg.get("echo_count", 0))
+	var casts: float = 1.0 + float(echo_n)
 	var proj_n: int = maxi(1, int(cfg.get("projectiles", 1)))
 	var hit_weight: float = 1.0
-	var gid: String = String(cfg.get("gem_id", ""))
-	if gid == "starlight_orb":
-		var orb_n: int = proj_n + (1 if bool(cfg.get("echo", false)) else 0)
+	var cid: String = String(cfg.get("card_id", ""))
+	if cid == "starlight_orb":
+		var orb_n: int = proj_n + echo_n
 		hit_weight = 1.0 + float(maxi(0, orb_n - 1)) * BalanceConfig.VOLLEY_REPEAT_MULT
 		casts = 1.0
-	elif gid == "spirit_bees" or gid == "acorn_barrage" or gid == "fireball_berry" or gid == "petal_cyclone" or gid == "frost_nova":
+	elif cid in ["spirit_bees", "acorn_barrage", "fireball_berry", "petal_cyclone", "frost_nova"]:
 		var hits_on_boss: int = mini(proj_n, maxi(1, extra_target_hits))
 		hit_weight = 1.0 + float(maxi(0, hits_on_boss - 1)) * BalanceConfig.VOLLEY_REPEAT_MULT
 	var direct_dps: float = (dmg * hit_weight * casts) / cd
-	var burn_dps: float = dmg * BalanceConfig.BURN_DPS_RATIO if bool(cfg.get("ignite", false)) else 0.0
-	return direct_dps + burn_dps
+	var burn_mult: float = float(cfg.get("burn_mult", 1.0))
+	var burn_dps: float = dmg * BalanceConfig.BURN_DPS_RATIO * burn_mult if bool(cfg.get("ignite", false)) else 0.0
+	var cadence_bonus: float = 0.0
+	var cad_stacks: int = int(cfg.get("cadence_stacks", 0))
+	if cad_stacks > 0:
+		var cad_dmg: float = BalanceConfig.CADENCE_DMG + BalanceConfig.CADENCE_DMG_STACK * float(cad_stacks - 1)
+		cadence_bonus = (cad_dmg * BalanceConfig.expected_crit_mult()) / (cd * float(BalanceConfig.CADENCE_EVERY_N))
+	return direct_dps + burn_dps + cadence_bonus
 
-func _build_single_skill_stats(main_id: String, mod_ids: Array[String], effects: Array[String]) -> Dictionary:
-	var st: HeroStats = HeroStats.new("shiba")
-	st.init_bare_for_tutorial("shiba")
-	var wep: ItemInstance = ItemInstance.new()
-	wep.equip_slot = GameEnums.EquipSlot.WEAPON
-	wep.effects = effects.duplicate()
-	var cols: Array[int] = [GameEnums.GemColor.WHITE, GameEnums.GemColor.WHITE, GameEnums.GemColor.WHITE, GameEnums.GemColor.WHITE]
-	var lnks: Array[bool] = [true, true, true]
-	wep.setup_sockets(cols, lnks)
-	wep.insert_gem(0, GemInstance.new(main_id))
-	for i in range(mini(mod_ids.size(), 3)):
-		wep.insert_gem(i + 1, GemInstance.new(mod_ids[i]))
-	st.equipped[GameEnums.EquipSlot.WEAPON] = wep
-	st.recompute()
-	return st.active_skill_configs[0]
+func _deck_total_dps(cards: Array[CardInstance], stand_still: bool = true) -> float:
+	var cd_mult: float = BalanceConfig.compute_deck_cd_mult(cards.size())
+	var total: float = 0.0
+	for c in cards:
+		var cfg: Dictionary = HeroStats.compile_card_config(c, cd_mult)
+		var hits_est: int = 2 if c.card_id == "spirit_bees" else 1
+		total += _card_dps(cfg, 1.5 if stand_still else 0.9, hits_est)
+	return total
+
+func _make_forged_card(cid: String, rarity: int, addons: Array[String]) -> CardInstance:
+	var c: CardInstance = CardInstance.new(cid, rarity)
+	for aid in addons:
+		c.apply_forge(aid)
+	return c
 
 func _run_audit() -> void:
-	print("=== Paw & Prism v2.3 Automated Balance Audit ===")
-	print("--- 1. T0 Single-Ability Baseline DPS (crit=x%.3f) ---" % BalanceConfig.expected_crit_mult())
+	print("=== Paw & Prism v3.0 Automated Balance Audit ===")
+	print("--- 1. T0 Single Template Card Baseline DPS (crit=x%.3f) ---" % BalanceConfig.expected_crit_mult())
 
-	for gid in GemDatabase.get_ids_by_type(GameEnums.GemType.MAIN):
-		var cfg: Dictionary = _build_single_skill_stats(gid, [], [])
-		var st_hits: int = 2 if gid == "spirit_bees" else 1
-		var dps: float = _single_skill_dps(cfg, 1.0, st_hits)
-		print("  %-18s dmg=%4.1f  cd=%.2fs  ST_DPS=%5.1f" % [String(cfg["gem_name"]), float(cfg["damage"]), float(cfg["cooldown"]), dps])
-		_check(dps >= 10.0 and dps <= 40.0, "T0 %s ST DPS within [10, 40] (got %.1f)" % [gid, dps])
+	for cid in CardDatabase.get_all_template_ids():
+		var card: CardInstance = CardInstance.new(cid, GameEnums.Rarity.COMMON)
+		var cfg: Dictionary = HeroStats.compile_card_config(card, 1.0)
+		var st_hits: int = 2 if cid == "spirit_bees" else 1
+		var dps: float = _card_dps(cfg, 1.0, st_hits)
+		print("  %-18s dmg=%4.1f  cd=%.2fs  ST_DPS=%5.1f" % [card.get_card_name(), float(cfg["damage"]), float(cfg["cooldown"]), dps])
+		_check(dps >= 10.0 and dps <= 40.0, "T0 %s ST DPS within [10, 40] (got %.1f)" % [cid, dps])
 
-	print("--- 2. Progression & Maxed Single-Ability Ceiling ---")
-	var t1_acorn: Dictionary = _build_single_skill_stats("acorn_barrage", ["mod_pierce"], ["sniper_focus"])
-	var t1_dps: float = _single_skill_dps(t1_acorn, 1.0, 1)
+	print("--- 2. Deck Progression: 1-Card Hyper-Forge vs 3-Card Well-Forged Endgame vs Unforged Bloat ---")
+	# Boss 1 (06:30): Early Uncommon Acorn (2/2) + Common Honey Slam (1/1)
+	var t1_deck: Array[CardInstance] = [
+		_make_forged_card("acorn_barrage", GameEnums.Rarity.UNCOMMON, ["addon_sniper_focus", "addon_pierce"]),
+		_make_forged_card("honey_slam", GameEnums.Rarity.COMMON, ["addon_chill"]),
+	]
+	var t1_dps: float = _deck_total_dps(t1_deck, false)
 
-	var t2_acorn: Dictionary = _build_single_skill_stats("acorn_barrage", ["mod_pierce", "mod_homing"], ["sniper_focus", "prism_echo"])
-	var t2_dps: float = _single_skill_dps(t2_acorn, 1.0, 1)
+	# Boss 2 (13:00): Uncommon Acorn (2/2) + Rare Meteor (2/3)
+	var t2_deck: Array[CardInstance] = [
+		_make_forged_card("acorn_barrage", GameEnums.Rarity.UNCOMMON, ["addon_sniper_focus", "addon_echo"]),
+		_make_forged_card("meteor_pine", GameEnums.Rarity.RARE, ["addon_giant_blast", "addon_chill"]),
+	]
+	var t2_dps: float = _deck_total_dps(t2_deck, false)
 
-	var t3_solid: Dictionary = _build_single_skill_stats("acorn_barrage", ["mod_pierce", "mod_homing", "mod_ignite"], ["sniper_focus", "prism_echo"])
-	var t3_solid_dps: float = _single_skill_dps(t3_solid, 1.0, 1)
+	# 1-Card Legendary Hyper-Forge (4/4)
+	var hyper_one: CardInstance = _make_forged_card("acorn_barrage", GameEnums.Rarity.LEGENDARY, ["addon_sniper_focus", "addon_echo", "addon_glass_spark", "addon_overclock"])
+	var hyper_one_still: float = _card_dps(HeroStats.compile_card_config(hyper_one, 1.0), 1.5, 1)
+	var hyper_one_move: float = _card_dps(HeroStats.compile_card_config(hyper_one, 1.0), 0.9, 1)
 
-	var max_sniper: Dictionary = _build_single_skill_stats("acorn_barrage", ["mod_pierce", "mod_homing", "mod_ignite"], ["sniper_focus", "glass_spark", "prism_echo", "turret_stance"])
-	var max_sniper_still: float = _single_skill_dps(max_sniper, BalanceConfig.TURRET_STILL_RATE, 1)
-	var max_sniper_move: float = _single_skill_dps(max_sniper, BalanceConfig.TURRET_MOVE_RATE, 1)
+	# 3-Card Well-Forged Endgame Deck (e.g. 1 Legendary 4/4 + 2 Rare 3/3)
+	var forged_three: Array[CardInstance] = [
+		_make_forged_card("acorn_barrage", GameEnums.Rarity.LEGENDARY, ["addon_sniper_focus", "addon_echo", "addon_glass_spark", "addon_overclock"]),
+		_make_forged_card("meteor_pine", GameEnums.Rarity.RARE, ["addon_echo", "addon_giant_blast", "addon_chill"]),
+		_make_forged_card("whisker_lightning", GameEnums.Rarity.RARE, ["addon_chain", "addon_ignite", "addon_leech"]),
+	]
+	var forged_three_still: float = _deck_total_dps(forged_three, true)
+	var forged_three_move: float = _deck_total_dps(forged_three, false)
 
-	var max_bees: Dictionary = _build_single_skill_stats("spirit_bees", ["mod_multishot", "mod_homing", "mod_ignite"], ["glass_spark", "prism_echo", "turret_stance"])
-	var max_bees_still: float = _single_skill_dps(max_bees, BalanceConfig.TURRET_STILL_RATE, int(max_bees["projectiles"]))
-	var max_bees_move: float = _single_skill_dps(max_bees, BalanceConfig.TURRET_MOVE_RATE, int(max_bees["projectiles"]))
+	# 6-Card Unforged Random Spam (deck bloat)
+	var spam_six: Array[CardInstance] = []
+	for sid in ["acorn_barrage", "whisker_lightning", "fireball_berry", "honey_slam", "spirit_bees", "boomerang_bone"]:
+		spam_six.append(CardInstance.new(sid, GameEnums.Rarity.COMMON))
+	var spam_six_dps: float = _deck_total_dps(spam_six, false)
 
-	var max_meteor: Dictionary = _build_single_skill_stats("meteor_pine", ["mod_nova_area", "mod_chill", "mod_leech"], ["glass_spark", "prism_echo", "turret_stance"])
-	var max_meteor_still: float = _single_skill_dps(max_meteor, BalanceConfig.TURRET_STILL_RATE, 1)
+	# 3 Well-Forged + 3 Raw Bloat Cards
+	var bloated_six: Array[CardInstance] = forged_three.duplicate()
+	for extra_id in ["petal_cyclone", "frost_nova", "boomerang_bone"]:
+		bloated_six.append(CardInstance.new(extra_id, GameEnums.Rarity.COMMON))
+	var bloated_six_move: float = _deck_total_dps(bloated_six, false)
 
-	# Unlinked 5-Main random spam comparison
-	var spam_st: HeroStats = HeroStats.new("shiba")
-	spam_st.init_bare_for_tutorial("shiba")
-	var spam_mains: Array[String] = ["acorn_barrage", "whisker_lightning", "fireball_berry", "honey_slam", "spirit_bees"]
-	var slots: Array[int] = [GameEnums.EquipSlot.WEAPON, GameEnums.EquipSlot.HELMET, GameEnums.EquipSlot.ARMOR, GameEnums.EquipSlot.BOOTS, GameEnums.EquipSlot.AMULET]
-	for idx in range(5):
-		var it: ItemInstance = ItemInstance.new()
-		it.equip_slot = slots[idx]
-		it.setup_sockets([GameEnums.GemColor.WHITE], [])
-		it.insert_gem(0, GemInstance.new(spam_mains[idx]))
-		spam_st.equipped[slots[idx]] = it
-	spam_st.recompute()
-	var spam_total_dps: float = 0.0
-	for scfg in spam_st.active_skill_configs:
-		var hits_est: int = 2 if String(scfg["gem_id"]) == "spirit_bees" else 1
-		spam_total_dps += _single_skill_dps(scfg, 1.0, hits_est)
+	print("  T1 Early Deck (06:30):              ST_DPS=%.1f" % t1_dps)
+	print("  T2 Mid Deck (13:00):                ST_DPS=%.1f" % t2_dps)
+	print("  1-Card Legendary Acorn (4/4):       Still=%.1f  Move=%.1f" % [hyper_one_still, hyper_one_move])
+	print("  3-Card Well-Forged Endgame (Sweet): Still=%.1f  Move=%.1f (CD x%.2f)" % [forged_three_still, forged_three_move, BalanceConfig.compute_deck_cd_mult(3)])
+	print("  3-Forged + 3-Raw Bloat (6 Cards):   Move=%.1f (CD x%.2f)" % [bloated_six_move, BalanceConfig.compute_deck_cd_mult(6)])
+	print("  6-Card Unforged Spam:               Total=%.1f (CD x%.2f)" % [spam_six_dps, BalanceConfig.compute_deck_cd_mult(6)])
 
-	print("  T1 Early Acorn Sniper:        ST_DPS=%.1f" % t1_dps)
-	print("  T2 Mid Acorn + Crown:         ST_DPS=%.1f" % t2_dps)
-	print("  T3 Solid Acorn + Crown:       ST_DPS=%.1f" % t3_solid_dps)
-	print("  T3 Max Acorn Sniper:          Still=%.1f  Move=%.1f" % [max_sniper_still, max_sniper_move])
-	print("  T3 Max Spirit Bees (%d bees): Still=%.1f  Move=%.1f" % [int(max_bees["projectiles"]), max_bees_still, max_bees_move])
-	print("  T3 Max Meteor Pinecone:       Still=%.1f" % max_meteor_still)
-	print("  Random 5-Main Unlinked Spam:  Total=%.1f (Focus CD=x%.2f)" % [spam_total_dps, spam_st.multi_skill_cd_mult])
-
-	_check(max_sniper_still > spam_total_dps * 1.4, "Focused Max Acorn beats 5-Main unlinked spam by >1.4x (%.1f vs %.1f)" % [max_sniper_still, spam_total_dps])
-	_check(max_bees_still <= 260.0, "Shotgun-dampened Max Bees stays <= 260 DPS (got %.1f)" % max_bees_still)
+	_check(forged_three_still > spam_six_dps * 2.0, "3-Card Forged Endgame beats 6-Card unforged spam by >2.0x (%.1f vs %.1f)" % [forged_three_still, spam_six_dps])
+	_check(forged_three_move > bloated_six_move, "Trimmed 3-Card Forged Deck beats 3-Forged + 3-Raw Bloat (%.1f vs %.1f)" % [forged_three_move, bloated_six_move])
 
 	print("--- 3. Boss & Elite TTK ---")
 	var b1_hp: float = float(EnemyDatabase.get_def("boss_grizzle")["hp"])
@@ -115,21 +128,21 @@ func _run_audit() -> void:
 	var b3_hp: float = float(EnemyDatabase.get_def("boss_bramblehorn")["hp"])
 	var t_b1: float = b1_hp / maxf(1.0, t1_dps)
 	var t_b2: float = b2_hp / maxf(1.0, t2_dps)
-	var t_b3_max: float = b3_hp / maxf(1.0, max_sniper_still)
-	var t_b3_solid: float = b3_hp / maxf(1.0, t3_solid_dps)
+	var t_b3_still: float = b3_hp / maxf(1.0, forged_three_still)
+	var t_b3_move: float = b3_hp / maxf(1.0, forged_three_move)
 	var late_prof: Dictionary = EnemyDatabase.get_wave_profile(1170.0)
 	var bandit_hp: float = float(EnemyDatabase.get_def("raccoon_bandit")["hp"]) * float(late_prof["hp_scale"])
-	var elite_bandit_hp: float = bandit_hp * BalanceConfig.ELITE_HP_MULT
-	var bandit_ttk_solid: float = bandit_hp / maxf(1.0, t3_solid_dps)
-	print("  06:30 Grizzle (%.0f HP) @ T1:        %.1fs" % [b1_hp, t_b1])
-	print("  13:00 Whiskers (%.0f HP) @ T2:       %.1fs" % [b2_hp, t_b2])
-	print("  19:30 Bramblehorn (%.0f HP) @ Max: %.1fs (Solid: %.1fs)" % [b3_hp, t_b3_max, t_b3_solid])
-	print("  19:30 Bandit (%.0f HP) / Elite (%.0f HP) @ Solid: %.1fs / %.1fs" % [bandit_hp, elite_bandit_hp, bandit_ttk_solid, elite_bandit_hp / t3_solid_dps])
+	var bandit_ttk: float = bandit_hp / maxf(1.0, forged_three_move)
 
-	_check(t_b1 >= 25.0 and t_b1 <= 55.0, "Boss 1 TTK at T1 within [25s, 55s] (got %.1fs)" % t_b1)
+	print("  06:30 Grizzle (%.0f HP) @ T1:         %.1fs" % [b1_hp, t_b1])
+	print("  13:00 Whiskers (%.0f HP) @ T2:        %.1fs" % [b2_hp, t_b2])
+	print("  19:30 Bramblehorn (%.0f HP) @ 3-Card: Still=%.1fs  Move=%.1fs" % [b3_hp, t_b3_still, t_b3_move])
+	print("  19:30 Bandit (%.0f HP) @ 3-Card Move: %.1fs" % [bandit_hp, bandit_ttk])
+
+	_check(t_b1 >= 20.0 and t_b1 <= 55.0, "Boss 1 TTK at T1 within [20s, 55s] (got %.1fs)" % t_b1)
 	_check(t_b2 >= 30.0 and t_b2 <= 75.0, "Boss 2 TTK at T2 within [30s, 75s] (got %.1fs)" % t_b2)
-	_check(t_b3_max >= 32.0 and t_b3_max <= 65.0, "Boss 3 TTK at Max within [32s, 65s] (got %.1fs)" % t_b3_max)
-	_check(bandit_ttk_solid <= 9.0, "Late Bandit TTK at Solid <= 9.0s (got %.1fs)" % bandit_ttk_solid)
+	_check(t_b3_still >= 30.0 and t_b3_still <= 65.0, "Boss 3 TTK at 3-Card Still within [30s, 65s] (got %.1fs)" % t_b3_still)
+	_check(bandit_ttk <= 9.0, "Late Bandit TTK at 3-Card Move <= 9.0s (got %.1fs)" % bandit_ttk)
 
 	print("--- 4. Lethality (Hits-to-Die) & Sustain Caps ---")
 	var m_hp: float = float(HeroDatabase.get_hero("shiba")["base_hp"])
@@ -138,22 +151,22 @@ func _run_audit() -> void:
 	var boss3_tele: float = float(EnemyDatabase.get_def("boss_bramblehorn")["damage"]) * late_dmg_scale * 1.65
 	var hits_bandit: int = int(ceil(m_hp / bandit_dmg))
 	var hits_boss3_tele: int = int(ceil(m_hp / boss3_tele))
-	var hits_glass_tele: int = int(ceil(m_hp / (boss3_tele * BalanceConfig.GLASS_TAKEN_MULT)))
-	var max_sustain_hps: float = BalanceConfig.BASE_HP_REGEN + (BalanceConfig.KILL_SIPHON_HEAL / BalanceConfig.KILL_SIPHON_ICD_SEC) + (BalanceConfig.LEECH_MAX_PER_PROC / BalanceConfig.LEECH_ICD_SEC)
+	var hits_glass_tele: int = int(ceil(m_hp / (boss3_tele * (1.0 + BalanceConfig.GLASS_TAKEN_BONUS))))
+	var max_sustain_hps: float = BalanceConfig.BASE_HP_REGEN + (BalanceConfig.LEECH_MAX_PER_PROC / BalanceConfig.LEECH_ICD_SEC)
+
 	print("  Mochi HP=%.0f | 19:30 Bandit=%.1f dmg (%d hits) | Boss3 Cross=%.1f (%d hits, Glass %d hit)" % [m_hp, bandit_dmg, hits_bandit, boss3_tele, hits_boss3_tele, hits_glass_tele])
-	print("  Max Capped Sustain HP/s: %.2f HP/s (Regen=%.2f + Siphon=%.2f + Leech=%.2f)" % [max_sustain_hps, BalanceConfig.BASE_HP_REGEN, BalanceConfig.KILL_SIPHON_HEAL / BalanceConfig.KILL_SIPHON_ICD_SEC, BalanceConfig.LEECH_MAX_PER_PROC / BalanceConfig.LEECH_ICD_SEC])
+	print("  Max Capped Sustain HP/s: %.2f HP/s (Regen=%.2f + Leech=%.2f)" % [max_sustain_hps, BalanceConfig.BASE_HP_REGEN, BalanceConfig.LEECH_MAX_PER_PROC / BalanceConfig.LEECH_ICD_SEC])
 	_check(hits_bandit >= 2 and hits_bandit <= 5, "Late regular Bandit kills Mochi in 2-5 hits (got %d)" % hits_bandit)
 	_check(hits_boss3_tele == 2 and hits_glass_tele == 1, "Boss 3 telegraph 2-shots standard Mochi and 1-shots Glass (got %d, Glass %d)" % [hits_boss3_tele, hits_glass_tele])
 
-	print("--- 5. Late-Game Speed & 20-Min Drop Budget ---")
-	var bear_spd: float = float(HeroDatabase.get_hero("bear")["base_speed"])
+	print("--- 5. Speed Pressure & 20-Min Card Drop Budget ---")
+	var m_spd: float = float(HeroDatabase.get_hero("shiba")["base_speed"])
 	var late_bandit_spd: float = float(EnemyDatabase.get_def("raccoon_bandit")["speed"]) * float(late_prof["speed_scale"])
-	print("  Bear Speed=%.1f | 19:30 Bandit Speed=%.2f (%.0f%% of Bear)" % [bear_spd, late_bandit_spd, (late_bandit_spd / bear_spd) * 100.0])
-	_check(late_bandit_spd >= bear_spd * 0.90, "Late Bandit >= 90%% of slowest hero speed (%.2f vs %.1f)" % [late_bandit_spd, bear_spd])
-	print("  Drop Gates: Item=%.1fs (%.1fs Lucky)  Gem=%.1fs (%.1fs Lucky) | Base=%.2f%% / %.2f%%" % [
-		BalanceConfig.ITEM_MIN_INTERVAL, BalanceConfig.ITEM_MIN_INTERVAL_LUCKY,
-		BalanceConfig.GEM_MIN_INTERVAL, BalanceConfig.GEM_MIN_INTERVAL_LUCKY,
-		BalanceConfig.BASE_ITEM_DROP * 100.0, BalanceConfig.BASE_GEM_DROP * 100.0,
+	print("  Mochi Speed=%.1f | 19:30 Bandit Speed=%.2f (%.0f%% of Mochi)" % [m_spd, late_bandit_spd, (late_bandit_spd / m_spd) * 100.0])
+	_check(late_bandit_spd >= m_spd * 0.90, "Late Bandit >= 90%% of Mochi speed (%.2f vs %.1f)" % [late_bandit_spd, m_spd])
+	print("  Card Drop Gates: Template=%.1fs (Base %.2f%%) | Add-on=%.1fs (Base %.2f%%)" % [
+		BalanceConfig.TEMPLATE_MIN_INTERVAL, BalanceConfig.BASE_TEMPLATE_DROP * 100.0,
+		BalanceConfig.ADDON_MIN_INTERVAL, BalanceConfig.BASE_ADDON_DROP * 100.0,
 	])
 
 	if _failures.is_empty():

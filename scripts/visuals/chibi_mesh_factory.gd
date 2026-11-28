@@ -183,8 +183,8 @@ static func _build_merged_mesh(parts: Array[Dictionary]) -> ArrayMesh:
 		st.commit(out_mesh)
 	return out_mesh
 
-static func build_hero_rig(hero_id: String) -> Node3D:
-	var hdef: Dictionary = HeroDatabase.get_hero(hero_id)
+static func build_hero_rig(_hero_id: String = "shiba") -> Node3D:
+	var hdef: Dictionary = HeroDatabase.get_hero("shiba")
 	var c_prim: Color = hdef["primary_color"]
 	var c_sec: Color = hdef["secondary_color"]
 	var c_acc: Color = hdef["accent_color"]
@@ -196,7 +196,7 @@ static func build_hero_rig(hero_id: String) -> Node3D:
 	var mat_nose: StandardMaterial3D = get_toon_mat(Color(0.16, 0.12, 0.14), 0.0, 0.25)
 
 	var root: Node3D = Node3D.new()
-	root.name = "ChibiHero_" + hero_id
+	root.name = "ChibiHero_shiba"
 	var hero_shadow: MeshInstance3D = _make_part(
 		_get_cylinder(0.64, 0.64, 0.02, 12),
 		get_unshaded_mat(Color(0.04, 0.05, 0.04, 0.50), true),
@@ -246,26 +246,22 @@ static func build_hero_rig(hero_id: String) -> Node3D:
 	body_pivot.add_child(_make_part(_get_sphere(0.11, 10, 5), mat_sec, Vector3(0.33, 0.44, 0.10), Vector3.ZERO, Vector3(0.85, 0.9, 1.15), false))
 	body_pivot.add_child(_make_part(_get_sphere(0.11, 10, 5), mat_sec, Vector3(-0.33, 0.44, 0.10), Vector3.ZERO, Vector3(0.85, 0.9, 1.15), false))
 
+	# Signature Acorn Forgemaster Wand
 	var weapon_mount: Node3D = Node3D.new()
 	weapon_mount.name = "WeaponMount"
 	weapon_mount.position = Vector3(-0.37, 0.48, 0.22)
 	body_pivot.add_child(weapon_mount)
+	var wood: StandardMaterial3D = get_toon_mat(Color(0.54, 0.34, 0.18))
+	weapon_mount.add_child(_make_part(_get_cylinder(0.035, 0.035, 0.55, 8), wood, Vector3(0.0, 0.18, 0.08), Vector3(32.0, 0.0, 0.0), Vector3.ONE, false))
+	weapon_mount.add_child(_make_part(_get_sphere(0.11, 10, 5), get_toon_mat(Color(0.92, 0.68, 0.28), 0.35), Vector3(0.0, 0.40, 0.22), Vector3.ZERO, Vector3.ONE, false))
+	weapon_mount.add_child(_make_part(_get_cylinder(0.08, 0.13, 0.08, 8), wood, Vector3(0.0, 0.47, 0.26), Vector3(32.0, 0.0, 0.0), Vector3.ONE, false))
 
 	var tail_pivot: Node3D = Node3D.new()
 	tail_pivot.name = "TailPivot"
 	tail_pivot.position = Vector3(0.0, 0.30, -0.26)
 	body_pivot.add_child(tail_pivot)
-	match hero_id:
-		"shiba":
-			tail_pivot.add_child(_make_part(_get_capsule(0.11, 0.34), mat_prim, Vector3(0.0, 0.16, -0.10), Vector3(-42.0, 0.0, 0.0), Vector3.ONE, false))
-			tail_pivot.add_child(_make_part(_get_sphere(0.13, 10, 5), mat_sec, Vector3(0.0, 0.30, -0.06), Vector3.ZERO, Vector3.ONE, false))
-		"bunny":
-			tail_pivot.add_child(_make_part(_get_sphere(0.15, 10, 5), mat_sec, Vector3(0.0, 0.02, -0.08), Vector3.ZERO, Vector3.ONE, false))
-		"bear":
-			tail_pivot.add_child(_make_part(_get_sphere(0.12, 10, 5), mat_prim, Vector3(0.0, 0.02, -0.06), Vector3.ZERO, Vector3.ONE, false))
-		"cat":
-			tail_pivot.add_child(_make_part(_get_capsule(0.06, 0.50), mat_prim, Vector3(0.0, 0.20, -0.14), Vector3(-48.0, 0.0, 0.0), Vector3.ONE, false))
-			tail_pivot.add_child(_make_part(_get_sphere(0.07, 8, 5), mat_sec, Vector3(0.0, 0.38, -0.30), Vector3.ZERO, Vector3.ONE, false))
+	tail_pivot.add_child(_make_part(_get_capsule(0.11, 0.34), mat_prim, Vector3(0.0, 0.16, -0.10), Vector3(-42.0, 0.0, 0.0), Vector3.ONE, false))
+	tail_pivot.add_child(_make_part(_get_sphere(0.13, 10, 5), mat_sec, Vector3(0.0, 0.30, -0.06), Vector3.ZERO, Vector3.ONE, false))
 
 	var head_pivot: Node3D = Node3D.new()
 	head_pivot.name = "HeadPivot"
@@ -273,102 +269,15 @@ static func build_hero_rig(hero_id: String) -> Node3D:
 	body_pivot.add_child(head_pivot)
 
 	head_pivot.add_child(_make_part(_get_sphere(0.41, 14, 8), mat_prim, Vector3.ZERO, Vector3.ZERO, Vector3(1.08, 0.94, 0.98), true))
-
-	if hero_id == "shiba" or hero_id == "cat":
-		head_pivot.add_child(_make_part(_get_sphere(0.24, 10, 6), mat_sec, Vector3(0.0, -0.10, 0.26), Vector3.ZERO, Vector3(1.18, 0.72, 0.68), false))
-	elif hero_id == "bear":
-		head_pivot.add_child(_make_part(_get_sphere(0.20, 10, 6), mat_sec, Vector3(0.0, -0.08, 0.30), Vector3.ZERO, Vector3(1.05, 0.80, 0.68), false))
-	else:
-		head_pivot.add_child(_make_part(_get_sphere(0.16, 10, 6), mat_sec, Vector3(0.0, -0.08, 0.32), Vector3.ZERO, Vector3(1.0, 0.75, 0.55), false))
-
-	var nose_mat: StandardMaterial3D = mat_pink if hero_id == "bunny" else mat_nose
-	head_pivot.add_child(_make_part(_get_sphere(0.055, 8, 5), nose_mat, Vector3(0.0, -0.02, 0.42), Vector3.ZERO, Vector3(1.15, 0.85, 0.85), false))
+	head_pivot.add_child(_make_part(_get_sphere(0.24, 10, 6), mat_sec, Vector3(0.0, -0.10, 0.26), Vector3.ZERO, Vector3(1.18, 0.72, 0.68), false))
+	head_pivot.add_child(_make_part(_get_sphere(0.055, 8, 5), mat_nose, Vector3(0.0, -0.02, 0.42), Vector3.ZERO, Vector3(1.15, 0.85, 0.85), false))
 	_add_cute_eyes(head_pivot, 0.06, 0.36, 0.165, 0.065)
 
-	match hero_id:
-		"shiba":
-			for side in [-1.0, 1.0]:
-				head_pivot.add_child(_make_part(_get_cylinder(0.02, 0.15, 0.28, 8), mat_prim, Vector3(side * 0.25, 0.36, 0.0), Vector3(8.0, 0.0, -side * 18.0), Vector3.ONE, false))
-				head_pivot.add_child(_make_part(_get_cylinder(0.01, 0.09, 0.20, 8), mat_pink, Vector3(side * 0.25, 0.35, 0.04), Vector3(8.0, 0.0, -side * 18.0), Vector3.ONE, false))
-		"bunny":
-			for side in [-1.0, 1.0]:
-				head_pivot.add_child(_make_part(_get_capsule(0.11, 0.46), mat_prim, Vector3(side * 0.23, 0.46, -0.02), Vector3(-10.0, 0.0, -side * 22.0), Vector3.ONE, false))
-				head_pivot.add_child(_make_part(_get_capsule(0.065, 0.34), mat_sec, Vector3(side * 0.23, 0.45, 0.04), Vector3(-10.0, 0.0, -side * 22.0), Vector3.ONE, false))
-		"bear":
-			for side in [-1.0, 1.0]:
-				head_pivot.add_child(_make_part(_get_sphere(0.15, 10, 5), mat_prim, Vector3(side * 0.30, 0.32, 0.0), Vector3.ZERO, Vector3(1.0, 1.0, 0.65), false))
-				head_pivot.add_child(_make_part(_get_sphere(0.085, 8, 4), mat_sec, Vector3(side * 0.30, 0.32, 0.05), Vector3.ZERO, Vector3(1.0, 1.0, 0.5), false))
-		"cat":
-			for side in [-1.0, 1.0]:
-				head_pivot.add_child(_make_part(_get_cylinder(0.015, 0.14, 0.27, 6), mat_prim, Vector3(side * 0.25, 0.35, 0.02), Vector3(6.0, 0.0, -side * 22.0), Vector3.ONE, false))
-				head_pivot.add_child(_make_part(_get_cylinder(0.01, 0.08, 0.18, 6), mat_pink, Vector3(side * 0.25, 0.34, 0.05), Vector3(6.0, 0.0, -side * 22.0), Vector3.ONE, false))
-			body_pivot.add_child(_make_part(_get_sphere(0.085, 8, 5), mat_acc, Vector3(0.0, 0.60, 0.29), Vector3.ZERO, Vector3.ONE, false))
-
-	var hat_mount: Node3D = Node3D.new()
-	hat_mount.name = "HatMount"
-	hat_mount.position = Vector3(0.0, 0.37, 0.0)
-	head_pivot.add_child(hat_mount)
+	for side in [-1.0, 1.0]:
+		head_pivot.add_child(_make_part(_get_cylinder(0.02, 0.15, 0.28, 8), mat_prim, Vector3(side * 0.25, 0.36, 0.0), Vector3(8.0, 0.0, -side * 18.0), Vector3.ONE, false))
+		head_pivot.add_child(_make_part(_get_cylinder(0.01, 0.09, 0.20, 8), mat_pink, Vector3(side * 0.25, 0.35, 0.04), Vector3(8.0, 0.0, -side * 18.0), Vector3.ONE, false))
 
 	return root
-
-static func update_hero_visual_gear(rig: Node3D, weapon_style: String, helmet_style: String) -> void:
-	var weapon_mount: Node3D = rig.get_node_or_null("BodyPivot/WeaponMount")
-	if weapon_mount != null:
-		for ch in weapon_mount.get_children():
-			weapon_mount.remove_child(ch)
-			ch.queue_free()
-		_build_chibi_weapon(weapon_mount, weapon_style)
-
-	var hat_mount: Node3D = rig.get_node_or_null("BodyPivot/HeadPivot/HatMount")
-	if hat_mount != null:
-		for ch in hat_mount.get_children():
-			hat_mount.remove_child(ch)
-			ch.queue_free()
-		_build_chibi_hat(hat_mount, helmet_style)
-
-static func _build_chibi_weapon(mount: Node3D, style: String) -> void:
-	var wood: StandardMaterial3D = get_toon_mat(Color(0.54, 0.34, 0.18))
-	var gold: StandardMaterial3D = get_toon_mat(Color(1.0, 0.80, 0.26), 0.35)
-	match style:
-		"acorn_wand":
-			mount.add_child(_make_part(_get_cylinder(0.035, 0.035, 0.55, 8), wood, Vector3(0.0, 0.18, 0.08), Vector3(32.0, 0.0, 0.0), Vector3.ONE, false))
-			mount.add_child(_make_part(_get_sphere(0.11, 10, 5), get_toon_mat(Color(0.84, 0.62, 0.28)), Vector3(0.0, 0.40, 0.22), Vector3.ZERO, Vector3.ONE, false))
-			mount.add_child(_make_part(_get_cylinder(0.08, 0.13, 0.08, 8), wood, Vector3(0.0, 0.47, 0.26), Vector3(32.0, 0.0, 0.0), Vector3.ONE, false))
-		"honey_hammer":
-			mount.add_child(_make_part(_get_cylinder(0.04, 0.04, 0.62, 8), wood, Vector3(0.0, 0.20, 0.08), Vector3(28.0, 0.0, 0.0), Vector3.ONE, false))
-			mount.add_child(_make_part(_get_cylinder(0.16, 0.16, 0.36, 10), gold, Vector3(0.0, 0.46, 0.22), Vector3(28.0, 0.0, 90.0), Vector3.ONE, false))
-		"star_staff":
-			mount.add_child(_make_part(_get_cylinder(0.03, 0.035, 0.72, 8), get_toon_mat(Color(0.45, 0.35, 0.75)), Vector3(0.0, 0.22, 0.06), Vector3(24.0, 0.0, 0.0), Vector3.ONE, false))
-			mount.add_child(_make_part(_get_sphere(0.12, 10, 5), get_toon_mat(Color(0.45, 0.88, 1.0), 0.9), Vector3(0.0, 0.56, 0.20), Vector3.ZERO, Vector3.ONE, false))
-		"paw_claws":
-			var steel: StandardMaterial3D = get_toon_mat(Color(0.82, 0.90, 1.0), 0.45)
-			for off_x in [-0.05, 0.0, 0.05]:
-				mount.add_child(_make_part(_get_prism(Vector3(0.035, 0.26, 0.035)), steel, Vector3(off_x, 0.06, 0.14), Vector3(75.0, 0.0, 0.0), Vector3.ONE, false))
-
-static func _build_chibi_hat(mount: Node3D, style: String) -> void:
-	match style:
-		"wizard_hat":
-			var wiz: StandardMaterial3D = get_toon_mat(Color(0.32, 0.34, 0.78))
-			var band: StandardMaterial3D = get_toon_mat(Color(1.0, 0.82, 0.28), 0.35)
-			mount.add_child(_make_part(_get_cylinder(0.32, 0.36, 0.05, 12), wiz, Vector3(0.0, 0.0, 0.0), Vector3.ZERO, Vector3.ONE, false))
-			mount.add_child(_make_part(_get_cylinder(0.18, 0.21, 0.08, 10), band, Vector3(0.0, 0.05, 0.0), Vector3.ZERO, Vector3.ONE, false))
-			mount.add_child(_make_part(_get_cylinder(0.02, 0.19, 0.36, 10), wiz, Vector3(0.0, 0.23, -0.02), Vector3(-10.0, 0.0, 0.0), Vector3.ONE, false))
-		"leaf_crown":
-			var leaf: StandardMaterial3D = get_toon_mat(Color(0.36, 0.82, 0.38))
-			var flower: StandardMaterial3D = get_toon_mat(Color(1.0, 0.86, 0.32), 0.25)
-			mount.add_child(_make_part(_get_torus(0.16, 0.24), leaf, Vector3(0.0, 0.01, 0.0), Vector3.ZERO, Vector3.ONE, false))
-			mount.add_child(_make_part(_get_sphere(0.075, 8, 4), flower, Vector3(0.14, 0.06, 0.14), Vector3.ZERO, Vector3.ONE, false))
-			mount.add_child(_make_part(_get_sphere(0.075, 8, 4), flower, Vector3(-0.14, 0.06, 0.14), Vector3.ZERO, Vector3.ONE, false))
-		"knight_helm":
-			var steel: StandardMaterial3D = get_toon_mat(Color(0.76, 0.80, 0.88), 0.0, 0.3)
-			var plume: StandardMaterial3D = get_toon_mat(Color(0.95, 0.34, 0.38))
-			mount.add_child(_make_part(_get_sphere(0.24, 10, 6), steel, Vector3(0.0, -0.02, 0.0), Vector3.ZERO, Vector3(1.05, 0.75, 1.05), false))
-			mount.add_child(_make_part(_get_capsule(0.06, 0.24), plume, Vector3(0.0, 0.17, -0.05), Vector3(-35.0, 0.0, 0.0), Vector3.ONE, false))
-		"ribbon_hood":
-			var rib: StandardMaterial3D = get_toon_mat(Color(0.96, 0.38, 0.50))
-			mount.add_child(_make_part(_get_sphere(0.08, 8, 4), rib, Vector3(0.0, 0.02, 0.14), Vector3.ZERO, Vector3.ONE, false))
-			mount.add_child(_make_part(_get_box(Vector3(0.18, 0.10, 0.08)), rib, Vector3(0.12, 0.03, 0.10), Vector3(0.0, 0.0, 22.0), Vector3.ONE, false))
-			mount.add_child(_make_part(_get_box(Vector3(0.18, 0.10, 0.08)), rib, Vector3(-0.12, 0.03, 0.10), Vector3(0.0, 0.0, -22.0), Vector3.ONE, false))
 
 static func _get_regular_enemy_merged_mesh(enemy_id: String, edef: Dictionary) -> ArrayMesh:
 	if _enemy_merged_cache.has(enemy_id):
@@ -519,24 +428,25 @@ static func build_loot_mesh(kind: String, color: Color, rarity: int = 0) -> Node
 	root.add_child(spin_pivot)
 
 	match kind:
-		"main_gem":
-			var mat_m: StandardMaterial3D = get_toon_mat(color, 1.15, 0.15)
-			spin_pivot.add_child(_make_part(_get_prism(Vector3(0.48, 0.58, 0.48)), mat_m, Vector3(0.0, 0.50, 0.0), Vector3.ZERO, Vector3.ONE, false))
-			spin_pivot.add_child(_make_part(_get_prism(Vector3(0.48, 0.58, 0.48)), mat_m, Vector3(0.0, 0.16, 0.0), Vector3(180.0, 0.0, 0.0), Vector3.ONE, false))
-			_add_loot_beam(root, color, 5.2)
-		"mod_gem":
-			var mat_mod: StandardMaterial3D = get_toon_mat(color, 0.95, 0.2)
-			var mat_rim: StandardMaterial3D = get_toon_mat(Color(1.0, 0.85, 0.32), 0.7)
-			spin_pivot.add_child(_make_part(_get_sphere(0.32), mat_mod, Vector3(0.0, 0.44, 0.0), Vector3.ZERO, Vector3.ONE, false))
-			spin_pivot.add_child(_make_part(_get_torus(0.34, 0.42), mat_rim, Vector3(0.0, 0.44, 0.0), Vector3(28.0, 0.0, 14.0), Vector3.ONE, false))
-			_add_loot_beam(root, color, 4.4)
-		"item":
+		"template_card":
 			var r_col: Color = GameEnums.rarity_color(rarity)
-			var mat_i: StandardMaterial3D = get_toon_mat(r_col, 0.75 if rarity >= GameEnums.Rarity.RARE else 0.40, 0.3)
-			spin_pivot.add_child(_make_part(_get_box(Vector3(0.48, 0.34, 0.34)), mat_i, Vector3(0.0, 0.36, 0.0), Vector3(10.0, 20.0, 0.0), Vector3.ONE, false))
-			spin_pivot.add_child(_make_part(_get_box(Vector3(0.52, 0.10, 0.38)), get_toon_mat(Color(1.0, 0.86, 0.35), 0.5), Vector3(0.0, 0.48, 0.0), Vector3(10.0, 20.0, 0.0), Vector3.ONE, false))
-			var beam_h: float = 2.8 if rarity == GameEnums.Rarity.COMMON else (3.6 + float(rarity) * 2.2)
+			var mat_rim: StandardMaterial3D = get_toon_mat(r_col, 0.95 if rarity >= GameEnums.Rarity.RARE else 0.55, 0.22)
+			var mat_face: StandardMaterial3D = get_toon_mat(Color(0.18, 0.14, 0.12), 0.2, 0.35)
+			var mat_seal: StandardMaterial3D = get_toon_mat(Color(1.0, 0.88, 0.38), 1.0, 0.2)
+			spin_pivot.add_child(_make_part(_get_box(Vector3(0.56, 0.78, 0.08)), mat_rim, Vector3(0.0, 0.56, 0.0), Vector3(12.0, 0.0, 0.0), Vector3.ONE, false))
+			spin_pivot.add_child(_make_part(_get_box(Vector3(0.46, 0.66, 0.10)), mat_face, Vector3(0.0, 0.56, 0.0), Vector3(12.0, 0.0, 0.0), Vector3.ONE, false))
+			spin_pivot.add_child(_make_part(_get_prism(Vector3(0.24, 0.26, 0.14)), mat_seal, Vector3(0.0, 0.58, 0.0), Vector3(12.0, 0.0, 0.0), Vector3.ONE, false))
+			var beam_h: float = 3.2 + float(rarity) * 1.8
 			_add_loot_beam(root, r_col, beam_h)
+		"addon_card":
+			var a_col: Color = GameEnums.rarity_color(rarity)
+			var mat_rim_a: StandardMaterial3D = get_toon_mat(a_col, 0.85, 0.2)
+			var mat_core_a: StandardMaterial3D = get_toon_mat(Color(0.20, 0.28, 0.42), 0.35, 0.3)
+			var mat_spark: StandardMaterial3D = get_toon_mat(Color(0.52, 0.94, 1.0), 1.15, 0.2)
+			spin_pivot.add_child(_make_part(_get_box(Vector3(0.48, 0.62, 0.07)), mat_rim_a, Vector3(0.0, 0.50, 0.0), Vector3(14.0, 0.0, 0.0), Vector3.ONE, false))
+			spin_pivot.add_child(_make_part(_get_box(Vector3(0.38, 0.50, 0.09)), mat_core_a, Vector3(0.0, 0.50, 0.0), Vector3(14.0, 0.0, 0.0), Vector3.ONE, false))
+			spin_pivot.add_child(_make_part(_get_sphere(0.12), mat_spark, Vector3(0.0, 0.52, 0.0), Vector3.ZERO, Vector3.ONE, false))
+			_add_loot_beam(root, color, 4.2)
 		"chest":
 			var chest_mat: StandardMaterial3D = get_toon_mat(Color(0.68, 0.40, 0.18))
 			var gold_mat: StandardMaterial3D = get_toon_mat(Color(1.0, 0.82, 0.24), 0.75)

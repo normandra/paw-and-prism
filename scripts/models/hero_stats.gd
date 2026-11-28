@@ -2,183 +2,133 @@ class_name HeroStats
 
 var hero_id: String = "shiba"
 
-# Equipped slots: EquipSlot -> ItemInstance or null
-var equipped: Dictionary = {}
-var item_bag: Array[ItemInstance] = []
-var gem_pouch: Array[GemInstance] = []
-const MAX_BAG_SIZE: int = 24
-const MAX_POUCH_SIZE: int = 24
+# Unlimited Active Deck of Template Cards + Collections
+var equipped_cards: Array[CardInstance] = []
+var template_inventory: Array[CardInstance] = []
+var addon_inventory: Array[CardInstance] = []
+const MAX_TEMPLATE_INV: int = 36
+const MAX_ADDON_INV: int = 36
 
-# Baseline Hero Vitals (zero stat-stick scaling)
-var max_hp: float = 135.0
-var hp_regen: float = 0.6
-var move_speed: float = 8.6
-var crit_chance: float = 8.0
-var crit_mult: float = 165.0
+# Baseline Hero Vitals
+var max_hp: float = 110.0
+var hp_regen: float = BalanceConfig.BASE_HP_REGEN
+var move_speed: float = 6.7
+var crit_chance: float = BalanceConfig.BASE_CRIT_CHANCE
+var crit_mult: float = BalanceConfig.BASE_CRIT_MULT
 
-# Behavioral Flags Derived From Equipped Global Item Effects
-var active_effects: Dictionary = {}
-var active_effect_list: Array[String] = []
+# Aggregated Deck-Wide Utility/Defense Stacks (derived from forged Add-ons on active cards)
+var active_forged_summary: Array[Dictionary] = []
+var glass_stacks: int = 0
+var ember_corpse_stacks: int = 0
+var frost_shatter_stacks: int = 0
+var zoomies_stacks: int = 0
+var thorns_stacks: int = 0
+var orbit_shield_stacks: int = 0
+var nine_lives_stacks: int = 0
+
 var incoming_dmg_mult: float = 1.0
-var has_lucky_clover: bool = false
-var has_turret_stance: bool = false
-var has_stride_honey_nova: bool = false
-var has_cadence_burst: bool = false
-var has_kill_siphon: bool = false
 var has_zoomies_on_kill: bool = false
 var has_ember_corpse: bool = false
 var has_frost_shatter: bool = false
-var has_static_sprint: bool = false
 var has_thorns_burst: bool = false
-var has_aegis_freeze: bool = false
 var has_orbit_shield: bool = false
 var has_cheat_death: bool = false
-var has_fleet_paws: bool = false
-var has_comet_stride: bool = false
 
-# Compiled PoE Active Skill List
+# Compiled Active Card Skill Configs
 var active_skill_configs: Array[Dictionary] = []
-var equipped_main_count: int = 0
-var multi_skill_cd_mult: float = 1.0
+var equipped_card_count: int = 0
+var deck_cd_mult: float = 1.0
 
 func _init(p_hero_id: String = "shiba") -> void:
 	init_for_hero(p_hero_id)
 
-func _reset_empty_slots(p_hero_id: String) -> void:
+func _reset_empty(p_hero_id: String = "shiba") -> void:
 	hero_id = p_hero_id
-	equipped.clear()
-	item_bag.clear()
-	gem_pouch.clear()
-	for slot in [
-		GameEnums.EquipSlot.WEAPON,
-		GameEnums.EquipSlot.HELMET,
-		GameEnums.EquipSlot.ARMOR,
-		GameEnums.EquipSlot.BOOTS,
-		GameEnums.EquipSlot.AMULET,
-		GameEnums.EquipSlot.RING,
-	]:
-		equipped[slot] = null
+	equipped_cards.clear()
+	template_inventory.clear()
+	addon_inventory.clear()
 
-func init_bare_for_tutorial(p_hero_id: String) -> void:
-	_reset_empty_slots(p_hero_id)
+func init_bare_for_tutorial(p_hero_id: String = "shiba") -> void:
+	_reset_empty(p_hero_id)
 	recompute()
 
-func init_for_hero(p_hero_id: String) -> void:
-	_reset_empty_slots(p_hero_id)
+func init_for_hero(p_hero_id: String = "shiba") -> void:
+	_reset_empty(p_hero_id)
 	var hdef: Dictionary = HeroDatabase.get_hero(hero_id)
-
-	# Starter Weapon: 2-Link containing Hero's Main Ability + open linked Modifier socket + signature Effect
-	var weapon: ItemInstance = ItemInstance.new()
-	weapon.item_name = String(hdef["starter_weapon_name"])
-	weapon.equip_slot = GameEnums.EquipSlot.WEAPON
-	weapon.rarity = GameEnums.Rarity.MAGIC
-	weapon.visual_style = String(hdef["starter_weapon_style"])
-	weapon.effects = [String(hdef["starter_effect_id"])]
-	var w_cols: Array[int] = []
-	for c in hdef["starter_weapon_sockets"]:
-		w_cols.append(int(c))
-	var w_lnks: Array[bool] = []
-	for l in hdef["starter_weapon_links"]:
-		w_lnks.append(bool(l))
-	weapon.setup_sockets(w_cols, w_lnks)
-	weapon.insert_gem(0, GemInstance.new(String(hdef["starter_main_gem"])))
-	equipped[GameEnums.EquipSlot.WEAPON] = weapon
-
-	# Starter Cosmetic Hat with 1 open socket (no starter effect so first looted Helmet is always exciting)
-	var helmet: ItemInstance = ItemInstance.new()
-	helmet.item_name = "Meadow Cap"
-	helmet.equip_slot = GameEnums.EquipSlot.HELMET
-	helmet.rarity = GameEnums.Rarity.COMMON
-	helmet.visual_style = String(hdef["starter_helmet_style"])
-	helmet.effects = []
-	helmet.setup_sockets([GameEnums.GemColor.GREEN, GameEnums.GemColor.BLUE], [false])
-	equipped[GameEnums.EquipSlot.HELMET] = helmet
-
+	var starter_id: String = String(hdef.get("starter_template_id", "acorn_barrage"))
+	var starter_rarity: int = int(hdef.get("starter_template_rarity", GameEnums.Rarity.UNCOMMON))
+	var starter: CardInstance = CardInstance.new(starter_id, starter_rarity)
+	equipped_cards.append(starter)
 	recompute()
 
-func has_effect(effect_id: String) -> bool:
-	return active_effects.has(effect_id)
+func can_add_template() -> bool:
+	return template_inventory.size() < MAX_TEMPLATE_INV
 
-func can_add_item_to_bag() -> bool:
-	return item_bag.size() < MAX_BAG_SIZE
+func can_add_addon() -> bool:
+	return addon_inventory.size() < MAX_ADDON_INV
 
-func can_add_gem_to_pouch() -> bool:
-	return gem_pouch.size() < MAX_POUCH_SIZE
+func add_card_to_inventory(card: CardInstance) -> bool:
+	if card == null:
+		return false
+	if card.is_template():
+		if not can_add_template():
+			return false
+		template_inventory.append(card)
+		return true
+	if not can_add_addon():
+		return false
+	addon_inventory.append(card)
+	return true
 
-func get_pouch_gems(filter_type: int = -1) -> Array[GemInstance]:
-	var out: Array[GemInstance] = []
-	for g in gem_pouch:
-		if filter_type == -1 or g.get_gem_type() == filter_type:
-			out.append(g)
-	return out
-
-func equip_item_from_bag(bag_idx: int) -> Dictionary:
-	if bag_idx < 0 or bag_idx >= item_bag.size():
-		return {"ok": false, "overflow_gems": []}
-	var new_item: ItemInstance = item_bag[bag_idx]
-	item_bag.remove_at(bag_idx)
-	var old_item: ItemInstance = equipped.get(new_item.equip_slot, null)
-
-	var overflow_gems: Array[GemInstance] = []
-	if old_item != null:
-		var old_gems: Array[GemInstance] = old_item.extract_all_gems()
-		for g in old_gems:
-			var placed: bool = false
-			for s_idx in range(new_item.get_socket_count()):
-				if new_item.socketed_gems[s_idx] == null and new_item.can_socket(s_idx, g):
-					new_item.insert_gem(s_idx, g)
-					placed = true
-					break
-			if not placed:
-				if gem_pouch.size() < MAX_POUCH_SIZE:
-					gem_pouch.append(g)
-				else:
-					overflow_gems.append(g)
-					gem_pouch.append(g) # Preserve player abilities safely
-		item_bag.insert(mini(bag_idx, item_bag.size()), old_item)
-
-	equipped[new_item.equip_slot] = new_item
+func equip_template_from_inventory(inv_idx: int) -> Dictionary:
+	if inv_idx < 0 or inv_idx >= template_inventory.size():
+		return {"ok": false}
+	var card: CardInstance = template_inventory[inv_idx]
+	template_inventory.remove_at(inv_idx)
+	equipped_cards.append(card)
 	recompute()
-	return {"ok": true, "overflow_gems": overflow_gems, "equipped_item": new_item}
+	return {"ok": true, "card": card}
 
-func discard_bag_item(bag_idx: int) -> bool:
-	if bag_idx < 0 or bag_idx >= item_bag.size():
-		return false
-	var item: ItemInstance = item_bag[bag_idx]
-	item_bag.remove_at(bag_idx)
-	for g in item.extract_all_gems():
-		gem_pouch.append(g)
-	return true
-
-func discard_gem_from_pouch(pouch_idx: int) -> bool:
-	if pouch_idx < 0 or pouch_idx >= gem_pouch.size():
-		return false
-	gem_pouch.remove_at(pouch_idx)
-	return true
-
-func socket_gem_into_equipped(slot: int, socket_idx: int, pouch_idx: int) -> bool:
-	var item: ItemInstance = equipped.get(slot, null)
-	if item == null or pouch_idx < 0 or pouch_idx >= gem_pouch.size():
-		return false
-	var gem: GemInstance = gem_pouch[pouch_idx]
-	if not item.can_socket(socket_idx, gem):
-		return false
-	gem_pouch.remove_at(pouch_idx)
-	var prev: GemInstance = item.insert_gem(socket_idx, gem)
-	if prev != null:
-		gem_pouch.append(prev)
+func unequip_template_card(eq_idx: int) -> Dictionary:
+	if eq_idx < 0 or eq_idx >= equipped_cards.size():
+		return {"ok": false}
+	var card: CardInstance = equipped_cards[eq_idx]
+	equipped_cards.remove_at(eq_idx)
+	template_inventory.append(card)
 	recompute()
+	return {"ok": true, "card": card}
+
+func forge_addon_onto_card(addon_idx: int, target_card: CardInstance) -> Dictionary:
+	if addon_idx < 0 or addon_idx >= addon_inventory.size() or target_card == null:
+		return {"ok": false, "reason": "Invalid card selection"}
+	var addon: CardInstance = addon_inventory[addon_idx]
+	var check: Dictionary = target_card.can_accept_addon(addon)
+	if not bool(check.get("ok", false)):
+		return check
+	var applied: bool = target_card.apply_forge(addon.card_id)
+	if not applied:
+		return {"ok": false, "reason": "Forge failed"}
+	# Consumes the Add-on Card permanently
+	addon_inventory.remove_at(addon_idx)
+	recompute()
+	return {
+		"ok": true,
+		"template": target_card,
+		"addon_id": addon.card_id,
+		"addon_name": addon.get_card_name(),
+	}
+
+func discard_template(inv_idx: int) -> bool:
+	if inv_idx < 0 or inv_idx >= template_inventory.size():
+		return false
+	template_inventory.remove_at(inv_idx)
 	return true
 
-func unsocket_gem_from_equipped(slot: int, socket_idx: int) -> GemInstance:
-	var item: ItemInstance = equipped.get(slot, null)
-	if item == null:
-		return null
-	var removed: GemInstance = item.remove_gem(socket_idx)
-	if removed != null:
-		gem_pouch.append(removed)
-		recompute()
-	return removed
+func discard_addon(addon_idx: int) -> bool:
+	if addon_idx < 0 or addon_idx >= addon_inventory.size():
+		return false
+	addon_inventory.remove_at(addon_idx)
+	return true
 
 func recompute() -> void:
 	var hdef: Dictionary = HeroDatabase.get_hero(hero_id)
@@ -188,91 +138,55 @@ func recompute() -> void:
 	crit_chance = BalanceConfig.BASE_CRIT_CHANCE
 	crit_mult = BalanceConfig.BASE_CRIT_MULT
 
-	# Collect active Global Item Effects
-	active_effects.clear()
-	active_effect_list.clear()
-	for slot in [
-		GameEnums.EquipSlot.WEAPON,
-		GameEnums.EquipSlot.HELMET,
-		GameEnums.EquipSlot.ARMOR,
-		GameEnums.EquipSlot.BOOTS,
-		GameEnums.EquipSlot.AMULET,
-		GameEnums.EquipSlot.RING,
-	]:
-		var item: ItemInstance = equipped.get(slot, null)
-		if item == null:
+	equipped_card_count = equipped_cards.size()
+	deck_cd_mult = BalanceConfig.compute_deck_cd_mult(equipped_card_count)
+
+	# Count deck-wide forged utility/defense/glass stacks across all equipped cards
+	var addon_totals: Dictionary = {}
+	var addon_order: Array[String] = []
+	for card in equipped_cards:
+		if card == null:
 			continue
-		for eid in item.effects:
-			if not active_effects.has(eid):
-				active_effects[eid] = true
-				active_effect_list.append(eid)
+		for aid in card.forged_addons:
+			if not addon_totals.has(aid):
+				addon_totals[aid] = 0
+				addon_order.append(aid)
+			addon_totals[aid] = int(addon_totals[aid]) + 1
 
-	has_lucky_clover = has_effect("lucky_clover")
-	has_turret_stance = has_effect("turret_stance")
-	has_stride_honey_nova = has_effect("stride_honey_nova")
-	has_cadence_burst = has_effect("cadence_burst")
-	has_kill_siphon = has_effect("kill_siphon")
-	has_zoomies_on_kill = has_effect("zoomies_on_kill")
-	has_ember_corpse = has_effect("ember_corpse")
-	has_frost_shatter = has_effect("frost_shatter")
-	has_static_sprint = has_effect("static_sprint")
-	has_thorns_burst = has_effect("thorns_burst")
-	has_aegis_freeze = has_effect("aegis_freeze")
-	has_orbit_shield = has_effect("orbit_shield")
-	has_cheat_death = has_effect("cheat_death")
-	has_fleet_paws = has_effect("fleet_paws")
-	has_comet_stride = has_effect("comet_stride")
-	incoming_dmg_mult = BalanceConfig.GLASS_TAKEN_MULT if has_effect("glass_spark") else 1.0
+	glass_stacks = int(addon_totals.get("addon_glass_spark", 0))
+	ember_corpse_stacks = int(addon_totals.get("addon_ember_corpse", 0))
+	frost_shatter_stacks = int(addon_totals.get("addon_frost_shatter", 0))
+	zoomies_stacks = int(addon_totals.get("addon_zoomies", 0))
+	thorns_stacks = int(addon_totals.get("addon_thorns", 0))
+	orbit_shield_stacks = int(addon_totals.get("addon_orbit_shield", 0))
+	nine_lives_stacks = int(addon_totals.get("addon_nine_lives", 0))
 
-	# Count total socketed Main Abilities so multi-skill focus tax applies uniformly
-	equipped_main_count = 0
-	for slot in [
-		GameEnums.EquipSlot.WEAPON,
-		GameEnums.EquipSlot.HELMET,
-		GameEnums.EquipSlot.ARMOR,
-		GameEnums.EquipSlot.BOOTS,
-		GameEnums.EquipSlot.AMULET,
-		GameEnums.EquipSlot.RING,
-	]:
-		var cnt_item: ItemInstance = equipped.get(slot, null)
-		if cnt_item == null:
-			continue
-		for g in cnt_item.socketed_gems:
-			if g != null and g.get_gem_type() == GameEnums.GemType.MAIN:
-				equipped_main_count += 1
-	multi_skill_cd_mult = 1.0 + BalanceConfig.MULTI_SKILL_CD_TAX * float(maxi(0, equipped_main_count - 1))
+	incoming_dmg_mult = minf(BalanceConfig.GLASS_TAKEN_CAP, 1.0 + BalanceConfig.GLASS_TAKEN_BONUS * float(glass_stacks))
+	has_zoomies_on_kill = zoomies_stacks > 0
+	has_ember_corpse = ember_corpse_stacks > 0
+	has_frost_shatter = frost_shatter_stacks > 0
+	has_thorns_burst = thorns_stacks > 0
+	has_orbit_shield = orbit_shield_stacks > 0
+	has_cheat_death = nine_lives_stacks > 0
 
-	# Compile PoE Main Socket Abilities + Linked Modifier Abilities
+	active_forged_summary.clear()
+	for aid in addon_order:
+		var adef: Dictionary = CardDatabase.get_def(aid)
+		active_forged_summary.append({
+			"id": aid,
+			"name": String(adef.get("card_name", aid)),
+			"count": int(addon_totals[aid]),
+			"rarity": int(adef.get("rarity", GameEnums.Rarity.COMMON)),
+		})
+
 	active_skill_configs.clear()
-	for slot in [
-		GameEnums.EquipSlot.WEAPON,
-		GameEnums.EquipSlot.HELMET,
-		GameEnums.EquipSlot.ARMOR,
-		GameEnums.EquipSlot.BOOTS,
-		GameEnums.EquipSlot.AMULET,
-		GameEnums.EquipSlot.RING,
-	]:
-		var item: ItemInstance = equipped.get(slot, null)
-		if item == null:
+	for card in equipped_cards:
+		if card == null:
 			continue
-		for grp in item.get_link_groups():
-			var group_indices: Array[int] = grp
-			var mains_in_group: Array[GemInstance] = []
-			var mods_in_group: Array[GemInstance] = []
-			for s_idx in group_indices:
-				var g: GemInstance = item.socketed_gems[s_idx]
-				if g == null:
-					continue
-				if g.get_gem_type() == GameEnums.GemType.MAIN:
-					mains_in_group.append(g)
-				elif g.get_gem_type() == GameEnums.GemType.MODIFIER:
-					mods_in_group.append(g)
+		active_skill_configs.append(compile_card_config(card, deck_cd_mult, crit_chance, crit_mult))
 
-			for main_gem in mains_in_group:
-				active_skill_configs.append(_compile_main_skill(main_gem, mods_in_group, slot))
-
-func _compile_main_skill(main_gem: GemInstance, mods_list: Array[GemInstance], equip_slot: int) -> Dictionary:
-	var def: Dictionary = main_gem.get_def()
+static func compile_card_config(card: CardInstance, p_deck_cd_mult: float = 1.0, p_crit_chance: float = BalanceConfig.BASE_CRIT_CHANCE, p_crit_mult: float = BalanceConfig.BASE_CRIT_MULT) -> Dictionary:
+	var def: Dictionary = card.get_def()
 	var final_dmg: float = float(def.get("base_damage", 20.0))
 	var final_cd: float = float(def.get("cooldown", 1.0))
 	var base_proj: int = int(def.get("base_projectiles", 1))
@@ -281,91 +195,117 @@ func _compile_main_skill(main_gem: GemInstance, mods_list: Array[GemInstance], e
 	var base_area: float = float(def.get("area_radius", 1.0))
 	var final_speed: float = float(def.get("proj_speed", 16.0))
 
-	var mod_factor: int = 2 if has_effect("prism_echo") else 1
+	# Group forged Add-ons by ID so stacking scales deterministically regardless of forge order
+	var counts: Dictionary = {}
+	for aid in card.forged_addons:
+		counts[aid] = int(counts.get(aid, 0)) + 1
+
 	var extra_proj: int = 0
 	var extra_chains: int = 0
 	var extra_pierce: int = 0
 	var forks: int = 0
 	var homing: bool = false
-	var echo: bool = false
+	var echo_count: int = 0
 	var area_mult: float = 1.0
 	var ignite: bool = false
+	var burn_mult: float = 1.0
 	var chill: bool = false
 	var leech_pct: float = 0.0
-	var linked_names: Array[String] = []
-	var linked_colors: Array[int] = []
+	var lifetime_mult: float = 1.0
+	var ricochet: bool = false
+	var nova_360: bool = false
+	var nova_min_proj: int = 6
+	var pull_inward: bool = false
+	var cadence_stacks: int = 0
+	var turret_still_mult: float = 1.0
+	var turret_move_mult: float = 1.0
 
-	for mod_gem in mods_list:
-		if not GemDatabase.does_modifier_apply(mod_gem.gem_id, main_gem.gem_id):
-			continue
-		var mdef: Dictionary = mod_gem.get_def()
-		var mods: Dictionary = mdef.get("mods", {})
-		linked_names.append(mod_gem.get_short_label())
-		linked_colors.append(mod_gem.get_gem_color())
+	if counts.has("addon_multishot"):
+		var k: int = int(counts["addon_multishot"])
+		extra_proj += 2 * k
+		final_dmg *= pow(0.78, k)
+	if counts.has("addon_chain"):
+		var k: int = int(counts["addon_chain"])
+		extra_chains += 2 * k
+		final_dmg *= pow(0.92, k)
+	if counts.has("addon_fork"):
+		var k: int = int(counts["addon_fork"])
+		forks += mini(BalanceConfig.MAX_FORK_GENERATIONS, k)
+		final_dmg *= pow(0.90, k)
+	if counts.has("addon_pierce"):
+		extra_pierce += 3 * int(counts["addon_pierce"])
+	if counts.has("addon_homing"):
+		var k: int = int(counts["addon_homing"])
+		homing = true
+		final_speed *= (1.0 + 0.15 * float(k))
+		final_dmg *= pow(0.95, k)
+	if counts.has("addon_echo"):
+		var k: int = int(counts["addon_echo"])
+		echo_count += k
+		final_dmg *= pow(0.74, k)
+	if counts.has("addon_giant_blast"):
+		var k: int = int(counts["addon_giant_blast"])
+		area_mult *= (1.0 + BalanceConfig.GIANT_AOE_RADIUS_STEP * float(k))
+	if counts.has("addon_ignite"):
+		var k: int = int(counts["addon_ignite"])
+		ignite = true
+		burn_mult = 1.0 + 0.15 * float(k - 1)
+	if counts.has("addon_chill"):
+		chill = true
+	if counts.has("addon_leech"):
+		var k: int = int(counts["addon_leech"])
+		leech_pct += BalanceConfig.LEECH_PCT_FIRST + BalanceConfig.LEECH_PCT_STACK * float(k - 1)
+	if counts.has("addon_short_barrage"):
+		var k: int = int(counts["addon_short_barrage"])
+		extra_proj += BalanceConfig.SHORT_BARRAGE_PROJ * k
+		lifetime_mult = maxf(0.30, lifetime_mult * pow(BalanceConfig.SHORT_BARRAGE_LIFE_MULT, k))
+	if counts.has("addon_gravity_pull"):
+		var k: int = int(counts["addon_gravity_pull"])
+		pull_inward = true
+		area_mult *= (1.0 + 0.15 * float(k - 1))
+	if counts.has("addon_ricochet"):
+		var k: int = int(counts["addon_ricochet"])
+		ricochet = true
+		final_speed *= (1.0 + 0.12 * float(k - 1))
+	if counts.has("addon_nova_ring"):
+		var k: int = int(counts["addon_nova_ring"])
+		nova_360 = true
+		nova_min_proj = 6 + 2 * (k - 1)
+	if counts.has("addon_cadence_burst"):
+		var k: int = int(counts["addon_cadence_burst"])
+		cadence_stacks = k
+		final_cd *= pow(BalanceConfig.CADENCE_CD_MULT, k)
+	if counts.has("addon_overclock"):
+		var k: int = int(counts["addon_overclock"])
+		turret_still_mult = BalanceConfig.TURRET_STILL_FIRST + BalanceConfig.TURRET_STILL_STACK * float(k - 1)
+		turret_move_mult = BalanceConfig.TURRET_MOVE_RATE
+	if counts.has("addon_glass_spark"):
+		var k: int = int(counts["addon_glass_spark"])
+		final_dmg *= (1.0 + BalanceConfig.GLASS_CARD_DMG_BONUS * float(k))
 
-		if mods.has("dmg_mult"):
-			final_dmg *= float(mods["dmg_mult"])
-		if mods.has("extra_proj"):
-			extra_proj += int(mods["extra_proj"]) * mod_factor
-		if mods.has("extra_chains"):
-			extra_chains += int(mods["extra_chains"]) * mod_factor
-		if mods.has("extra_pierce"):
-			extra_pierce += int(mods["extra_pierce"]) * mod_factor
-		if mods.has("fork"):
-			forks += int(mods["fork"]) * mod_factor
-		if mods.has("homing"):
-			homing = true
-		if mods.has("echo"):
-			echo = true
-		if mods.has("area_mult"):
-			area_mult *= (1.0 + (float(mods["area_mult"]) - 1.0) * float(mod_factor))
-		if mods.has("proj_speed_mult"):
-			final_speed *= float(mods["proj_speed_mult"])
-		if mods.has("ignite"):
-			ignite = true
-		if mods.has("chill"):
-			chill = true
-		if mods.has("leech_pct"):
-			leech_pct += float(mods["leech_pct"]) * float(mod_factor)
-
-	if has_effect("prism_echo") and not linked_names.is_empty() and not echo:
-		echo = true
-		final_dmg *= BalanceConfig.PRISM_ECHO_DMG_MULT
-
-	var tags: Array = main_gem.get_tags()
+	var tags: Array = card.get_tags()
 	var uses_proj: bool = tags.has(GameEnums.SkillTag.PROJECTILE) or tags.has(GameEnums.SkillTag.ORBIT)
 	var final_proj: int = base_proj + (extra_proj if uses_proj else 0)
 	var final_pierce: int = base_pierce + extra_pierce
-	var lifetime_mult: float = 1.0
 
-	# Global Behavioral Item Tradeoffs
-	if has_effect("short_barrage") and uses_proj:
-		final_proj += BalanceConfig.SHORT_BARRAGE_PROJ
-		lifetime_mult *= BalanceConfig.SHORT_BARRAGE_LIFE_MULT
-	if has_effect("sniper_focus") and tags.has(GameEnums.SkillTag.PROJECTILE):
+	if counts.has("addon_sniper_focus") and tags.has(GameEnums.SkillTag.PROJECTILE):
+		var ks: int = int(counts["addon_sniper_focus"])
 		final_proj = 1
-		final_pierce += BalanceConfig.SNIPER_EXTRA_PIERCE
+		final_pierce += BalanceConfig.SNIPER_EXTRA_PIERCE * ks
 		final_speed *= BalanceConfig.SNIPER_SPEED_MULT
-		final_dmg *= BalanceConfig.SNIPER_DMG_MULT
-	if has_effect("giant_slow_aoe") and (tags.has(GameEnums.SkillTag.AOE) or tags.has(GameEnums.SkillTag.ORBIT)):
-		area_mult *= BalanceConfig.GIANT_AOE_RADIUS_MULT
-		final_cd *= BalanceConfig.GIANT_AOE_CD_MULT
-	if has_effect("glass_spark"):
-		final_dmg *= BalanceConfig.GLASS_DMG_MULT
-	if has_effect("cadence_burst"):
-		final_cd *= BalanceConfig.CADENCE_CD_MULT
-	final_cd *= multi_skill_cd_mult
+		final_dmg *= BalanceConfig.SNIPER_DMG_FIRST * pow(BalanceConfig.SNIPER_DMG_STACK, ks - 1)
 
+	final_cd *= p_deck_cd_mult
 	final_cd = maxf(0.18, final_cd)
 
 	return {
-		"uid": main_gem.uid,
-		"gem_id": main_gem.gem_id,
-		"gem": main_gem,
-		"equip_slot": equip_slot,
-		"gem_name": main_gem.get_gem_name(),
-		"short": main_gem.get_short_label(),
-		"color": main_gem.get_gem_color(),
+		"uid": card.uid,
+		"card_id": card.card_id,
+		"card": card,
+		"card_name": card.get_display_title(),
+		"short": card.get_short_label(),
+		"rarity": card.rarity,
+		"category": card.get_category(),
 		"tags": tags,
 		"damage": final_dmg,
 		"cooldown": final_cd,
@@ -373,20 +313,24 @@ func _compile_main_skill(main_gem: GemInstance, mods_list: Array[GemInstance], e
 		"chains": base_chains + extra_chains,
 		"pierce": final_pierce,
 		"forks": forks,
-		"homing": homing or main_gem.gem_id == "spirit_bees",
-		"echo": echo,
+		"homing": homing or card.card_id == "spirit_bees",
+		"echo_count": echo_count,
 		"area_radius": base_area * area_mult,
 		"area_mult": area_mult,
 		"proj_speed": final_speed,
 		"lifetime_mult": lifetime_mult,
-		"ricochet": has_effect("edge_ricochet"),
-		"nova_360": has_effect("nova_barrage"),
-		"pull_inward": has_effect("gravity_slams"),
-		"crit_chance": crit_chance,
-		"crit_mult": crit_mult,
+		"ricochet": ricochet,
+		"nova_360": nova_360,
+		"nova_min_proj": nova_min_proj,
+		"pull_inward": pull_inward,
+		"cadence_stacks": cadence_stacks,
+		"turret_still_mult": turret_still_mult,
+		"turret_move_mult": turret_move_mult,
+		"crit_chance": p_crit_chance,
+		"crit_mult": p_crit_mult,
 		"ignite": ignite or tags.has(GameEnums.SkillTag.FIRE),
+		"burn_mult": burn_mult,
 		"chill": chill or tags.has(GameEnums.SkillTag.COLD),
 		"leech_pct": leech_pct,
-		"linked_mod_names": linked_names,
-		"linked_mod_colors": linked_colors,
+		"forged_summary": card.get_forged_summary_counts(),
 	}
