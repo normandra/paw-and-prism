@@ -4,6 +4,7 @@ extends Node
 signal objective_changed(step_idx: int, total_steps: int, short_text: String, highlight_bag: bool)
 signal satchel_hint_changed(hint_text: String)
 signal banner_requested(text: String, color: Color)
+signal open_tutorial_shop_requested()
 signal tutorial_completed()
 
 enum Step {
@@ -11,7 +12,8 @@ enum Step {
 	LOOT_TEMPLATE,
 	EQUIP_TEMPLATE,
 	KILL_WAVE_1,
-	LOOT_ADDON,
+	LOOT_GOLD,
+	BUY_IN_SHOP,
 	FORGE_ADDON,
 	KILL_WAVE_2,
 	DONE,
@@ -48,7 +50,7 @@ func start(p_stats: HeroStats, p_loot: LootManager, p_wave: WaveDirector, p_play
 	_loot_manager.spawn_specific_card(origin + Vector3(0.0, 0.0, -4.2), starter_tpl)
 
 	satchel_hint_changed.emit("")
-	objective_changed.emit(1, 3, "1/3  Walk to Acorn Barrage Card", false)
+	objective_changed.emit(1, 4, "1/4  Walk to Acorn Barrage Card", false)
 	banner_requested.emit("Tutorial: Pick up your first Template Card!", Color(1.0, 0.88, 0.36))
 
 func notify_card_looted(card: CardInstance) -> void:
@@ -57,11 +59,29 @@ func notify_card_looted(card: CardInstance) -> void:
 	if current_step == Step.LOOT_TEMPLATE and card.is_template():
 		current_step = Step.EQUIP_TEMPLATE
 		satchel_hint_changed.emit("Templates tab -> Tap [Equip] on Acorn Barrage")
-		objective_changed.emit(1, 3, "1/3  Equip Card in Deck [Tab]", true)
-	elif current_step == Step.LOOT_ADDON and card.is_addon():
+		objective_changed.emit(1, 4, "1/4  Equip Card in Deck [Tab]", true)
+
+func notify_gold_collected(_amount: int) -> void:
+	if current_step == Step.LOOT_GOLD:
+		current_step = Step.BUY_IN_SHOP
+		objective_changed.emit(3, 4, "3/4  Buy Multi-Shot in Shop", false)
+		open_tutorial_shop_requested.emit()
+
+func notify_shop_purchased(kind: String, _item_name: String) -> void:
+	if current_step == Step.BUY_IN_SHOP and kind == "addon" and _stats != null and not _stats.addon_inventory.is_empty():
 		current_step = Step.FORGE_ADDON
-		satchel_hint_changed.emit("Add-ons tab -> Tap [Forge onto Card] on Multi-Shot -> Forge onto Acorn Barrage")
-		objective_changed.emit(3, 3, "3/3  Forge Multi-Shot [Tab]", true)
+		satchel_hint_changed.emit("Add-ons tab -> Tap [Forge onto Card] -> Forge onto Acorn Barrage!")
+		objective_changed.emit(3, 4, "3/4  Forge Multi-Shot [Deck]", true)
+
+func notify_shop_closed() -> void:
+	if current_step == Step.BUY_IN_SHOP and _stats != null:
+		if _stats.addon_inventory.is_empty():
+			# Ensure the player can never get stuck if they exited Shop before buying
+			_stats.addon_inventory.append(CardInstance.new("addon_multishot", GameEnums.Rarity.COMMON))
+		current_step = Step.FORGE_ADDON
+		satchel_hint_changed.emit("Add-ons tab -> Tap [Forge onto Card] -> Forge onto Acorn Barrage!")
+		objective_changed.emit(3, 4, "3/4  Forge Multi-Shot [Tab]", true)
+		banner_requested.emit("Open Deck [Tab] to forge your Add-on!", Color(0.52, 0.94, 1.0))
 
 func notify_deck_changed() -> void:
 	if _stats == null:
@@ -74,7 +94,7 @@ func notify_deck_changed() -> void:
 				_wave_kills = 0
 				satchel_hint_changed.emit("")
 				_spawn_critter_ring(origin, 3, 7.5, 0.55, 0.35)
-				objective_changed.emit(2, 3, "2/3  Defeat Critters (0/3)", false)
+				objective_changed.emit(2, 4, "2/4  Defeat Critters (0/3)", false)
 				banner_requested.emit("Card Equipped! Watch Acorn Barrage Auto-Cast!", Color(0.55, 0.96, 0.60))
 		Step.FORGE_ADDON:
 			var has_forged: bool = false
@@ -87,7 +107,7 @@ func notify_deck_changed() -> void:
 				_wave_kills = 0
 				satchel_hint_changed.emit("")
 				_spawn_critter_ring(origin, 5, 8.5, 0.60, 0.35)
-				objective_changed.emit(3, 3, "3/3  Test Forged Combo (0/5)", false)
+				objective_changed.emit(4, 4, "4/4  Test Forged Combo (0/5)", false)
 				banner_requested.emit("Forged! Multi-Shot Permanently Added!", Color(1.0, 0.85, 0.35))
 
 func notify_enemy_killed(_enemy: EnemyEntity) -> void:
@@ -96,22 +116,21 @@ func notify_enemy_killed(_enemy: EnemyEntity) -> void:
 		Step.KILL_WAVE_1:
 			_wave_kills += 1
 			if _wave_kills >= 3:
-				current_step = Step.LOOT_ADDON
-				var addon: CardInstance = CardInstance.new("addon_multishot")
-				_loot_manager.spawn_specific_card(origin + Vector3(-3.4, 0.0, -2.8), addon)
-				objective_changed.emit(2, 3, "2/3  Pick up Multi-Shot Add-on", false)
-				banner_requested.emit("Add-on Dropped! Forge it into Acorn Barrage!", Color(0.52, 0.94, 1.0))
+				current_step = Step.LOOT_GOLD
+				_loot_manager.spawn_gold(origin + Vector3(-3.4, 0.0, -2.8), 40)
+				objective_changed.emit(2, 4, "2/4  Pick up 40 Gold Pouch", false)
+				banner_requested.emit("Gold Dropped! Pick it up to open the Caravan Shop!", Color(1.0, 0.88, 0.30))
 			else:
-				objective_changed.emit(2, 3, "2/3  Defeat Critters (%d/3)" % _wave_kills, false)
+				objective_changed.emit(2, 4, "2/4  Defeat Critters (%d/3)" % _wave_kills, false)
 		Step.KILL_WAVE_2:
 			_wave_kills += 1
 			if _wave_kills >= 5:
 				current_step = Step.DONE
 				satchel_hint_changed.emit("")
-				objective_changed.emit(3, 3, "Tutorial Complete!", false)
+				objective_changed.emit(4, 4, "Tutorial Complete!", false)
 				tutorial_completed.emit()
 			else:
-				objective_changed.emit(3, 3, "3/3  Test Forged Combo (%d/5)" % _wave_kills, false)
+				objective_changed.emit(4, 4, "4/4  Test Forged Combo (%d/5)" % _wave_kills, false)
 
 func _spawn_critter_ring(center: Vector3, count: int, radius: float, hp_scale: float, dmg_scale: float) -> void:
 	if _wave_director == null:

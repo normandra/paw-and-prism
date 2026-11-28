@@ -115,7 +115,7 @@ func _run_audit() -> void:
 	print("  T1 Early Deck (06:30):              ST_DPS=%.1f" % t1_dps)
 	print("  T2 Mid Deck (13:00):                ST_DPS=%.1f" % t2_dps)
 	print("  1-Card Legendary Acorn (4/4):       Still=%.1f  Move=%.1f" % [hyper_one_still, hyper_one_move])
-	print("  3-Card Well-Forged Endgame (Sweet): Still=%.1f  Move=%.1f (CD x%.2f)" % [forged_three_still, forged_three_move, BalanceConfig.compute_deck_cd_mult(3)])
+	print("  3-Card Well-Forged Endgame:         Still=%.1f  Move=%.1f (CD x%.2f)" % [forged_three_still, forged_three_move, BalanceConfig.compute_deck_cd_mult(3)])
 	print("  3-Forged + 3-Raw Bloat (6 Cards):   Move=%.1f (CD x%.2f)" % [bloated_six_move, BalanceConfig.compute_deck_cd_mult(6)])
 	print("  6-Card Unforged Spam:               Total=%.1f (CD x%.2f)" % [spam_six_dps, BalanceConfig.compute_deck_cd_mult(6)])
 
@@ -159,15 +159,19 @@ func _run_audit() -> void:
 	_check(hits_bandit >= 2 and hits_bandit <= 5, "Late regular Bandit kills Mochi in 2-5 hits (got %d)" % hits_bandit)
 	_check(hits_boss3_tele == 2 and hits_glass_tele == 1, "Boss 3 telegraph 2-shots standard Mochi and 1-shots Glass (got %d, Glass %d)" % [hits_boss3_tele, hits_glass_tele])
 
-	print("--- 5. Speed Pressure & 20-Min Card Drop Budget ---")
+	print("--- 5. Speed Pressure & 20-Min Deterministic Shop Gold Economy ---")
 	var m_spd: float = float(HeroDatabase.get_hero("shiba")["base_speed"])
 	var late_bandit_spd: float = float(EnemyDatabase.get_def("raccoon_bandit")["speed"]) * float(late_prof["speed_scale"])
 	print("  Mochi Speed=%.1f | 19:30 Bandit Speed=%.2f (%.0f%% of Mochi)" % [m_spd, late_bandit_spd, (late_bandit_spd / m_spd) * 100.0])
 	_check(late_bandit_spd >= m_spd * 0.90, "Late Bandit >= 90%% of Mochi speed (%.2f vs %.1f)" % [late_bandit_spd, m_spd])
-	print("  Card Drop Gates: Template=%.1fs (Base %.2f%%) | Add-on=%.1fs (Base %.2f%%)" % [
-		BalanceConfig.TEMPLATE_MIN_INTERVAL, BalanceConfig.BASE_TEMPLATE_DROP * 100.0,
-		BalanceConfig.ADDON_MIN_INTERVAL, BalanceConfig.BASE_ADDON_DROP * 100.0,
-	])
+
+	var est_enemy_gold: float = 950.0 * BalanceConfig.GOLD_DROP_CHANCE * float(BalanceConfig.GOLD_VALUE_ENEMY)
+	var est_elite_gold: float = 14.0 * float(BalanceConfig.GOLD_VALUE_ELITE)
+	var est_boss_gold: float = 3.0 * float(BalanceConfig.GOLD_VALUE_BOSS)
+	var est_chest_gold: float = 12.0 * float(BalanceConfig.GOLD_VALUE_CHEST)
+	var est_total_gold: float = float(BalanceConfig.STARTING_GOLD) + est_enemy_gold + est_elite_gold + est_boss_gold + est_chest_gold
+	print("  6 Caravan Shops (every %.0fs) | Est. 20m Gold Income: ~%.0f G" % [BalanceConfig.SHOP_INTERVAL_SEC, est_total_gold])
+	_check(est_total_gold >= 1300.0 and est_total_gold <= 2600.0, "Est. 20m Gold budget within [1300, 2600] (got %.0f G)" % est_total_gold)
 
 	if _failures.is_empty():
 		print("=== BALANCE AUDIT PASSED ===")

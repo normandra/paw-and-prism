@@ -61,19 +61,19 @@ func get_tags() -> Array:
 func get_desc() -> String:
 	return String(get_def().get("desc", ""))
 
-func get_max_forges() -> int:
+func get_max_forges(bonus_slots: int = 0) -> int:
 	if not is_template():
 		return 0
-	return GameEnums.rarity_forge_limit(rarity)
+	return GameEnums.rarity_forge_limit(rarity) + maxi(0, bonus_slots)
 
 func get_forge_count() -> int:
 	return forged_addons.size()
 
-func get_remaining_forges() -> int:
-	return maxi(0, get_max_forges() - forged_addons.size())
+func get_remaining_forges(bonus_slots: int = 0) -> int:
+	return maxi(0, get_max_forges(bonus_slots) - forged_addons.size())
 
-func is_forge_full() -> bool:
-	return forged_addons.size() >= get_max_forges()
+func is_forge_full(bonus_slots: int = 0) -> bool:
+	return forged_addons.size() >= get_max_forges(bonus_slots)
 
 func get_addon_stack_count(addon_id: String) -> int:
 	var count: int = 0
@@ -82,19 +82,20 @@ func get_addon_stack_count(addon_id: String) -> int:
 			count += 1
 	return count
 
-func can_accept_addon(addon_card: CardInstance) -> Dictionary:
+func can_accept_addon(addon_card: CardInstance, bonus_slots: int = 0) -> Dictionary:
 	if not is_template():
 		return {"ok": false, "reason": "Only Template Cards can be forged"}
 	if addon_card == null or not addon_card.is_addon():
 		return {"ok": false, "reason": "Select an Add-on Card first"}
-	if is_forge_full():
-		return {"ok": false, "reason": "Forge Limit (%d/%d)" % [get_forge_count(), get_max_forges()]}
+	var max_f: int = get_max_forges(bonus_slots)
+	if is_forge_full(bonus_slots):
+		return {"ok": false, "reason": "Forge Limit (%d/%d)" % [get_forge_count(), max_f]}
 	if not CardDatabase.does_addon_apply(addon_card.card_id, card_id):
 		return {"ok": false, "reason": "Requires %s" % CardDatabase.get_compatibility_text(addon_card.card_id)}
-	return {"ok": true, "reason": "Forge (%d/%d -> %d/%d)" % [get_forge_count(), get_max_forges(), get_forge_count() + 1, get_max_forges()]}
+	return {"ok": true, "reason": "Forge (%d/%d -> %d/%d)" % [get_forge_count(), max_f, get_forge_count() + 1, max_f]}
 
-func apply_forge(addon_id: String) -> bool:
-	if not is_template() or is_forge_full():
+func apply_forge(addon_id: String, bonus_slots: int = 0) -> bool:
+	if not is_template() or is_forge_full(bonus_slots):
 		return false
 	if not CardDatabase.does_addon_apply(addon_id, card_id):
 		return false
@@ -116,6 +117,7 @@ func get_forged_summary_counts() -> Array[Dictionary]:
 			"id": aid,
 			"name": String(adef.get("card_name", aid)),
 			"short": String(adef.get("short", aid.to_upper())),
+			"desc": String(adef.get("desc", "")),
 			"count": int(counts[aid]),
 			"rarity": int(adef.get("rarity", GameEnums.Rarity.COMMON)),
 		})

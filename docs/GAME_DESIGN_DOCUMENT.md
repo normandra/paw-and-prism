@@ -1,7 +1,7 @@
 # Paw & Prism — Living Game Design Document (GDD)
 
 > **Status:** Living Design Reference  
-> **Version:** `v3.0` (Single-Hero Card-Forging Core — Mochi the Shiba + Template & Add-on Cards)  
+> **Version:** `v3.1` (Compact Arena + Deterministic 3-Min Gold Shops + Slay-the-Spire Relics + Card Forging Animations)  
 > **Engine & Renderer:** Godot `4.7.2` (`GL Compatibility`)  
 > **Live Web Build:** https://normandra.github.io/paw-and-prism/  
 > **Cards & Forging Catalog:** [docs/ITEMS_AND_SKILLS.md](https://github.com/normandra/paw-and-prism/blob/main/docs/ITEMS_AND_SKILLS.md)  
@@ -12,27 +12,26 @@
 
 ## 1. High Concept, Core Pillars & Gameplay Loop
 
-**Pitch:** *Vampire Survivors meets Slay-the-Spire Card Forging in a sunny-to-twilight 3D meadow.* Play as **Mochi the Shiba** (*Acorn Forgemaster*), weave one-handed through 20 minutes of escalating critter swarms, loot **Template Cards** (auto-casting abilities) and **Add-on Cards** (permanent forge upgrades), forge custom multi-effect cards inside an illustrated Card Deck workshop, and survive 3 telegraphed bosses.
+**Pitch:** *Vampire Survivors meets Slay-the-Spire Card Forging & Relic Shops in a compact Brotato-style 3D meadow.* Play as **Mochi the Shiba** (*Acorn Forgemaster*), weave one-handed through 20 minutes of escalating critter swarms inside a tight `56×56m` fenced arena with a live HUD Minimap, collect Gold coins/pouches/chests, visit deterministic **Caravan Shops every 3 minutes** to buy **Template Cards**, **Add-on Cards**, and **Slay-the-Spire Relics**, watch juicy anvil-forging animations customize your deck, and survive 3 telegraphed bosses.
 
 ### Core Design Pillars
 
-| Pillar | Design Choice (`v3.0`) | Primary Code Owners |
+| Pillar | Design Choice (`v3.1`) | Primary Code Owners |
 |---|---|---|
-| **1. Streamlined Single Hero** | Focus core balance, feel, and polish on one mascot (`Mochi the Shiba`: `110 HP`, `6.7` spd) | `hero_database.gd`, `chibi_mesh_factory.gd`, `player_controller.gd` |
-| **2. Slay-the-Spire Card System** | Only equip **Cards** — each rendered with custom `160x120` vector art, rarity borders, live compiled `DMG · CD`, and rules text | `card_database.gd`, `card_instance.gd`, `card_widget.gd`, `ui_icons.gd` |
-| **3. Template + Consumed Add-on Forging** | **Add-on Cards** are permanently forged into **Template Cards** (and consumed); duplicates stack cleanly | `hero_stats.gd`, `inventory_panel.gd` |
-| **4. Rarity Forge Caps & Unlimited Focus Curve** | Forge slots scale by Template Rarity (`Common 1`, `Uncommon 2`, `Rare 3`, `Legendary 4`). Equipping unlimited cards incurs Deck Focus scaling so **~3 forged cards** hit the sweet spot | `game_enums.gd`, `balance_config.gd`, `skill_executor.gd` |
-| **5. 3-Beat Forging Tutorial & Mobile Play** | Bare-pawed `TUTORIAL` walks hands-on through **Equip Template -> Forge Add-on**; portrait-friendly touch joystick & momentum scrolling (`TouchScrollContainer`) | `tutorial_director.gd`, `touch_controls.gd`, `hud_controller.gd` |
+| **1. Streamlined Single Hero** | Focused entirely on `Mochi the Shiba` (`110 HP`, `6.7` spd) | `hero_database.gd`, `chibi_mesh_factory.gd`, `player_controller.gd` |
+| **2. Slay-the-Spire Cards & Relics** | Equip **Template Cards**, forge consumed **Add-on Cards** (each showing its full rule text on forged cards), and collect 12 passive **Relics** (`160×120` vector art) | `card_database.gd`, `relic_database.gd`, `card_widget.gd`, `ui_icons.gd` |
+| **3. Deterministic 3-Min Caravan Shops** | Ground enemies/chests drop **Gold** instead of RNG cards; Caravan Shops open deterministically at `03:00, 06:00, 09:00, 12:00, 15:00, 18:00` with Rerolls, 3 Templates, 4 Add-ons, and 2 Relics | `shop_manager.gd`, `shop_panel.gd`, `loot_manager.gd`, `wave_director.gd` |
+| **4. Compact Arena + Live Minimap** | Tight `56×56m` fenced meadow (`ARENA_HALF_SIZE = 28.0`) + real-time HUD **Minimap** tracking Gold, Critters, Elites, Bosses, and Mochi | `arena_builder.gd`, `minimap_widget.gd`, `hud_controller.gd` |
+| **5. Anvil Forge Animation & Freedom of Build** | `ForgeAnimationOverlay` animates Add-on fusion with shockwaves & sparks; Rarity sets forge caps (`Common 1..Legendary 4`, `+1` with *Masterwork Anvil*), while players freely choose deck size along the Focus curve | `forge_animation_overlay.gd`, `inventory_panel.gd`, `balance_config.gd` |
 
-### Core Moment-to-Moment Loop (`v3.0`)
+### Core Moment-to-Moment Loop (`v3.1`)
 
 ```mermaid
 flowchart LR
-    M["Move & Weave (Auto-Cast Equipped Template Cards)"] --> L["Loot 3 World Drops: Template Cards, Add-on Cards & Chests"]
-    L --> D["Open Card Deck & Forge [Tab / I]"]
-    D --> E["Equip / Unequip Template Cards (Unlimited Slots, Deck Focus Curve)"]
-    D --> F["Forge Add-on Card into Compatible Template Card (Consumes Add-on, Uses 1 Forge Pip)"]
-    E --> M
+    M["Move & Weave in 56x56m Fenced Arena"] --> G["Collect Gold Coins, Boss Pouches & Gold Chests"]
+    G --> S["Deterministic Caravan Shop Every 3m (Buy Cards, Add-ons & Relics)"]
+    S --> D["Open Card Deck & Forge [Tab / Deck]"]
+    D --> F["Forge Add-on -> Animated Anvil Fusion (Consumes Add-on, Explains Effect)"]
     F --> M
     M --> B["Defeat 3 Scripted Bosses (06:30 -> 13:00 -> 19:30)"]
     B --> V["Victory! Meadow Saved!"]
@@ -44,34 +43,33 @@ flowchart LR
 
 | Input | Action | Notes |
 |---|---|---|
-| `WASD` / `Arrow Keys` | 8-directional movement | Arena clamped to `±66.5m` inside `136x136m` meadow (`ArenaBuilder.ARENA_HALF_SIZE = 68.0`) |
+| `WASD` / `Arrow Keys` | 8-directional movement | Clamped inside `56×56m` timber-fenced meadow (`ArenaBuilder.ARENA_HALF_SIZE = 28.0`) |
 | **Touch Drag** *(Mobile)* | Analog floating virtual joystick | Drag-anywhere one-handed control; auto-enabled on touchscreens/Android or `?mobile=1` |
-| **Touch Swipe** *(Deck / EndScreen)* | Momentum vertical scroll | `TouchScrollContainer` with tap threshold guard so scrolling never triggers accidental equips/forges |
-| `Tab` / `I` | Toggle Card Deck & Forge | Pauses run; Desktop 2-pane (`Active Deck | Collection`) or Mobile 3-tab (`Active | Tpl | Add-on`) |
-| `Esc` | Pause / Resume | Also closes Card Deck if open |
+| **Touch Swipe** *(Deck / Shop / Summary)* | Momentum scroll | `TouchScrollContainer` with tap threshold guard |
+| `Tab` / `I` | Toggle Card Deck & Forge | Pauses run (or jumps from Shop into Deck); tabs are `Active | Templates | Add-ons` |
+| `Esc` | Pause / Resume | Closes Deck or Shop cleanly |
 | `M` | Toggle procedural audio mute | Reflected in HUD `[M]` button |
-| `F3` / (`F8`,`F9` with `?review=1`) | FPS counter & review helpers | `F8`: seed Rare/Legendary Templates + Add-ons · `F9`: Victory screen |
+| `F3` / (`F7`,`F8`,`F9` with `?review=1`) | FPS counter & review helpers | `F7`: open Caravan Shop · `F8`: +Gold, Relics & Cards · `F9`: Victory screen |
 
 ### Technical Notes (WebGL & Stripped WASM Compatibility)
-- `build/web_custom.py` compiles the Web WASM runtime with `deprecated = "no"` and `target=template_release` (`~26.6 MB` raw / `~6.9 MB` gzip).
-- All procedural images (`arena_builder.gd`, `ui_icons.gd`) must strictly use `Image.create_empty(...)` — **never** `Image.create(...)`, which is stripped when `deprecated = "no"` and breaks script compilation in Web WASM.
+- `build/web_custom.py` compiles the Web WASM runtime with `deprecated = "no"` and `target=template_release`.
+- All procedural images (`arena_builder.gd`, `ui_icons.gd`) strictly use `Image.create_empty(...)` — **never** `Image.create(...)`.
 
 ---
 
-## 3. Cards & Forging Economy (`card_database.gd`, `hero_stats.gd`, `balance_config.gd`)
+## 3. Gold Economy, Shops & Cards (`shop_manager.gd`, `relic_database.gd`, `hero_stats.gd`)
 
-- **Starter State (20-Min Run):** Mochi enters with 1 **Uncommon Acorn Barrage** (`0/2` Forges).
-- **Starter State (Tutorial Mode):** Starts bare-pawed (`0` cards), loots & equips `Uncommon Acorn Barrage`, kills 3 critters, loots `Multi-Shot`, forges it (`1/2`), and clears 5 critters.
+- **Starter State (20-Min Run):** Mochi starts with **20 Gold** and 1 **Uncommon Acorn Barrage** (`0/2` Forges).
+- **Starter State (Tutorial Mode):** Starts bare-pawed (`0` cards), equips `Acorn Barrage`, clears 3 critters, picks up `40G` Pouch to open the **Tutorial Caravan Shop**, buys `Multi-Shot` (`30G`), watches the Anvil Forge animation, and clears 5 critters.
+- **Gold Sources (`balance_config.gd`, `loot_manager.gd`):**
+  - Regular critters (`56%` drop chance): `2G` (`+1G` chance from `10:00` onward)
+  - Elites: `22G` Pouch + `16 HP` heal
+  - Bosses: `65G` (`3` Gold Pouches) + `40 HP` heal
+  - Periodic Gold Chests (`95s`): `28G` + `20 HP` heal
 - **Deck Focus Cooldown Curve (`compute_deck_cd_mult(N)`):**
-  - `1 Card -> 1.00×`
-  - `2 Cards -> 1.12×`
-  - `3 Cards -> 1.25×` *(Sweet Spot)*
-  - `N >= 4 Cards -> 1.25 + 0.35 * (N - 3)` (`4: 1.60×`, `5: 1.95×`, `6: 2.30×`)
-- **Card Drop Rates (`loot_manager.gd`):**
-  - **Template Cards:** Base `1.60%` / `Pow(spawn_intensity, 0.75)` + pity after `75` kills (`+0.14%/kill`), gated by `22.0s` regular drop cooldown; Elites (`72%`, min Uncommon), Chests (`100%`, `60% Rare / 40% Uncommon`), and Bosses (`100%` **Legendary** Template) guarantee high-rarity upgrade milestones.
-  - **Add-on Cards:** Base `2.00%` / `Pow(spawn_intensity, 0.75)` + pity after `60` kills (`+0.16%/kill`), gated by `18.0s` regular cooldown; Elites (`85%`), Chests (`100%`), and Bosses (`2` guaranteed Add-ons: `Rare+` and `Uncommon+`) feed continuous forging choices (~3 well-forged endgame cards plus spare collection cards by `20:00`).
+  - `1 Card -> 1.00×` | `2 Cards -> 1.12×` | `3 Cards -> 1.25×` | `N >= 4 Cards -> 1.25 + 0.35 * (N - 3)` (`4: 1.60×`, `5: 1.95×`, `6: 2.30×`)
 
-Full tables for all **10 Template Cards** and **24 Add-on Cards** live in [docs/ITEMS_AND_SKILLS.md](https://github.com/normandra/paw-and-prism/blob/main/docs/ITEMS_AND_SKILLS.md).
+Full tables for all **10 Template Cards**, **24 Add-on Cards**, and **12 Relics** live in [docs/ITEMS_AND_SKILLS.md](https://github.com/normandra/paw-and-prism/blob/main/docs/ITEMS_AND_SKILLS.md).
 
 ---
 

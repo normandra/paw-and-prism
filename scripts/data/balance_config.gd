@@ -86,15 +86,31 @@ const BURN_DPS_RATIO: float = 0.22
 const BURN_DURATION: float = 3.0
 const CHILL_DURATION: float = 2.2
 
-# === Card Drop Formula Constants (targets ~3 forged cards + spare inventory by 20m) ===
-const BASE_TEMPLATE_DROP: float = 0.016
-const BASE_ADDON_DROP: float = 0.020
-const PITY_GRACE_TEMPLATE: int = 75
-const PITY_STEP_TEMPLATE: float = 0.0014
-const PITY_GRACE_ADDON: int = 60
-const PITY_STEP_ADDON: float = 0.0016
-const TEMPLATE_MIN_INTERVAL: float = 22.0
-const ADDON_MIN_INTERVAL: float = 18.0
+# === Shop, Gold & Relic Economy Constants ===
+const SHOP_INTERVAL_SEC: float = 180.0
+const SHOP_COUNT: int = 6
+const STARTING_GOLD: int = 20
+const GOLD_DROP_CHANCE: float = 0.56
+const GOLD_VALUE_ENEMY: int = 2
+const GOLD_VALUE_ELITE: int = 22
+const GOLD_VALUE_BOSS: int = 65
+const GOLD_VALUE_CHEST: int = 28
+const GOLD_MAGNET_BASE: float = 3.2
+const SHOP_REROLL_BASE: int = 20
+const SHOP_REROLL_STEP: int = 10
+
+const TEMPLATE_PRICE_BY_RARITY: Dictionary = {
+	GameEnums.Rarity.COMMON: 45,
+	GameEnums.Rarity.UNCOMMON: 65,
+	GameEnums.Rarity.RARE: 90,
+	GameEnums.Rarity.LEGENDARY: 125,
+}
+const ADDON_PRICE_BY_RARITY: Dictionary = {
+	GameEnums.Rarity.COMMON: 35,
+	GameEnums.Rarity.UNCOMMON: 50,
+	GameEnums.Rarity.RARE: 70,
+	GameEnums.Rarity.LEGENDARY: 100,
+}
 
 static func expected_crit_mult() -> float:
 	return 1.0 + (BASE_CRIT_CHANCE * 0.01) * ((BASE_CRIT_MULT * 0.01) - 1.0)

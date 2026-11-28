@@ -38,6 +38,11 @@ var _tab_tpl_btn: Button = null
 var _tab_add_btn: Button = null
 var _collection_grid: GridContainer = null
 
+var _relics_bar: PanelContainer = null
+var _relics_flow: HFlowContainer = null
+var _forge_anim: ForgeAnimationOverlay = null
+var _back_to_shop_mode: bool = false
+
 var _is_mobile_layout: bool = false
 var _mobile_tab: String = "active" # active | templates | addons
 var _active_right_tab: String = "templates" # templates | addons
@@ -82,8 +87,8 @@ func _clamp_frame_size() -> void:
 		if _title_lbl != null:
 			_title_lbl.text = "CARD DECK"
 		if _close_btn != null:
-			_close_btn.text = "Resume"
-			_close_btn.custom_minimum_size = Vector2(106, 42)
+			_close_btn.text = "Back to Shop" if _back_to_shop_mode else "Resume"
+			_close_btn.custom_minimum_size = Vector2(124 if _back_to_shop_mode else 106, 42)
 		var grid_cols: int = 1 if vp.x < 430.0 else 2
 		if _active_grid != null:
 			_active_grid.columns = grid_cols
@@ -96,7 +101,7 @@ func _clamp_frame_size() -> void:
 		if _title_lbl != null:
 			_title_lbl.text = "CARD DECK & FORGE"
 		if _close_btn != null:
-			_close_btn.text = "Resume [Tab / Esc]"
+			_close_btn.text = "Back to Shop [Esc]" if _back_to_shop_mode else "Resume [Tab / Esc]"
 			_close_btn.custom_minimum_size = Vector2(175, 42)
 		if _active_grid != null:
 			_active_grid.columns = 2
@@ -322,6 +327,20 @@ func _build_shell() -> void:
 	_collection_grid.add_theme_constant_override("v_separation", 8)
 	col_scroll.add_child(_collection_grid)
 
+	# Owned Relics Ribbon at bottom of Deck frame
+	_relics_bar = PanelContainer.new()
+	_relics_bar.visible = false
+	_relics_bar.add_theme_stylebox_override("panel", UiHelper.make_panel_box(Color(0.12, 0.10, 0.18, 0.94), Color(0.68, 0.50, 0.92), 10, 1, 7, false))
+	root_v.add_child(_relics_bar)
+	_relics_flow = HFlowContainer.new()
+	_relics_flow.add_theme_constant_override("h_separation", 6)
+	_relics_flow.add_theme_constant_override("v_separation", 4)
+	_relics_bar.add_child(_relics_flow)
+
+	# Juicy Forge Animation Overlay (topmost inside InventoryPanel)
+	_forge_anim = ForgeAnimationOverlay.new()
+	add_child(_forge_anim)
+
 func _make_tab_button(label_txt: String, is_mobile_bar: bool, on_press: Callable) -> Button:
 	var btn: Button = Button.new()
 	btn.text = label_txt
@@ -351,8 +370,9 @@ func _show_feedback(msg: String) -> void:
 	_feedback_lbl.text = msg
 	_feedback_panel.visible = not msg.is_empty()
 
-func open_panel(stats: HeroStats) -> void:
+func open_panel(stats: HeroStats, back_to_shop: bool = false) -> void:
 	_stats = stats
+	_back_to_shop_mode = back_to_shop
 	_forging_addon_idx = -1
 	_show_feedback("")
 	if not _tutorial_hint.is_empty():
@@ -363,6 +383,8 @@ func open_panel(stats: HeroStats) -> void:
 
 func close_panel() -> void:
 	_forging_addon_idx = -1
+	if _forge_anim != null and _forge_anim.visible:
+		_forge_anim.visible = false
 	visible = false
 	closed.emit()
 
@@ -405,7 +427,7 @@ func unequip_card_at(eq_idx: int) -> bool:
 	refresh()
 	return true
 
-func confirm_forge_onto_card(target_card: CardInstance) -> bool:
+func confirm_forge_onto_card(target_card: CardInstance, animate: bool = true) -> bool:
 	if _stats == null or _forging_addon_idx < 0 or target_card == null:
 		return false
 	var res: Dictionary = _stats.forge_addon_onto_card(_forging_addon_idx, target_card)
@@ -413,27 +435,37 @@ func confirm_forge_onto_card(target_card: CardInstance) -> bool:
 		_show_feedback(String(res.get("reason", "Cannot forge Add-on here")))
 		return false
 	var addon_name: String = String(res.get("addon_name", "Add-on"))
+	var consumed_addon: CardInstance = res.get("addon_card", null)
 	_forging_addon_idx = -1
 	_show_feedback("Forged %s onto %s (%d/%d)!" % [
 		addon_name,
 		target_card.get_card_name(),
 		target_card.get_forge_count(),
-		target_card.get_max_forges(),
+		target_card.get_max_forges(_stats.bonus_forge_slots),
 	])
 	sfx_requested.emit("socket_chime")
 	deck_changed.emit()
 	refresh()
+	if animate and _forge_anim != null and visible and consumed_addon != null:
+		_forge_anim.play_forge(
+			target_card,
+			consumed_addon,
+			_stats.bonus_forge_slots,
+			_stats.deck_cd_mult,
+			_stats.relic_cd_mult,
+			func() -> void: refresh()
+		)
 	return true
 
-func confirm_forge_onto_equipped(eq_idx: int) -> bool:
+func confirm_forge_onto_equipped(eq_idx: int, animate: bool = true) -> bool:
 	if _stats == null or eq_idx < 0 or eq_idx >= _stats.equipped_cards.size():
 		return false
-	return confirm_forge_onto_card(_stats.equipped_cards[eq_idx])
+	return confirm_forge_onto_card(_stats.equipped_cards[eq_idx], animate)
 
-func confirm_forge_onto_inventory_template(inv_idx: int) -> bool:
+func confirm_forge_onto_inventory_template(inv_idx: int, animate: bool = true) -> bool:
 	if _stats == null or inv_idx < 0 or inv_idx >= _stats.template_inventory.size():
 		return false
-	return confirm_forge_onto_card(_stats.template_inventory[inv_idx])
+	return confirm_forge_onto_card(_stats.template_inventory[inv_idx], animate)
 
 func refresh() -> void:
 	if _stats == null:
@@ -447,11 +479,50 @@ func refresh() -> void:
 	_refresh_tab_buttons()
 	_rebuild_active_grid()
 	_rebuild_collection_grid()
+	_refresh_relics_bar()
+
+func _refresh_relics_bar() -> void:
+	if _relics_bar == null or _relics_flow == null or _stats == null:
+		return
+	for c in _relics_flow.get_children():
+		c.queue_free()
+	if _stats.owned_relics.is_empty():
+		_relics_bar.visible = false
+		return
+	_relics_bar.visible = true
+	var hdr: Label = Label.new()
+	hdr.text = "Relics:"
+	hdr.add_theme_font_override("font", UiHelper.get_bold_font())
+	hdr.add_theme_font_size_override("font_size", 12)
+	hdr.add_theme_color_override("font_color", Color(0.92, 0.80, 1.0))
+	_relics_flow.add_child(hdr)
+	for rid in _stats.owned_relics:
+		var rdef: Dictionary = RelicDatabase.get_def(rid)
+		var rar_c: Color = GameEnums.rarity_color(int(rdef.get("rarity", GameEnums.Rarity.UNCOMMON)))
+		var chip: PanelContainer = PanelContainer.new()
+		chip.tooltip_text = "%s: %s" % [String(rdef.get("name", rid)), String(rdef.get("desc", ""))]
+		chip.add_theme_stylebox_override("panel", UiHelper.make_panel_box(rar_c.darkened(0.75), rar_c, 8, 1, 4, false))
+		var ch_h: HBoxContainer = HBoxContainer.new()
+		ch_h.add_theme_constant_override("separation", 5)
+		chip.add_child(ch_h)
+		var ic: TextureRect = TextureRect.new()
+		ic.texture = UiIcons.get_relic_art(rid)
+		ic.custom_minimum_size = Vector2(22, 16)
+		ic.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		ic.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		ch_h.add_child(ic)
+		var lbl: Label = Label.new()
+		lbl.text = "%s (%s)" % [String(rdef.get("name", rid)), String(rdef.get("tag", ""))]
+		lbl.add_theme_font_size_override("font_size", 11)
+		lbl.add_theme_color_override("font_color", rar_c.lightened(0.40))
+		ch_h.add_child(lbl)
+		_relics_flow.add_child(chip)
 
 func _refresh_focus_header() -> void:
 	var n: int = _stats.equipped_card_count
-	var rate_pct: int = int(round((1.0 / maxf(0.1, _stats.deck_cd_mult)) * 100.0))
-	var tag: String = "Focused" if n <= 2 else ("Sweet Spot" if n == 3 else "Deck Tax x%.2f" % _stats.deck_cd_mult)
+	var eff_cd: float = _stats.deck_cd_mult * _stats.relic_cd_mult
+	var rate_pct: int = int(round((1.0 / maxf(0.1, eff_cd)) * 100.0))
+	var tag: String = "Focused" if n <= 2 else ("Balanced" if n == 3 else "Deck Tax x%.2f" % _stats.deck_cd_mult)
 	_focus_pill_lbl.text = "Active: %d Card%s · %d%% Rate (%s)" % [n, "" if n == 1 else "s", rate_pct, tag]
 	var col: Color = Color(0.64, 0.96, 0.72) if n <= 3 else Color(1.0, 0.78, 0.36)
 	_focus_pill_lbl.add_theme_color_override("font_color", col)
@@ -477,8 +548,8 @@ func _refresh_tab_buttons() -> void:
 	_tab_tpl_btn.text = "Templates (%d)" % n_tpl
 	_tab_add_btn.text = "Add-ons (%d)" % n_add
 	_m_tab_active_btn.text = "Active (%d)" % n_act
-	_m_tab_tpl_btn.text = "Tpl (%d)" % n_tpl
-	_m_tab_add_btn.text = "Add-on (%d)" % n_add
+	_m_tab_tpl_btn.text = "Templates (%d)" % n_tpl
+	_m_tab_add_btn.text = "Add-ons (%d)" % n_add
 
 	UiHelper.style_button(_tab_tpl_btn, UiHelper.CTA_SAPPHIRE if _active_right_tab == "templates" else UiHelper.BG_OAK_CARD, UiHelper.BORDER_GOLD if _active_right_tab == "templates" else UiHelper.BORDER_BRASS, 8, 5)
 	UiHelper.style_button(_tab_add_btn, UiHelper.CTA_SAPPHIRE if _active_right_tab == "addons" else UiHelper.BG_OAK_CARD, UiHelper.BORDER_GOLD if _active_right_tab == "addons" else UiHelper.BORDER_BRASS, 8, 5)
@@ -505,10 +576,14 @@ func _rebuild_active_grid() -> void:
 
 	for idx in range(_stats.equipped_cards.size()):
 		var card: CardInstance = _stats.equipped_cards[idx]
-		var forge_check: Dictionary = card.can_accept_addon(pending_addon) if pending_addon != null else {"ok": false, "reason": ""}
+		var forge_check: Dictionary = card.can_accept_addon(pending_addon, _stats.bonus_forge_slots) if pending_addon != null else {"ok": false, "reason": ""}
 		var cw: CardWidget = CardWidget.new()
 		cw.setup_card(card, {
 			"deck_cd_mult": _stats.deck_cd_mult,
+			"relic_cd_mult": _stats.relic_cd_mult,
+			"crit_chance": _stats.crit_chance,
+			"crit_mult": _stats.crit_mult,
+			"bonus_forges": _stats.bonus_forge_slots,
 			"forge_target_mode": pending_addon != null,
 			"can_forge_here": bool(forge_check.get("ok", false)),
 			"forge_reason": String(forge_check.get("reason", "")),
@@ -534,7 +609,7 @@ func _rebuild_collection_grid() -> void:
 	if _active_right_tab == "templates":
 		if _stats.template_inventory.is_empty():
 			var e_tpl: Label = Label.new()
-			e_tpl.text = "No spare Template Cards in collection.\nDefeat critters, Elites, and Bosses to loot more!"
+			e_tpl.text = "No spare Template Cards in collection.\nBuy Template Cards at Caravan Shops every 3 minutes!"
 			e_tpl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 			e_tpl.add_theme_font_size_override("font_size", 14)
 			e_tpl.add_theme_color_override("font_color", UiHelper.TEXT_PARCHMENT)
@@ -544,10 +619,14 @@ func _rebuild_collection_grid() -> void:
 		var pending_addon: CardInstance = _stats.addon_inventory[_forging_addon_idx] if (_forging_addon_idx >= 0 and _forging_addon_idx < _stats.addon_inventory.size()) else null
 		for idx in range(_stats.template_inventory.size()):
 			var card: CardInstance = _stats.template_inventory[idx]
-			var forge_check: Dictionary = card.can_accept_addon(pending_addon) if pending_addon != null else {"ok": false, "reason": ""}
+			var forge_check: Dictionary = card.can_accept_addon(pending_addon, _stats.bonus_forge_slots) if pending_addon != null else {"ok": false, "reason": ""}
 			var cw: CardWidget = CardWidget.new()
 			cw.setup_card(card, {
 				"deck_cd_mult": _stats.deck_cd_mult,
+				"relic_cd_mult": _stats.relic_cd_mult,
+				"crit_chance": _stats.crit_chance,
+				"crit_mult": _stats.crit_mult,
+				"bonus_forges": _stats.bonus_forge_slots,
 				"forge_target_mode": pending_addon != null,
 				"can_forge_here": bool(forge_check.get("ok", false)),
 				"forge_reason": String(forge_check.get("reason", "")),
@@ -573,7 +652,7 @@ func _rebuild_collection_grid() -> void:
 	else:
 		if _stats.addon_inventory.is_empty():
 			var e_add: Label = Label.new()
-			e_add.text = "No Add-on Cards in pouch.\nHunt critters & Chests for permanent upgrades!"
+			e_add.text = "No Add-on Cards in pouch.\nVisit Caravan Shops every 3 minutes for Add-ons & Relics!"
 			e_add.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 			e_add.add_theme_font_size_override("font_size", 14)
 			e_add.add_theme_color_override("font_color", UiHelper.TEXT_PARCHMENT)

@@ -22,6 +22,9 @@ var leech_pct: float = 0.0
 var apply_slow: bool = false
 var apply_burn: bool = false
 var pull_inward: bool = false
+var burn_dps_mult: float = 1.0
+var burn_dur_bonus: float = 0.0
+var chilled_vuln_mult: float = 1.0
 
 var _timer: float = 0.0
 var _duration: float = 0.4
@@ -184,7 +187,8 @@ func _apply_player_aoe(grid: SpatialGrid, player_pos: Vector3) -> void:
 		if not is_instance_valid(e) or e.get("is_dead") == true:
 			continue
 		var is_crit: bool = randf() * 100.0 < crit_chance
-		var dmg: float = damage * (crit_mult * 0.01 if is_crit else 1.0)
+		var chill_bonus: float = chilled_vuln_mult if float(e.get("_chill_timer")) > 0.0 else 1.0
+		var dmg: float = damage * chill_bonus * (crit_mult * 0.01 if is_crit else 1.0)
 		var kb: Vector3 = Vector3.ZERO
 		if pull_inward:
 			var pull: Vector3 = center_pos - e.global_position
@@ -196,7 +200,7 @@ func _apply_player_aoe(grid: SpatialGrid, player_pos: Vector3) -> void:
 			kb.y = 0.0
 			kb = kb.normalized() * 3.8 if kb.length_squared() > 0.01 else Vector3.ZERO
 		if (is_fire or apply_burn) and e.has_method("apply_burn"):
-			e.apply_burn(dmg * 0.28, 3.0)
+			e.apply_burn(dmg * 0.28 * burn_dps_mult, 3.0 + burn_dur_bonus)
 		if (is_cold or apply_slow) and e.has_method("apply_chill"):
 			e.apply_chill(2.5)
 		e.take_damage(dmg, kb)

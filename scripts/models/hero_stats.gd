@@ -34,6 +34,22 @@ var has_thorns_burst: bool = false
 var has_orbit_shield: bool = false
 var has_cheat_death: bool = false
 
+# Economy & Relics
+var gold: int = BalanceConfig.STARTING_GOLD
+var total_gold_earned: int = BalanceConfig.STARTING_GOLD
+var owned_relics: Array[String] = []
+var bonus_forge_slots: int = 0
+var gold_mult: float = 1.0
+var shop_price_mult: float = 1.0
+var magnet_mult: float = 1.0
+var relic_cd_mult: float = 1.0
+var extra_invuln_sec: float = 0.0
+var burn_dps_mult: float = 1.0
+var burn_dur_bonus: float = 0.0
+var chilled_vuln_mult: float = 1.0
+var has_prism_mirror: bool = false
+var shop_enter_heal: float = 0.0
+
 # Compiled Active Card Skill Configs
 var active_skill_configs: Array[Dictionary] = []
 var equipped_card_count: int = 0
@@ -47,9 +63,14 @@ func _reset_empty(p_hero_id: String = "shiba") -> void:
 	equipped_cards.clear()
 	template_inventory.clear()
 	addon_inventory.clear()
+	owned_relics.clear()
+	gold = BalanceConfig.STARTING_GOLD
+	total_gold_earned = BalanceConfig.STARTING_GOLD
 
 func init_bare_for_tutorial(p_hero_id: String = "shiba") -> void:
 	_reset_empty(p_hero_id)
+	gold = 0
+	total_gold_earned = 0
 	recompute()
 
 func init_for_hero(p_hero_id: String = "shiba") -> void:
@@ -60,6 +81,33 @@ func init_for_hero(p_hero_id: String = "shiba") -> void:
 	var starter: CardInstance = CardInstance.new(starter_id, starter_rarity)
 	equipped_cards.append(starter)
 	recompute()
+
+func add_gold(base_amount: int) -> int:
+	var gained: int = maxi(1, int(round(float(base_amount) * gold_mult)))
+	gold += gained
+	total_gold_earned += gained
+	return gained
+
+func spend_gold(amount: int) -> bool:
+	if amount < 0 or gold < amount:
+		return false
+	gold -= amount
+	return true
+
+func has_relic(relic_id: String) -> bool:
+	return owned_relics.has(relic_id)
+
+func add_relic(relic_id: String) -> bool:
+	if owned_relics.has(relic_id):
+		return false
+	owned_relics.append(relic_id)
+	recompute()
+	return true
+
+func get_max_forges_for(card: CardInstance) -> int:
+	if card == null:
+		return 0
+	return card.get_max_forges(bonus_forge_slots)
 
 func can_add_template() -> bool:
 	return template_inventory.size() < MAX_TEMPLATE_INV
@@ -102,10 +150,10 @@ func forge_addon_onto_card(addon_idx: int, target_card: CardInstance) -> Diction
 	if addon_idx < 0 or addon_idx >= addon_inventory.size() or target_card == null:
 		return {"ok": false, "reason": "Invalid card selection"}
 	var addon: CardInstance = addon_inventory[addon_idx]
-	var check: Dictionary = target_card.can_accept_addon(addon)
+	var check: Dictionary = target_card.can_accept_addon(addon, bonus_forge_slots)
 	if not bool(check.get("ok", false)):
 		return check
-	var applied: bool = target_card.apply_forge(addon.card_id)
+	var applied: bool = target_card.apply_forge(addon.card_id, bonus_forge_slots)
 	if not applied:
 		return {"ok": false, "reason": "Forge failed"}
 	# Consumes the Add-on Card permanently
@@ -114,6 +162,7 @@ func forge_addon_onto_card(addon_idx: int, target_card: CardInstance) -> Diction
 	return {
 		"ok": true,
 		"template": target_card,
+		"addon_card": addon,
 		"addon_id": addon.card_id,
 		"addon_name": addon.get_card_name(),
 	}
@@ -137,6 +186,29 @@ func recompute() -> void:
 	move_speed = float(hdef["base_speed"])
 	crit_chance = BalanceConfig.BASE_CRIT_CHANCE
 	crit_mult = BalanceConfig.BASE_CRIT_MULT
+
+	# Apply Slay-the-Spire style Relics
+	bonus_forge_slots = 1 if has_relic("relic_forge_hammer") else 0
+	gold_mult = 1.0 + (0.30 if has_relic("relic_golden_acorn") else 0.0) + (0.15 if has_relic("relic_magnet_clover") else 0.0)
+	shop_price_mult = 0.80 if has_relic("relic_merchant_bell") else 1.0
+	magnet_mult = 1.0 * (1.50 if has_relic("relic_feather_boots") else 1.0) * (2.40 if has_relic("relic_magnet_clover") else 1.0)
+	relic_cd_mult = 0.85 if has_relic("relic_hourglass") else 1.0
+	extra_invuln_sec = 0.25 if has_relic("relic_spiked_collar") else 0.0
+	burn_dps_mult = 1.40 if has_relic("relic_ember_lantern") else 1.0
+	burn_dur_bonus = 1.5 if has_relic("relic_ember_lantern") else 0.0
+	chilled_vuln_mult = 1.18 if has_relic("relic_frost_compass") else 1.0
+	has_prism_mirror = has_relic("relic_mirror_shard")
+	shop_enter_heal = 25.0 if has_relic("relic_honey_jar") else 0.0
+
+	if has_relic("relic_lucky_dice"):
+		crit_chance += 10.0
+		crit_mult += 25.0
+	if has_relic("relic_honey_jar"):
+		max_hp += 25.0
+	if has_relic("relic_spiked_collar"):
+		max_hp += 30.0
+	if has_relic("relic_feather_boots"):
+		move_speed *= 1.12
 
 	equipped_card_count = equipped_cards.size()
 	deck_cd_mult = BalanceConfig.compute_deck_cd_mult(equipped_card_count)
@@ -183,9 +255,9 @@ func recompute() -> void:
 	for card in equipped_cards:
 		if card == null:
 			continue
-		active_skill_configs.append(compile_card_config(card, deck_cd_mult, crit_chance, crit_mult))
+		active_skill_configs.append(compile_card_config(card, deck_cd_mult, crit_chance, crit_mult, relic_cd_mult))
 
-static func compile_card_config(card: CardInstance, p_deck_cd_mult: float = 1.0, p_crit_chance: float = BalanceConfig.BASE_CRIT_CHANCE, p_crit_mult: float = BalanceConfig.BASE_CRIT_MULT) -> Dictionary:
+static func compile_card_config(card: CardInstance, p_deck_cd_mult: float = 1.0, p_crit_chance: float = BalanceConfig.BASE_CRIT_CHANCE, p_crit_mult: float = BalanceConfig.BASE_CRIT_MULT, p_relic_cd_mult: float = 1.0) -> Dictionary:
 	var def: Dictionary = card.get_def()
 	var final_dmg: float = float(def.get("base_damage", 20.0))
 	var final_cd: float = float(def.get("cooldown", 1.0))
@@ -295,7 +367,7 @@ static func compile_card_config(card: CardInstance, p_deck_cd_mult: float = 1.0,
 		final_speed *= BalanceConfig.SNIPER_SPEED_MULT
 		final_dmg *= BalanceConfig.SNIPER_DMG_FIRST * pow(BalanceConfig.SNIPER_DMG_STACK, ks - 1)
 
-	final_cd *= p_deck_cd_mult
+	final_cd *= p_deck_cd_mult * p_relic_cd_mult
 	final_cd = maxf(0.18, final_cd)
 
 	return {

@@ -160,7 +160,7 @@ func show_pause(stats: HeroStats, wave_dir: WaveDirector) -> void:
 	_hdr_banner.add_theme_stylebox_override("panel", UiHelper.make_panel_box(Color(0.14, 0.19, 0.28), Color(0.54, 0.84, 1.0), 12, 2, 10, false))
 	_title_lbl.text = "RUN PAUSED"
 	_title_lbl.add_theme_color_override("font_color", Color(0.70, 0.92, 1.0))
-	_fill_summary(stats, wave_dir, "Press [Tab] anytime to equip Template Cards and permanently forge Add-ons.")
+	_fill_summary(stats, wave_dir, "Press [Tab] anytime to view Relics, equip Template Cards, and forge Add-ons.")
 	visible = true
 
 func show_end(victory: bool, stats: HeroStats, wave_dir: WaveDirector) -> void:
@@ -189,7 +189,7 @@ func show_tutorial_complete(stats: HeroStats, wave_dir: WaveDirector) -> void:
 	_hdr_banner.add_theme_stylebox_override("panel", UiHelper.make_panel_box(Color(0.14, 0.28, 0.16), Color(0.48, 0.94, 0.56), 12, 2, 10, false))
 	_title_lbl.text = "TUTORIAL COMPLETE!"
 	_title_lbl.add_theme_color_override("font_color", Color(0.68, 1.0, 0.72))
-	_fill_summary(stats, wave_dir, "Equipped Template Card -> Forged Permanent Add-on!")
+	_fill_summary(stats, wave_dir, "Collected Gold -> Shopped -> Forged Permanent Add-on!")
 	visible = true
 
 func _fill_summary(stats: HeroStats, wave_dir: WaveDirector, intro: String) -> void:
@@ -210,6 +210,8 @@ func _fill_summary(stats: HeroStats, wave_dir: WaveDirector, intro: String) -> v
 		{"icon": UiIcons.get_ui_icon("sun_meadow"), "label": "Time", "val": "%02d:%02d / 20:00" % [mins, secs]},
 		{"icon": UiIcons.get_ui_icon("boss_crown"), "label": "Bosses", "val": "%d / 3" % bosses},
 		{"icon": UiIcons.get_ui_icon("skull"), "label": "Critters", "val": "%d" % kills},
+		{"icon": UiIcons.get_ui_icon("gold_coin"), "label": "Gold Earned", "val": "%d G (%d G Left)" % [stats.total_gold_earned, stats.gold]},
+		{"icon": UiIcons.get_ui_icon("star_upgrade"), "label": "Relics", "val": "%d Owned" % stats.owned_relics.size()},
 	]
 	for s in stat_items:
 		var c: PanelContainer = PanelContainer.new()
@@ -254,7 +256,7 @@ func _fill_summary(stats: HeroStats, wave_dir: WaveDirector, intro: String) -> v
 			_build_vbox.add_child(row)
 			row.add_child(UiHelper.make_icon_rect(UiIcons.get_card_art(card.card_id), 24))
 			var slbl: Label = Label.new()
-			slbl.text = "%s (%d/%d)" % [card.get_display_title(), card.get_forge_count(), card.get_max_forges()]
+			slbl.text = "%s (%d/%d)" % [card.get_display_title(), card.get_forge_count(), card.get_max_forges(stats.bonus_forge_slots)]
 			slbl.add_theme_font_override("font", UiHelper.get_bold_font())
 			slbl.add_theme_font_size_override("font_size", 13)
 			slbl.add_theme_color_override("font_color", r_col.lightened(0.25))
@@ -262,4 +264,24 @@ func _fill_summary(stats: HeroStats, wave_dir: WaveDirector, intro: String) -> v
 			for entry in card.get_forged_summary_counts():
 				var cnt: int = int(entry["count"])
 				var txt: String = "%s%s" % [String(entry["name"]), (" x%d" % cnt) if cnt > 1 else ""]
-				row.add_child(UiHelper.make_badge_pill(txt, UiHelper.BG_WALNUT, UiHelper.BORDER_GOLD, Color(1.0, 0.90, 0.50), 10))
+				var pill: PanelContainer = UiHelper.make_badge_pill(txt, UiHelper.BG_WALNUT, UiHelper.BORDER_GOLD, Color(1.0, 0.90, 0.50), 10)
+				pill.tooltip_text = String(entry.get("desc", ""))
+				row.add_child(pill)
+
+	if not stats.owned_relics.is_empty():
+		var rel_hdr: Label = Label.new()
+		rel_hdr.text = "Collected Relics (%d)" % stats.owned_relics.size()
+		rel_hdr.add_theme_font_override("font", UiHelper.get_bold_font())
+		rel_hdr.add_theme_font_size_override("font_size", 13)
+		rel_hdr.add_theme_color_override("font_color", Color(0.88, 0.72, 1.0))
+		_build_vbox.add_child(rel_hdr)
+		var r_flow: HFlowContainer = HFlowContainer.new()
+		r_flow.add_theme_constant_override("h_separation", 6)
+		r_flow.add_theme_constant_override("v_separation", 4)
+		_build_vbox.add_child(r_flow)
+		for rid in stats.owned_relics:
+			var rdef: Dictionary = RelicDatabase.get_def(rid)
+			var rar_c: Color = GameEnums.rarity_color(int(rdef.get("rarity", GameEnums.Rarity.UNCOMMON)))
+			var rpill: PanelContainer = UiHelper.make_badge_pill(String(rdef.get("name", rid)), rar_c.darkened(0.70), rar_c, rar_c.lightened(0.35), 10)
+			rpill.tooltip_text = String(rdef.get("desc", ""))
+			r_flow.add_child(rpill)

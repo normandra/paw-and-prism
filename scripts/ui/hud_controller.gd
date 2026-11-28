@@ -28,10 +28,15 @@ var _timer_lbl: Label = null
 var _phase_icon: TextureRect = null
 var _phase_lbl: Label = null
 var _next_boss_lbl: Label = null
+var _next_shop_lbl: Label = null
 var _fps_pill: PanelContainer = null
 var _fps_lbl: Label = null
 var _kills_lbl: Label = null
+var _gold_lbl: Label = null
 var _bosses_lbl: Label = null
+var _minimap: MinimapWidget = null
+var _relics_hud_hbox: HBoxContainer = null
+var _last_relic_count: int = -1
 
 var _boss_panel: PanelContainer = null
 var _boss_name_lbl: Label = null
@@ -112,6 +117,14 @@ func _build_hud() -> void:
 	_bosses_lbl.add_theme_color_override("font_color", Color(1.0, 0.84, 0.44))
 	lp_h.add_child(_bosses_lbl)
 
+	lp_h.add_child(UiHelper.make_icon_rect(UiIcons.get_ui_icon("gold_coin"), 17))
+	_gold_lbl = Label.new()
+	_gold_lbl.text = "20G"
+	_gold_lbl.add_theme_font_override("font", UiHelper.get_bold_font())
+	_gold_lbl.add_theme_font_size_override("font_size", 14)
+	_gold_lbl.add_theme_color_override("font_color", Color(1.0, 0.90, 0.34))
+	lp_h.add_child(_gold_lbl)
+
 	var spacer1: Control = Control.new()
 	spacer1.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	spacer1.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -139,6 +152,13 @@ func _build_hud() -> void:
 	_timer_lbl.text = "00:00 / 20:00"
 	UiHelper.apply_display_font(_timer_lbl, 20, UiHelper.TEXT_CREAM, 3)
 	cp_h.add_child(_timer_lbl)
+
+	_next_shop_lbl = Label.new()
+	_next_shop_lbl.text = "Shop 1 in 03:00"
+	_next_shop_lbl.add_theme_font_override("font", UiHelper.get_bold_font())
+	_next_shop_lbl.add_theme_font_size_override("font_size", 13)
+	_next_shop_lbl.add_theme_color_override("font_color", Color(0.54, 0.92, 1.0))
+	cp_h.add_child(_next_shop_lbl)
 
 	_next_boss_lbl = Label.new()
 	_next_boss_lbl.text = "Boss 1 in 06:30"
@@ -274,11 +294,30 @@ func _build_hud() -> void:
 	UiHelper.apply_display_font(_banner_lbl, 19, Color(1.0, 0.90, 0.42), 3)
 	_banner_panel.add_child(_banner_lbl)
 
-	# === Right Loot Toast Feed ===
+	# === Top-Right Live Arena Minimap & Owned Relics Bar ===
+	_minimap = MinimapWidget.new()
+	_minimap.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+	_minimap.offset_left = -140
+	_minimap.offset_right = -18
+	_minimap.offset_top = 72
+	_minimap.offset_bottom = 194
+	add_child(_minimap)
+
+	_relics_hud_hbox = HBoxContainer.new()
+	_relics_hud_hbox.set_anchors_preset(Control.PRESET_TOP_LEFT)
+	_relics_hud_hbox.offset_left = 18
+	_relics_hud_hbox.offset_top = 70
+	_relics_hud_hbox.offset_right = 480
+	_relics_hud_hbox.offset_bottom = 98
+	_relics_hud_hbox.add_theme_constant_override("separation", 5)
+	_relics_hud_hbox.mouse_filter = Control.MOUSE_FILTER_PASS
+	add_child(_relics_hud_hbox)
+
+	# === Right Loot Toast Feed (placed cleanly left of Minimap) ===
 	_toast_vbox = VBoxContainer.new()
 	_toast_vbox.set_anchors_preset(Control.PRESET_TOP_RIGHT)
-	_toast_vbox.offset_left = -350
-	_toast_vbox.offset_right = -18
+	_toast_vbox.offset_left = -420
+	_toast_vbox.offset_right = -152
 	_toast_vbox.offset_top = 74
 	_toast_vbox.offset_bottom = 340
 	_toast_vbox.add_theme_constant_override("separation", 6)
@@ -447,6 +486,8 @@ func _apply_responsive_layout() -> void:
 	var is_portrait: bool = vp.x < 750.0
 	if _phase_lbl != null:
 		_phase_lbl.visible = not is_portrait
+	if _next_shop_lbl != null:
+		_next_shop_lbl.visible = not is_portrait
 	if _next_boss_lbl != null:
 		_next_boss_lbl.visible = not is_portrait
 	var hide_kb_hints: bool = is_portrait or _is_mobile_mode
@@ -501,9 +542,20 @@ func _apply_responsive_layout() -> void:
 			_bc_vbox.offset_right = -310
 			_bc_vbox.offset_top = -104
 			_bc_vbox.offset_bottom = -14
+	if _minimap != null:
+		if is_portrait:
+			_minimap.offset_left = -102
+			_minimap.offset_right = -8
+			_minimap.offset_top = 66
+			_minimap.offset_bottom = 160
+		else:
+			_minimap.offset_left = -140
+			_minimap.offset_right = -18
+			_minimap.offset_top = 72
+			_minimap.offset_bottom = 194
 	if _toast_vbox != null:
-		_toast_vbox.offset_left = -260 if is_portrait else -350
-		_toast_vbox.offset_right = -10 if is_portrait else -18
+		_toast_vbox.offset_left = -310 if is_portrait else -420
+		_toast_vbox.offset_right = -110 if is_portrait else -152
 	if _inv_lbl != null and _unread_loot == 0:
 		_inv_lbl.text = "Deck" if _is_mobile_mode else "Deck [Tab]"
 	if touch_controls != null:
@@ -519,7 +571,11 @@ func reset_hud(hero_id: String = "shiba") -> void:
 	_hud_throttle = 1.0
 	_last_phase_name = ""
 	_last_inv_text = ""
+	_last_relic_count = -1
 	_banner_panel.visible = false
+	if _relics_hud_hbox != null:
+		for c in _relics_hud_hbox.get_children():
+			c.queue_free()
 	if _hero_portrait != null:
 		_hero_portrait.texture = UiIcons.get_hero_portrait(hero_id)
 	for t in _toasts:
@@ -597,7 +653,14 @@ func rebuild_skill_bar(stats: HeroStats) -> void:
 		var r_col: Color = GameEnums.rarity_color(card_obj.rarity)
 		var card: PanelContainer = PanelContainer.new()
 		card.custom_minimum_size = Vector2(card_w, 74)
+		card.mouse_filter = Control.MOUSE_FILTER_PASS
 		card.add_theme_stylebox_override("panel", UiHelper.make_panel_box(UiHelper.BG_WALNUT, r_col, 10, 2, 5))
+
+		var tip_parts: PackedStringArray = [card_obj.get_display_title(), "%d DMG · %.2fs CD" % [int(round(float(cfg["damage"]))), float(cfg["cooldown"])]]
+		for f_item in card_obj.get_forged_summary_counts():
+			var cnt_s: String = " x%d" % int(f_item["count"]) if int(f_item["count"]) > 1 else ""
+			tip_parts.append("+ %s%s: %s" % [String(f_item["name"]), cnt_s, String(f_item.get("desc", ""))])
+		card.tooltip_text = "\n".join(tip_parts)
 
 		var v: VBoxContainer = VBoxContainer.new()
 		v.alignment = BoxContainer.ALIGNMENT_CENTER
@@ -625,7 +688,7 @@ func rebuild_skill_bar(stats: HeroStats) -> void:
 		var pip_center: CenterContainer = CenterContainer.new()
 		pip_center.custom_minimum_size = Vector2(0, 10)
 		v.add_child(pip_center)
-		pip_center.add_child(UiHelper.make_forge_pips_row(f_cnt, card_obj.get_max_forges(), r_col, 7))
+		pip_center.add_child(UiHelper.make_forge_pips_row(f_cnt, card_obj.get_max_forges(stats.bonus_forge_slots), r_col, 7))
 
 		var cd_bar: ProgressBar = ProgressBar.new()
 		cd_bar.show_percentage = false
@@ -700,12 +763,29 @@ func update_hud(delta: float, stats: HeroStats, player: PlayerController, wave_d
 				_phase_icon.texture = UiIcons.get_ui_icon("moon_twilight")
 			else:
 				_phase_icon.texture = UiIcons.get_ui_icon("sun_meadow")
+		_next_shop_lbl.text = wave_dir.get_next_shop_countdown()
 		_next_boss_lbl.text = wave_dir.get_next_boss_countdown()
 
 	_kills_lbl.text = "%d" % wave_dir.kills_count
 	_bosses_lbl.text = "%d/3" % wave_dir.bosses_defeated_count
+	if _gold_lbl != null:
+		_gold_lbl.text = "%dG" % stats.gold
 	if _fps_pill.visible:
 		_fps_lbl.text = "%d FPS" % int(Engine.get_frames_per_second())
+	if _minimap != null:
+		_minimap.update_entities(player.global_position, player.get_facing_dir(), wave_dir.enemies, loot_mgr.pickups, ArenaBuilder.ARENA_HALF_SIZE)
+	if _relics_hud_hbox != null and stats.owned_relics.size() != _last_relic_count:
+		_last_relic_count = stats.owned_relics.size()
+		for c in _relics_hud_hbox.get_children():
+			c.queue_free()
+		for rid in stats.owned_relics:
+			var rdef: Dictionary = RelicDatabase.get_def(rid)
+			var rar_c: Color = GameEnums.rarity_color(int(rdef.get("rarity", GameEnums.Rarity.UNCOMMON)))
+			var badge: PanelContainer = PanelContainer.new()
+			badge.tooltip_text = "%s\n%s" % [String(rdef.get("name", rid)), String(rdef.get("desc", ""))]
+			badge.add_theme_stylebox_override("panel", UiHelper.make_panel_box(Color(0.14, 0.11, 0.20, 0.90), rar_c, 6, 1, 2, false))
+			badge.add_child(UiHelper.make_icon_rect(UiIcons.get_relic_art(rid), 22))
+			_relics_hud_hbox.add_child(badge)
 
 	_hp_bar.max_value = stats.max_hp
 	_hp_bar.value = player.current_hp

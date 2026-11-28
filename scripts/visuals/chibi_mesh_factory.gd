@@ -428,6 +428,19 @@ static func build_loot_mesh(kind: String, color: Color, rarity: int = 0) -> Node
 	root.add_child(spin_pivot)
 
 	match kind:
+		"gold_coin":
+			var mat_gold_c: StandardMaterial3D = get_toon_mat(Color(1.0, 0.84, 0.22), 0.85, 0.25)
+			var mat_rim_c: StandardMaterial3D = get_toon_mat(Color(0.92, 0.58, 0.12), 0.45, 0.25)
+			spin_pivot.add_child(_make_part(_get_cylinder(0.28, 0.28, 0.10, 12), mat_rim_c, Vector3(0.0, 0.42, 0.0), Vector3(90.0, 0.0, 0.0), Vector3.ONE, false))
+			spin_pivot.add_child(_make_part(_get_cylinder(0.21, 0.21, 0.13, 12), mat_gold_c, Vector3(0.0, 0.42, 0.0), Vector3(90.0, 0.0, 0.0), Vector3.ONE, false))
+		"gold_pouch":
+			var mat_sack: StandardMaterial3D = get_toon_mat(Color(0.96, 0.72, 0.20), 0.65, 0.25)
+			var mat_tie: StandardMaterial3D = get_toon_mat(Color(0.76, 0.30, 0.18), 0.35, 0.25)
+			var mat_shine: StandardMaterial3D = get_toon_mat(Color(1.0, 0.94, 0.46), 1.0, 0.15)
+			spin_pivot.add_child(_make_part(_get_sphere(0.36, 10, 8), mat_sack, Vector3(0.0, 0.40, 0.0), Vector3.ZERO, Vector3(1.0, 1.15, 0.92), false))
+			spin_pivot.add_child(_make_part(_get_cylinder(0.16, 0.24, 0.22, 8), mat_tie, Vector3(0.0, 0.76, 0.0), Vector3.ZERO, Vector3.ONE, false))
+			spin_pivot.add_child(_make_part(_get_sphere(0.14, 8, 6), mat_shine, Vector3(0.18, 0.46, 0.22), Vector3.ZERO, Vector3.ONE, false))
+			_add_loot_beam(root, Color(1.0, 0.86, 0.24), 4.6)
 		"template_card":
 			var r_col: Color = GameEnums.rarity_color(rarity)
 			var mat_rim: StandardMaterial3D = get_toon_mat(r_col, 0.95 if rarity >= GameEnums.Rarity.RARE else 0.55, 0.22)

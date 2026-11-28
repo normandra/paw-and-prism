@@ -129,7 +129,7 @@ func _build_ui() -> void:
 	var sub_center: CenterContainer = CenterContainer.new()
 	crest_v.add_child(sub_center)
 	_crest_sub_pill = UiHelper.make_badge_pill(
-		"Loot Cards  ·  Forge Combos  ·  Defeat 3 Bosses",
+		"Collect Gold  ·  Visit Caravan Shops  ·  Forge Combos",
 		UiHelper.BG_WALNUT,
 		UiHelper.BORDER_BRASS,
 		UiHelper.TEXT_PARCHMENT,
@@ -226,9 +226,9 @@ func _refresh_summary() -> void:
 		return
 	var hdef: Dictionary = HeroDatabase.get_hero("shiba")
 	var controls_hint: String = (
-		"Drag to Move  ·  Tap Deck to Equip & Forge Add-ons"
+		"Drag to Move  ·  Caravan Shops every 3m (Gold, Cards, Relics)  ·  Tap Deck to Forge"
 		if _is_mobile_mode
-		else "[WASD] Move  ·  [Tab] Deck & Forge  ·  Bosses at 06:30 / 13:00 / 19:30"
+		else "[WASD] Move  ·  Caravan Shops every 3m  ·  [Tab] Deck & Forge  ·  Bosses 06:30 / 13:00 / 19:30"
 	)
 	_detail_label.text = "[b][color=#ffd966]%s[/color]  ·  %s[/b]\n[color=#e8dfd0]%s[/color]\n[color=#a9d6ff]Starter: Uncommon Acorn Barrage (0/2 Forges)[/color]  ·  [color=#cfc3af]%s[/color]" % [
 		String(hdef["hero_name"]),

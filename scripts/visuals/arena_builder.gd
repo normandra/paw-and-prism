@@ -1,6 +1,6 @@
 class_name ArenaBuilder
 
-const ARENA_HALF_SIZE: float = 68.0
+const ARENA_HALF_SIZE: float = 28.0
 
 var sun_light: DirectionalLight3D = null
 var world_env: WorldEnvironment = null
@@ -58,13 +58,13 @@ func _build_ground(parent: Node3D) -> void:
 	var tex: ImageTexture = _generate_meadow_texture()
 	var mat: StandardMaterial3D = StandardMaterial3D.new()
 	mat.albedo_texture = tex
-	mat.uv1_scale = Vector3(24.0, 24.0, 1.0)
+	mat.uv1_scale = Vector3(13.0, 13.0, 1.0)
 	mat.roughness = 0.96
 	mat.diffuse_mode = BaseMaterial3D.DIFFUSE_LAMBERT
 	mat.specular_mode = BaseMaterial3D.SPECULAR_DISABLED
 
 	var plane: PlaneMesh = PlaneMesh.new()
-	plane.size = Vector2(200.0, 200.0)
+	plane.size = Vector2(110.0, 110.0)
 	var ground: MeshInstance3D = MeshInstance3D.new()
 	ground.mesh = plane
 	ground.material_override = mat
@@ -81,7 +81,7 @@ func _build_ground(parent: Node3D) -> void:
 	plaza_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 
 	var plaza_plane: PlaneMesh = PlaneMesh.new()
-	plaza_plane.size = Vector2(14.0, 14.0)
+	plaza_plane.size = Vector2(10.0, 10.0)
 	var plaza: MeshInstance3D = MeshInstance3D.new()
 	plaza.mesh = plaza_plane
 	plaza.material_override = plaza_mat
@@ -168,16 +168,16 @@ func _build_scenic_props(parent: Node3D) -> void:
 	tree_shadow_mm.mesh = ChibiMeshFactory._get_cylinder(2.1, 2.1, 0.02, 10)
 
 	var tree_positions: Array[Vector3] = []
-	for i in range(96):
-		var angle: float = (float(i) / 96.0) * TAU + rng.randf_range(-0.02, 0.02)
-		var dist: float = rng.randf_range(70.5, 86.0)
-		var tx: float = clampf(cos(angle) * dist, -84.0, 84.0)
-		var tz: float = clampf(sin(angle) * dist, -84.0, 84.0)
-		if absf(tx) < 70.0 and absf(tz) < 70.0:
+	for i in range(72):
+		var angle: float = (float(i) / 72.0) * TAU + rng.randf_range(-0.025, 0.025)
+		var dist: float = rng.randf_range(30.5, 42.0)
+		var tx: float = clampf(cos(angle) * dist, -41.0, 41.0)
+		var tz: float = clampf(sin(angle) * dist, -41.0, 41.0)
+		if absf(tx) < 29.5 and absf(tz) < 29.5:
 			if absf(tx) > absf(tz):
-				tx = signf(tx) * rng.randf_range(71.0, 82.0)
+				tx = signf(tx) * rng.randf_range(30.5, 40.5)
 			else:
-				tz = signf(tz) * rng.randf_range(71.0, 82.0)
+				tz = signf(tz) * rng.randf_range(30.5, 40.5)
 		tree_positions.append(Vector3(tx, 0.0, tz))
 
 	trunk_mm.instance_count = tree_positions.size()
@@ -225,13 +225,13 @@ func _build_scenic_props(parent: Node3D) -> void:
 	shrub_mm.transform_format = MultiMesh.TRANSFORM_3D
 	shrub_mm.use_colors = true
 	shrub_mm.mesh = ChibiMeshFactory._get_sphere(0.85, 10, 6)
-	shrub_mm.instance_count = 36
-	for i in range(36):
+	shrub_mm.instance_count = 18
+	for i in range(18):
 		var sa: float = rng.randf() * TAU
-		var sd: float = rng.randf_range(16.0, 62.0)
+		var sd: float = rng.randf_range(8.5, 24.5)
 		var sx: float = cos(sa) * sd
 		var sz: float = sin(sa) * sd
-		var sc: float = rng.randf_range(0.7, 1.3)
+		var sc: float = rng.randf_range(0.65, 1.15)
 		shrub_mm.set_instance_transform(i, Transform3D(Basis().scaled(Vector3(sc * 1.2, sc * 0.65, sc * 1.1)), Vector3(sx, 0.35 * sc, sz)))
 		shrub_mm.set_instance_color(i, pine_greens[i % pine_greens.size()].lightened(0.08))
 	var shrub_mat: StandardMaterial3D = ChibiMeshFactory.get_toon_mat(Color(1.0, 1.0, 1.0)).duplicate()
@@ -242,24 +242,25 @@ func _build_scenic_props(parent: Node3D) -> void:
 	shrubs_node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	parent.add_child(shrubs_node)
 
-	# 3. Warm Mossy Stone Boundary Pillars + Tiny Amber Lantern Orbs
+	# 3. Cozy Brotato-style Meadow Perimeter Wall: Mossy Pillars, Lantern Orbs & Timber Fence Rails
 	var stone_mm: MultiMesh = MultiMesh.new()
 	stone_mm.transform_format = MultiMesh.TRANSFORM_3D
-	stone_mm.mesh = ChibiMeshFactory._get_cylinder(0.40, 0.56, 1.15, 8)
+	stone_mm.mesh = ChibiMeshFactory._get_cylinder(0.42, 0.56, 1.25, 8)
 	var orb_mm: MultiMesh = MultiMesh.new()
 	orb_mm.transform_format = MultiMesh.TRANSFORM_3D
 	orb_mm.mesh = ChibiMeshFactory._get_sphere(0.24, 8, 5)
 	var stone_pts: Array[Vector3] = []
-	for step in range(-64, 68, 16):
-		stone_pts.append(Vector3(float(step), 0.55, -ARENA_HALF_SIZE))
-		stone_pts.append(Vector3(float(step), 0.55, ARENA_HALF_SIZE))
-		stone_pts.append(Vector3(-ARENA_HALF_SIZE, 0.55, float(step)))
-		stone_pts.append(Vector3(ARENA_HALF_SIZE, 0.55, float(step)))
+	for step in range(-28, 32, 8):
+		stone_pts.append(Vector3(float(step), 0.60, -ARENA_HALF_SIZE))
+		stone_pts.append(Vector3(float(step), 0.60, ARENA_HALF_SIZE))
+		if abs(step) < 28:
+			stone_pts.append(Vector3(-ARENA_HALF_SIZE, 0.60, float(step)))
+			stone_pts.append(Vector3(ARENA_HALF_SIZE, 0.60, float(step)))
 	stone_mm.instance_count = stone_pts.size()
 	orb_mm.instance_count = stone_pts.size()
 	for i in range(stone_pts.size()):
 		stone_mm.set_instance_transform(i, Transform3D(Basis(), stone_pts[i]))
-		orb_mm.set_instance_transform(i, Transform3D(Basis(), stone_pts[i] + Vector3(0.0, 0.72, 0.0)))
+		orb_mm.set_instance_transform(i, Transform3D(Basis(), stone_pts[i] + Vector3(0.0, 0.76, 0.0)))
 	var stones_node: MultiMeshInstance3D = MultiMeshInstance3D.new()
 	stones_node.multimesh = stone_mm
 	stones_node.material_override = ChibiMeshFactory.get_toon_mat(Color(0.46, 0.44, 0.40))
@@ -272,22 +273,46 @@ func _build_scenic_props(parent: Node3D) -> void:
 	orbs_node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	parent.add_child(orbs_node)
 
+	var rail_mat: StandardMaterial3D = ChibiMeshFactory.get_toon_mat(Color(0.50, 0.34, 0.19))
+	var fence_span: float = ARENA_HALF_SIZE * 2.0
+	for rail_y in [0.46, 0.86]:
+		for z_sign in [-1.0, 1.0]:
+			var rail_h: MeshInstance3D = ChibiMeshFactory._make_part(
+				ChibiMeshFactory._get_box(Vector3(fence_span, 0.14, 0.16)),
+				rail_mat,
+				Vector3(0.0, rail_y, z_sign * ARENA_HALF_SIZE),
+				Vector3.ZERO,
+				Vector3.ONE,
+				false
+			)
+			parent.add_child(rail_h)
+		for x_sign in [-1.0, 1.0]:
+			var rail_v: MeshInstance3D = ChibiMeshFactory._make_part(
+				ChibiMeshFactory._get_box(Vector3(0.16, 0.14, fence_span)),
+				rail_mat,
+				Vector3(x_sign * ARENA_HALF_SIZE, rail_y, 0.0),
+				Vector3.ZERO,
+				Vector3.ONE,
+				false
+			)
+			parent.add_child(rail_v)
+
 	# 4. Multi-color Wildflowers (excluded from center cobblestone plaza!)
 	var flower_mm: MultiMesh = MultiMesh.new()
 	flower_mm.transform_format = MultiMesh.TRANSFORM_3D
 	flower_mm.use_colors = true
 	flower_mm.mesh = ChibiMeshFactory._get_sphere(0.18, 8, 5)
-	flower_mm.instance_count = 140
+	flower_mm.instance_count = 80
 	var flower_cols: Array[Color] = [
 		Color(0.98, 0.96, 0.88),
 		Color(1.0, 0.76, 0.84),
 		Color(0.84, 0.76, 1.0),
 		Color(1.0, 0.86, 0.42),
 	]
-	for i in range(140):
-		var fp: Vector3 = Vector3(rng.randf_range(-64.0, 64.0), 0.10, rng.randf_range(-64.0, 64.0))
-		while Vector2(fp.x, fp.z).length() < 8.0:
-			fp = Vector3(rng.randf_range(-64.0, 64.0), 0.10, rng.randf_range(-64.0, 64.0))
+	for i in range(80):
+		var fp: Vector3 = Vector3(rng.randf_range(-25.5, 25.5), 0.10, rng.randf_range(-25.5, 25.5))
+		while Vector2(fp.x, fp.z).length() < 6.0:
+			fp = Vector3(rng.randf_range(-25.5, 25.5), 0.10, rng.randf_range(-25.5, 25.5))
 		flower_mm.set_instance_transform(i, Transform3D(Basis().scaled(Vector3(1.0, 0.5, 1.0)), fp))
 		flower_mm.set_instance_color(i, flower_cols[i % flower_cols.size()])
 	var f_mat: StandardMaterial3D = ChibiMeshFactory.get_toon_mat(Color(1.0, 1.0, 1.0)).duplicate()

@@ -26,6 +26,7 @@ var _shield_orbit_hit_cd: Dictionary = {}
 var _next_cast_uid: int = 1
 var _kill_proc_icd: float = 0.0
 var _leech_icd: float = 0.0
+var _mirror_cast_counter: int = 0
 
 func setup(p_world: Node3D, p_grid: SpatialGrid, p_stats: HeroStats) -> void:
 	world_root = p_world
@@ -55,6 +56,7 @@ func clear_all() -> void:
 	_next_cast_uid = 1
 	_kill_proc_icd = 0.0
 	_leech_icd = 0.0
+	_mirror_cast_counter = 0
 	_shield_orbit_hit_cd.clear()
 	for n in _shield_orbit_nodes:
 		if is_instance_valid(n):
@@ -114,6 +116,10 @@ func step(delta: float, player_pos: Vector3, player_ctrl: PlayerController) -> v
 			if fired:
 				_cooldowns[uid] = float(cfg["cooldown"])
 				var e_cnt: int = int(cfg.get("echo_count", 0))
+				if stats.has_prism_mirror:
+					_mirror_cast_counter += 1
+					if _mirror_cast_counter % 5 == 0:
+						e_cnt += 1
 				for e_idx in range(e_cnt):
 					_echo_queue.append({"delay": 0.16 * float(e_idx + 1), "cfg": cfg})
 			else:
@@ -195,6 +201,7 @@ func trigger_reactive_nova(kind: String, pos: Vector3, dmg: float, radius: float
 	var a: AreaEffectEntity = AreaEffectEntity.new()
 	a.apply_slow = p_slow
 	a.apply_burn = p_fire
+	_apply_relic_area_mods(a)
 	a.setup_player_nova(pos, radius, dmg, stats.crit_chance, stats.crit_mult, col, p_fire, p_cold, 0.0, grid, pos)
 	a.enemy_hit.connect(_on_area_enemy_hit)
 	world_root.add_child(a)
@@ -325,9 +332,10 @@ func _step_orbit_skill(cfg: Dictionary, delta: float, player_pos: Vector3) -> vo
 				continue
 			hit_cd[eid] = hit_cooldown
 			var is_crit: bool = randf() * 100.0 < float(cfg["crit_chance"])
-			var dmg: float = base_dmg * (float(cfg["crit_mult"]) * 0.01 if is_crit else 1.0)
+			var chill_bonus: float = stats.chilled_vuln_mult if float(e.get("_chill_timer")) > 0.0 else 1.0
+			var dmg: float = base_dmg * chill_bonus * (float(cfg["crit_mult"]) * 0.01 if is_crit else 1.0)
 			if is_fire and e.has_method("apply_burn"):
-				e.apply_burn(dmg * BalanceConfig.BURN_DPS_RATIO * burn_mult, BalanceConfig.BURN_DURATION)
+				e.apply_burn(dmg * BalanceConfig.BURN_DPS_RATIO * burn_mult * stats.burn_dps_mult, BalanceConfig.BURN_DURATION + stats.burn_dur_bonus)
 			if is_cold and e.has_method("apply_chill"):
 				e.apply_chill(BalanceConfig.CHILL_DURATION)
 			var kb: Vector3 = (e.global_position - player_pos)
@@ -375,6 +383,7 @@ func _trigger_skill(cfg: Dictionary, player_pos: Vector3, is_echo: bool) -> bool
 			var nova: AreaEffectEntity = AreaEffectEntity.new()
 			nova.apply_slow = true
 			nova.pull_inward = bool(cfg.get("pull_inward", false))
+			_apply_relic_area_mods(nova)
 			nova.setup_player_nova(player_pos, float(cfg["area_radius"]), float(cfg["damage"]) * 0.7, float(cfg["crit_chance"]), float(cfg["crit_mult"]), Color(0.45, 0.90, 1.0), bool(cfg.get("ignite", false)), true, float(cfg.get("leech_pct", 0.0)), grid, player_pos)
 			nova.enemy_hit.connect(_on_area_enemy_hit)
 			world_root.add_child(nova)
@@ -388,6 +397,7 @@ func _trigger_skill(cfg: Dictionary, player_pos: Vector3, is_echo: bool) -> bool
 			var slam: AreaEffectEntity = AreaEffectEntity.new()
 			slam.apply_slow = true
 			slam.pull_inward = bool(cfg.get("pull_inward", false))
+			_apply_relic_area_mods(slam)
 			slam.setup_player_nova(slam_pos, float(cfg["area_radius"]), float(cfg["damage"]), float(cfg["crit_chance"]), float(cfg["crit_mult"]), Color(1.0, 0.78, 0.22), is_fire_s, is_cold_s, float(cfg.get("leech_pct", 0.0)), grid, player_pos)
 			slam.enemy_hit.connect(_on_area_enemy_hit)
 			world_root.add_child(slam)
@@ -402,6 +412,7 @@ func _trigger_skill(cfg: Dictionary, player_pos: Vector3, is_echo: bool) -> bool
 			var drop_pos: Vector3 = grid.find_densest_cluster_center(player_pos, 18.0)
 			var meteor: AreaEffectEntity = AreaEffectEntity.new()
 			meteor.pull_inward = bool(cfg.get("pull_inward", false))
+			_apply_relic_area_mods(meteor)
 			meteor.setup_meteor(drop_pos, float(cfg["area_radius"]), float(cfg["damage"]), float(cfg["crit_chance"]), float(cfg["crit_mult"]), bool(cfg.get("chill", false)), float(cfg.get("leech_pct", 0.0)))
 			meteor.enemy_hit.connect(_on_area_enemy_hit)
 			world_root.add_child(meteor)
@@ -440,9 +451,22 @@ func _fire_fan(origin: Vector3, target: Vector3, cfg: Dictionary, style: String,
 		var d: Vector3 = Vector3(cos(base_ang + off), 0.0, sin(base_ang + off))
 		_spawn_proj(origin, d, volley_cfg, style)
 
+func _apply_relic_area_mods(a: AreaEffectEntity) -> void:
+	if stats == null or a == null:
+		return
+	a.burn_dps_mult = stats.burn_dps_mult
+	a.burn_dur_bonus = stats.burn_dur_bonus
+	a.chilled_vuln_mult = stats.chilled_vuln_mult
+
 func _spawn_proj(origin: Vector3, dir: Vector3, cfg: Dictionary, style: String, hit_ids: Dictionary = {}) -> void:
+	var p_cfg: Dictionary = cfg
+	if stats != null:
+		p_cfg = cfg.duplicate()
+		p_cfg["burn_dps_mult"] = stats.burn_dps_mult
+		p_cfg["burn_dur_bonus"] = stats.burn_dur_bonus
+		p_cfg["chilled_vuln_mult"] = stats.chilled_vuln_mult
 	var p: ProjectileEntity = ProjectileEntity.new()
-	p.setup_player_proj(origin, dir, cfg, style, hit_ids)
+	p.setup_player_proj(origin, dir, p_cfg, style, hit_ids)
 	p.enemy_hit.connect(_on_proj_enemy_hit)
 	p.chain_arc_requested.connect(_on_chain_arc_requested)
 	p.fork_requested.connect(_on_fork_requested)
@@ -457,7 +481,9 @@ func _cast_chain_lightning(origin: Vector3, first_target: Node3D, cfg: Dictionar
 	var curr: Node3D = first_target
 	var base_dmg: float = float(cfg["damage"])
 	var is_fire: bool = bool(cfg.get("ignite", false))
-	var burn_mult: float = float(cfg.get("burn_mult", 1.0))
+	var burn_mult: float = float(cfg.get("burn_mult", 1.0)) * (stats.burn_dps_mult if stats != null else 1.0)
+	var burn_dur_add: float = stats.burn_dur_bonus if stats != null else 0.0
+	var chill_vuln: float = stats.chilled_vuln_mult if stats != null else 1.0
 	var is_cold: bool = bool(cfg.get("chill", false))
 	var leech_pct: float = float(cfg.get("leech_pct", 0.0))
 
@@ -467,9 +493,10 @@ func _cast_chain_lightning(origin: Vector3, first_target: Node3D, cfg: Dictionar
 		hit_map[curr.get_instance_id()] = true
 		_spawn_lightning_visual(prev_pos, curr.global_position, Color(0.55, 0.88, 1.0))
 		var is_crit: bool = randf() * 100.0 < float(cfg["crit_chance"])
-		var dmg: float = base_dmg * (float(cfg["crit_mult"]) * 0.01 if is_crit else 1.0)
+		var chill_bonus: float = chill_vuln if float(curr.get("_chill_timer")) > 0.0 else 1.0
+		var dmg: float = base_dmg * chill_bonus * (float(cfg["crit_mult"]) * 0.01 if is_crit else 1.0)
 		if is_fire and curr.has_method("apply_burn"):
-			curr.apply_burn(dmg * BalanceConfig.BURN_DPS_RATIO * burn_mult, BalanceConfig.BURN_DURATION)
+			curr.apply_burn(dmg * BalanceConfig.BURN_DPS_RATIO * burn_mult, BalanceConfig.BURN_DURATION + burn_dur_add)
 		if is_cold and curr.has_method("apply_chill"):
 			curr.apply_chill(BalanceConfig.CHILL_DURATION)
 		curr.take_damage(dmg, Vector3.ZERO)
@@ -498,6 +525,7 @@ func _on_fork_requested(pos: Vector3, dir: Vector3, cfg: Dictionary, hit_ids: Di
 func _on_explosion_requested(pos: Vector3, radius: float, cfg: Dictionary) -> void:
 	var boom: AreaEffectEntity = AreaEffectEntity.new()
 	boom.pull_inward = bool(cfg.get("pull_inward", false))
+	_apply_relic_area_mods(boom)
 	boom.setup_player_nova(
 		pos,
 		radius,

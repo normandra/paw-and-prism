@@ -4,6 +4,7 @@ extends Node
 enum GameState {
 	TITLE,
 	PLAYING,
+	SHOP,
 	INVENTORY,
 	PAUSED,
 	ENDED,
@@ -21,11 +22,13 @@ var skill_executor: SkillExecutor = null
 var wave_director: WaveDirector = null
 var loot_manager: LootManager = null
 var tutorial_director: TutorialDirector = null
+var shop_manager: ShopManager = null
 var sfx: SfxManager = null
 
 var ui_layer: CanvasLayer = null
 var title_screen: TitleScreen = null
 var hud: HudController = null
+var shop_panel: ShopPanel = null
 var inventory_panel: InventoryPanel = null
 var end_screen: EndScreen = null
 
@@ -33,6 +36,7 @@ var _showcase_rig: Node3D = null
 var _showcase_time: float = 0.0
 var _selected_hero_id: String = "shiba"
 var _is_tutorial: bool = false
+var _inv_opened_from_shop: bool = false
 var _shake_trauma: float = 0.0
 var _rng: RandomNumberGenerator = RandomNumberGenerator.new()
 var _review_mode: bool = false
@@ -86,6 +90,7 @@ func _ready() -> void:
 	arena_builder.build_arena(world_root)
 
 	spatial_grid = SpatialGrid.new()
+	shop_manager = ShopManager.new()
 
 	sfx = SfxManager.new()
 	sfx.name = "SfxManager"
@@ -122,10 +127,19 @@ func _ready() -> void:
 		hud.spawn_damage_popup(player.global_position, amt, false, false, false, true)
 		sfx.play("loot_common")
 	)
+	loot_manager.gold_collected.connect(func(amt: int) -> void:
+		if amt >= 10:
+			hud.push_toast("+%d Gold" % amt, Color(1.0, 0.88, 0.30), UiIcons.get_ui_icon("gold_coin"))
+			sfx.play("loot_rare", 0.10, 120)
+		else:
+			sfx.play("loot_common", 0.14, 110)
+		if _is_tutorial and tutorial_director != null:
+			tutorial_director.notify_gold_collected(amt)
+	)
 	loot_manager.card_looted.connect(_on_card_looted)
 	loot_manager.loot_bag_full.connect(func(msg: String) -> void: hud.push_toast(msg, Color(1.0, 0.55, 0.40)))
 	loot_manager.chest_opened.connect(func() -> void:
-		hud.show_banner("Acorn Card Chest Opened!", Color(1.0, 0.88, 0.30))
+		hud.show_banner("Gold Loot Chest Opened!", Color(1.0, 0.88, 0.30))
 		sfx.play("loot_rare")
 	)
 	world_root.add_child(loot_manager)
@@ -143,6 +157,7 @@ func _ready() -> void:
 		if b_idx < 3:
 			hud.show_banner("BOSS %d/3 DEFEATED: %s!" % [b_idx, b_name], Color(1.0, 0.85, 0.30))
 	)
+	wave_director.shop_triggered.connect(_on_shop_triggered)
 	wave_director.wave_banner.connect(func(t: String, c: Color) -> void: hud.show_banner(t, c))
 	wave_director.all_bosses_cleared.connect(_on_victory)
 	world_root.add_child(wave_director)
@@ -161,6 +176,7 @@ func _ready() -> void:
 		if hud != null:
 			hud.show_banner(t, c)
 	)
+	tutorial_director.open_tutorial_shop_requested.connect(_open_tutorial_shop)
 	tutorial_director.tutorial_completed.connect(_on_tutorial_completed)
 	add_child(tutorial_director)
 
@@ -211,6 +227,13 @@ func _build_ui() -> void:
 	ui_layer.add_child(hud)
 	hud.set_mobile_mode(_is_mobile_touch, _allow_mouse_touch)
 
+	shop_panel = ShopPanel.new()
+	shop_panel.shop_closed.connect(_close_shop)
+	shop_panel.open_deck_requested.connect(_open_inventory_from_shop)
+	shop_panel.purchased.connect(_on_shop_purchased)
+	shop_panel.sfx_requested.connect(func(sname: String) -> void: sfx.play(sname))
+	ui_layer.add_child(shop_panel)
+
 	inventory_panel = InventoryPanel.new()
 	inventory_panel.closed.connect(_close_inventory)
 	inventory_panel.deck_changed.connect(_on_deck_changed)
@@ -232,6 +255,7 @@ func _build_ui() -> void:
 func _enter_title_state() -> void:
 	state = GameState.TITLE
 	_is_tutorial = false
+	_inv_opened_from_shop = false
 	get_tree().paused = false
 	_clear_touch_controls()
 	if tutorial_director != null:
@@ -242,10 +266,14 @@ func _enter_title_state() -> void:
 		skill_executor.clear_all()
 	if loot_manager != null:
 		loot_manager.clear_all()
+	if shop_manager != null:
+		shop_manager.reset()
 	player.visible = false
 	title_screen.visible = true
 	hud.visible = false
 	hud.set_tutorial_objective(false)
+	if shop_panel != null:
+		shop_panel.visible = false
 	inventory_panel.visible = false
 	inventory_panel.set_tutorial_hint("")
 	end_screen.visible = false
@@ -263,6 +291,7 @@ func _spawn_title_showcase() -> void:
 func start_new_run(_hero_id: String = "shiba") -> void:
 	_selected_hero_id = "shiba"
 	_is_tutorial = false
+	_inv_opened_from_shop = false
 	if _showcase_rig != null:
 		_showcase_rig.queue_free()
 		_showcase_rig = null
@@ -272,6 +301,8 @@ func start_new_run(_hero_id: String = "shiba") -> void:
 	_shake_trauma = 0.0
 
 	tutorial_director.reset()
+	if shop_manager != null:
+		shop_manager.reset()
 	stats = HeroStats.new("shiba")
 	player.visible = true
 	player.global_position = Vector3.ZERO
@@ -295,6 +326,8 @@ func start_new_run(_hero_id: String = "shiba") -> void:
 	spatial_grid.rebuild([])
 
 	title_screen.visible = false
+	if shop_panel != null:
+		shop_panel.visible = false
 	inventory_panel.visible = false
 	inventory_panel.set_tutorial_hint("")
 	end_screen.visible = false
@@ -305,12 +338,13 @@ func start_new_run(_hero_id: String = "shiba") -> void:
 	hud.set_mobile_mode(_is_mobile_touch, _allow_mouse_touch)
 	hud.reset_touch_input()
 	hud.rebuild_skill_bar(stats)
-	hud.show_banner("Survive 20 Minutes · Forge 3 Mighty Cards!", Color(1.0, 0.90, 0.42))
+	hud.show_banner("Survive 20 Minutes & Defeat All 3 Bosses!", Color(1.0, 0.90, 0.42))
 	sfx.play("socket_chime")
 
 func start_tutorial(_hero_id: String = "shiba") -> void:
 	_selected_hero_id = "shiba"
 	_is_tutorial = true
+	_inv_opened_from_shop = false
 	if _showcase_rig != null:
 		_showcase_rig.queue_free()
 		_showcase_rig = null
@@ -319,6 +353,8 @@ func start_tutorial(_hero_id: String = "shiba") -> void:
 	state = GameState.PLAYING
 	_shake_trauma = 0.0
 
+	if shop_manager != null:
+		shop_manager.reset()
 	stats = HeroStats.new("shiba")
 	stats.init_bare_for_tutorial("shiba")
 	player.visible = true
@@ -344,6 +380,8 @@ func start_tutorial(_hero_id: String = "shiba") -> void:
 	spatial_grid.rebuild([])
 
 	title_screen.visible = false
+	if shop_panel != null:
+		shop_panel.visible = false
 	inventory_panel.visible = false
 	end_screen.visible = false
 	hud.visible = true
@@ -364,7 +402,11 @@ func _input(event: InputEvent) -> void:
 			get_viewport().set_input_as_handled()
 			return
 		if _review_mode and stats != null:
-			if kc == KEY_F8:
+			if kc == KEY_F7:
+				_open_shop_ui(maxi(1, int(wave_director.elapsed_time) / int(BalanceConfig.SHOP_INTERVAL_SEC)), false)
+				get_viewport().set_input_as_handled()
+				return
+			elif kc == KEY_F8:
 				_seed_review_loot()
 				get_viewport().set_input_as_handled()
 				return
@@ -383,12 +425,18 @@ func _input(event: InputEvent) -> void:
 			if state == GameState.PLAYING:
 				_open_inventory()
 				get_viewport().set_input_as_handled()
+			elif state == GameState.SHOP:
+				_open_inventory_from_shop()
+				get_viewport().set_input_as_handled()
 			elif state == GameState.INVENTORY:
 				_close_inventory()
 				get_viewport().set_input_as_handled()
 		elif kc == KEY_ESCAPE:
 			if state == GameState.INVENTORY:
 				_close_inventory()
+				get_viewport().set_input_as_handled()
+			elif state == GameState.SHOP:
+				_close_shop()
 				get_viewport().set_input_as_handled()
 			elif state == GameState.PLAYING or state == GameState.PAUSED:
 				_toggle_pause()
@@ -398,22 +446,95 @@ func _toggle_mute() -> void:
 	var is_m: bool = sfx.toggle_mute()
 	hud.set_muted_state(is_m)
 
+func _on_shop_triggered(shop_idx: int) -> void:
+	if _is_tutorial or state != GameState.PLAYING:
+		return
+	_open_shop_ui(shop_idx, false)
+
+func _open_tutorial_shop() -> void:
+	if state != GameState.PLAYING:
+		return
+	_open_shop_ui(0, true)
+
+func _open_shop_ui(shop_idx: int, is_tutorial_shop: bool) -> void:
+	if stats == null or shop_manager == null or shop_panel == null:
+		return
+	_clear_touch_controls()
+	_inv_opened_from_shop = false
+	if loot_manager != null:
+		loot_manager.collect_all_ground_gold()
+	var heal_amt: float = 0.0
+	if not is_tutorial_shop and stats.shop_enter_heal > 0.0 and player != null:
+		heal_amt = stats.shop_enter_heal
+		player.heal(heal_amt)
+	if is_tutorial_shop:
+		shop_manager.setup_tutorial_shop()
+	else:
+		shop_manager.setup_for_shop(shop_idx, wave_director.elapsed_time, stats)
+	state = GameState.SHOP
+	get_tree().paused = true
+	var tut_hint: String = "Tutorial: Buy Multi-Shot Add-on (30G), then tap [Deck & Forge] or [Continue]!" if is_tutorial_shop else ""
+	shop_panel.open_shop(shop_manager, stats, wave_director.elapsed_time, heal_amt, tut_hint)
+	sfx.play("loot_rare")
+
+func _close_shop() -> void:
+	if state != GameState.SHOP:
+		return
+	shop_panel.visible = false
+	_inv_opened_from_shop = false
+	state = GameState.PLAYING
+	get_tree().paused = false
+	if player != null:
+		player.refresh_card_auras()
+	if hud != null and stats != null:
+		hud.rebuild_skill_bar(stats)
+	if _is_tutorial and tutorial_director != null:
+		tutorial_director.notify_shop_closed()
+	sfx.play("ui_click")
+
+func _on_shop_purchased(kind: String, item_name: String) -> void:
+	if player != null:
+		player.refresh_card_auras()
+	if hud != null and stats != null:
+		hud.rebuild_skill_bar(stats)
+	if kind == "template" or kind == "addon":
+		hud.add_unread_loot()
+	if _is_tutorial and tutorial_director != null:
+		tutorial_director.notify_shop_purchased(kind, item_name)
+
 func _open_inventory() -> void:
 	if state != GameState.PLAYING:
 		return
 	_clear_touch_controls()
+	_inv_opened_from_shop = false
 	state = GameState.INVENTORY
 	get_tree().paused = true
 	hud.mark_loot_read()
-	inventory_panel.open_panel(stats)
+	inventory_panel.open_panel(stats, false)
+	sfx.play("ui_click")
+
+func _open_inventory_from_shop() -> void:
+	if state != GameState.SHOP:
+		return
+	_inv_opened_from_shop = true
+	shop_panel.visible = false
+	state = GameState.INVENTORY
+	hud.mark_loot_read()
+	inventory_panel.open_panel(stats, true)
 	sfx.play("ui_click")
 
 func _close_inventory() -> void:
 	if state != GameState.INVENTORY:
 		return
 	inventory_panel.visible = false
-	state = GameState.PLAYING
-	get_tree().paused = false
+	if _inv_opened_from_shop:
+		_inv_opened_from_shop = false
+		state = GameState.SHOP
+		shop_panel.visible = true
+		shop_panel.refresh()
+	else:
+		state = GameState.PLAYING
+		get_tree().paused = false
 	sfx.play("ui_click")
 
 func _toggle_pause() -> void:
@@ -527,16 +648,22 @@ func _on_card_looted(card: CardInstance) -> void:
 func _seed_review_loot() -> void:
 	if stats == null:
 		return
+	stats.add_gold(160)
+	if stats.owned_relics.is_empty():
+		stats.add_relic("relic_golden_acorn")
+		stats.add_relic("relic_hourglass")
 	if stats.template_inventory.is_empty():
 		stats.template_inventory.append(CardInstance.new("meteor_pine", GameEnums.Rarity.RARE))
 		stats.template_inventory.append(CardInstance.new("starlight_orb", GameEnums.Rarity.LEGENDARY))
 	if stats.addon_inventory.is_empty():
 		stats.addon_inventory.append(CardInstance.new("addon_multishot"))
 		stats.addon_inventory.append(CardInstance.new("addon_echo"))
-		stats.addon_inventory.append(CardInstance.new("addon_sniper_focus"))
+		stats.addon_inventory.append(CardInstance.new("addon_leech"))
 		stats.addon_inventory.append(CardInstance.new("addon_frost_shatter"))
 	if inventory_panel != null and inventory_panel.visible:
 		inventory_panel.refresh()
+	if shop_panel != null and shop_panel.visible:
+		shop_panel.refresh()
 
 func _on_tutorial_completed() -> void:
 	if state == GameState.ENDED:

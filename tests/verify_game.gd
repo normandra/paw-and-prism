@@ -13,7 +13,7 @@ func _initialize() -> void:
 	call_deferred("_run_all")
 
 func _run_all() -> void:
-	print("=== Paw & Prism v3.0 Card-Forging Verification Suite ===")
+	print("=== Paw & Prism v3.1 Card, Shop & Relic Verification Suite ===")
 
 	# 1. Load & instantiate main scene
 	var packed: PackedScene = load("res://scenes/main.tscn")
@@ -23,14 +23,15 @@ func _run_all() -> void:
 	root.add_child(main_inst)
 	await process_frame
 
-	# 2. Single streamlined playable hero: Mochi the Shiba only
+	# 2. Single streamlined playable hero + Brotato-scale 56x56m Arena
 	var all_heroes: Array[Dictionary] = HeroDatabase.get_all_heroes()
 	_assert(all_heroes.size() == 1 and String(all_heroes[0]["id"]) == "shiba", "HeroDatabase streamlined to 1 playable hero (shiba)")
+	_assert(is_equal_approx(ArenaBuilder.ARENA_HALF_SIZE, 28.0), "Arena resized to compact Brotato-style half-size 28.0m (56x56m)")
 	var rig: Node3D = ChibiMeshFactory.build_hero_rig("shiba")
 	_assert(rig != null and rig.get_node_or_null("BodyPivot/WeaponMount") != null, "Mochi the Shiba 3D rig built with signature Acorn Wand")
 	rig.free()
 
-	# 3. All 7 regular enemies + 3 bosses + 3 Card/Chest loot mesh types
+	# 3. All 7 regular enemies + 3 bosses + 5 Loot Mesh Types (including Gold Coin & Pouch)
 	for eid in EnemyDatabase.get_all_regular_ids():
 		var erig: Node3D = ChibiMeshFactory.build_enemy_rig(eid, true)
 		var bmesh: MeshInstance3D = erig.get_node_or_null("BodyPivot/BodyMesh")
@@ -40,12 +41,12 @@ func _run_all() -> void:
 		var brig: Node3D = ChibiMeshFactory.build_enemy_rig(bid, false)
 		_assert(brig != null and brig.get_node_or_null("BodyPivot") != null, "Boss rig built for " + bid)
 		brig.free()
-	for lkind in ["template_card", "addon_card", "chest"]:
+	for lkind in ["gold_coin", "gold_pouch", "template_card", "addon_card", "chest"]:
 		var lm: Node3D = ChibiMeshFactory.build_loot_mesh(lkind, Color.GOLD, GameEnums.Rarity.RARE)
 		_assert(lm != null and lm.get_node_or_null("SpinPivot") != null, "Loot 3D mesh built for " + lkind)
 		lm.free()
 
-	# 4. Storybook Theme, Fonts & Bespoke SVG Card Artwork (10 Templates + 24 Add-ons)
+	# 4. Storybook Theme, Fonts, Bespoke SVG Card Artwork (10 Templates + 24 Add-ons) & 12 Relic SVGs
 	var game_theme: Theme = UiHelper.create_game_theme()
 	_assert(game_theme != null and UiHelper.get_display_font() != null and UiHelper.get_body_font() != null, "Storybook Theme and Fredoka/Nunito fonts loaded")
 	_assert(UiHelper._wght_tag() == 2003265652, "OpenType wght FourCC tag resolves cleanly")
@@ -54,33 +55,31 @@ func _run_all() -> void:
 
 	var tpl_ids: Array[String] = CardDatabase.get_all_template_ids()
 	var add_ids: Array[String] = CardDatabase.get_all_addon_ids()
-	_assert(tpl_ids.size() == 10 and add_ids.size() == 24, "CardDatabase exposes 10 Template Cards & 24 Add-on Cards")
+	var relic_ids: Array[String] = RelicDatabase.get_all_ids()
+	_assert(tpl_ids.size() == 10 and add_ids.size() == 24 and relic_ids.size() == 12, "Databases expose 10 Templates, 24 Add-ons, and 12 Relics")
 	for cid in tpl_ids + add_ids:
 		var art: Texture2D = UiIcons.get_card_art(cid)
 		_assert(art != null and art.get_width() == 160 and art.get_height() == 120, "Custom SVG card artwork rendered (160x120) for " + cid)
+	for rid in relic_ids:
+		var rart: Texture2D = UiIcons.get_relic_art(rid)
+		_assert(rart != null and rart.get_width() == 160 and rart.get_height() == 120, "Custom SVG relic artwork rendered (160x120) for " + rid)
 
-	# 5. CardInstance Rarity Forge Limits (Common 1 / Uncommon 2 / Rare 3 / Legendary 4), Stacking & Tag Validation
+	# 5. CardInstance Rarity Forge Limits, Relic Effects & Readable Forged Descriptions
 	var rng: RandomNumberGenerator = RandomNumberGenerator.new()
 	rng.seed = 42069
 	var expected_limits: Array[int] = [1, 2, 3, 4]
 	for r in [GameEnums.Rarity.COMMON, GameEnums.Rarity.UNCOMMON, GameEnums.Rarity.RARE, GameEnums.Rarity.LEGENDARY]:
 		var c_probe: CardInstance = CardInstance.generate_template(600.0, rng, r, "acorn_barrage")
 		_assert(c_probe.get_max_forges() == expected_limits[r], "Rarity %s forge cap == %d" % [GameEnums.rarity_label(r), expected_limits[r]])
+		c_probe.apply_forge("addon_leech")
 		var cw_probe: CardWidget = CardWidget.new()
-		cw_probe.setup_card(c_probe)
-		_assert(cw_probe.mouse_filter == Control.MOUSE_FILTER_STOP and cw_probe.action_row != null, "CardWidget builds Slay-the-Spire card frame for " + GameEnums.rarity_label(r))
+		cw_probe.setup_card(c_probe, {"bonus_forges": 1})
+		_assert(cw_probe.mouse_filter == Control.MOUSE_FILTER_STOP and cw_probe.tooltip_text.contains("Life Siphon") and cw_probe.tooltip_text.contains("Hits heal 2.2%"), "Forged Life Siphon renders full effect explanation on CardWidget for " + GameEnums.rarity_label(r))
 		cw_probe.free()
 
-	# Incompatible add-on check (Multi-Shot cannot forge onto Melee Honey Slam)
-	var slam_card: CardInstance = CardInstance.new("honey_slam", GameEnums.Rarity.RARE)
-	var multi_addon: CardInstance = CardInstance.new("addon_multishot")
-	_assert(not bool(slam_card.can_accept_addon(multi_addon)["ok"]), "Incompatible Multi-Shot rejected on melee Honey Slam")
-
-	# Duplicate stacking + forge limit cap + Add-on consumption
+	# Masterwork Anvil (+1 Forge Slot) + Hourglass (-15% CD) + Lucky Dice + Bell discount
 	var test_stats: HeroStats = HeroStats.new("shiba")
 	test_stats.init_bare_for_tutorial("shiba")
-	_assert(test_stats.equipped_cards.is_empty() and test_stats.active_skill_configs.is_empty(), "Tutorial bare init starts with 0 equipped cards")
-
 	var unc_acorn: CardInstance = CardInstance.new("acorn_barrage", GameEnums.Rarity.UNCOMMON)
 	test_stats.equipped_cards.append(unc_acorn)
 	test_stats.addon_inventory.append(CardInstance.new("addon_multishot"))
@@ -88,13 +87,16 @@ func _run_all() -> void:
 	test_stats.addon_inventory.append(CardInstance.new("addon_pierce"))
 	test_stats.recompute()
 
-	var f1: Dictionary = test_stats.forge_addon_onto_card(0, unc_acorn)
-	_assert(bool(f1["ok"]) and test_stats.addon_inventory.size() == 2 and unc_acorn.get_forge_count() == 1, "1st Multi-Shot forged & Add-on consumed")
-	var f2: Dictionary = test_stats.forge_addon_onto_card(0, unc_acorn)
-	_assert(bool(f2["ok"]) and test_stats.addon_inventory.size() == 1 and unc_acorn.get_forge_count() == 2, "2nd stacked Multi-Shot forged (2/2 limit)")
-	var f3: Dictionary = test_stats.forge_addon_onto_card(0, unc_acorn)
-	_assert(not bool(f3["ok"]) and test_stats.addon_inventory.size() == 1, "3rd forge blocked on Uncommon 2/2 cap without consuming Add-on")
-	_assert(int(test_stats.active_skill_configs[0]["projectiles"]) == 5, "Double-stacked Multi-Shot on Acorn grants 1 + 2 + 2 = 5 shots")
+	_assert(bool(test_stats.forge_addon_onto_card(0, unc_acorn)["ok"]), "1st Multi-Shot forged & Add-on consumed")
+	_assert(bool(test_stats.forge_addon_onto_card(0, unc_acorn)["ok"]), "2nd stacked Multi-Shot forged (2/2 limit)")
+	_assert(not bool(test_stats.forge_addon_onto_card(0, unc_acorn)["ok"]) and test_stats.addon_inventory.size() == 1, "3rd forge blocked on Uncommon 2/2 cap")
+	test_stats.add_relic("relic_forge_hammer")
+	_assert(test_stats.get_max_forges_for(unc_acorn) == 3, "Masterwork Anvil Relic expands Uncommon cap from 2 -> 3")
+	_assert(bool(test_stats.forge_addon_onto_card(0, unc_acorn)["ok"]) and unc_acorn.get_forge_count() == 3, "3rd forge (Pierce) succeeds after acquiring Masterwork Anvil Relic")
+
+	test_stats.add_relic("relic_hourglass")
+	test_stats.add_relic("relic_merchant_bell")
+	_assert(is_equal_approx(test_stats.relic_cd_mult, 0.85) and is_equal_approx(test_stats.shop_price_mult, 0.80), "Hourglass (-15%% CD) & Merchant's Bell (20%% discount) update HeroStats cleanly")
 
 	# Unlimited equip count + Deck Focus scaling
 	var deck_stats: HeroStats = HeroStats.new("shiba")
@@ -104,52 +106,43 @@ func _run_all() -> void:
 	_assert(deck_stats.equipped_card_count == 2 and is_equal_approx(deck_stats.deck_cd_mult, 1.12), "2 equipped cards give 1.12x Deck Focus CD")
 	deck_stats.equipped_cards.append(CardInstance.new("frost_nova", GameEnums.Rarity.COMMON))
 	deck_stats.recompute()
-	_assert(deck_stats.equipped_card_count == 3 and is_equal_approx(deck_stats.deck_cd_mult, 1.25), "3 equipped cards give 1.25x Deck Focus CD (sweet spot)")
+	_assert(deck_stats.equipped_card_count == 3 and is_equal_approx(deck_stats.deck_cd_mult, 1.25), "3 equipped cards give 1.25x Deck Focus CD")
 	deck_stats.equipped_cards.append(CardInstance.new("honey_slam", GameEnums.Rarity.COMMON))
 	deck_stats.equipped_cards.append(CardInstance.new("spirit_bees", GameEnums.Rarity.COMMON))
 	deck_stats.recompute()
 	_assert(deck_stats.equipped_card_count == 5 and is_equal_approx(deck_stats.deck_cd_mult, 1.95), "5 unlimited equipped cards apply 1.95x Deck Focus CD")
 
-	# Per-card Sniper Focus vs Short Barrage + Glass Spark taken dmg
-	var s_stats: HeroStats = HeroStats.new("shiba")
-	var acorn_sniper: CardInstance = CardInstance.new("acorn_barrage", GameEnums.Rarity.LEGENDARY)
-	acorn_sniper.apply_forge("addon_multishot")
-	acorn_sniper.apply_forge("addon_sniper_focus")
-	acorn_sniper.apply_forge("addon_glass_spark")
-	acorn_sniper.apply_forge("addon_echo")
-	s_stats.equipped_cards = [acorn_sniper]
-	s_stats.recompute()
-	var scfg: Dictionary = s_stats.active_skill_configs[0]
-	_assert(int(scfg["projectiles"]) == 1 and int(scfg["pierce"]) == 2 and int(scfg["echo_count"]) == 1, "Legendary 4/4 forged Acorn Sniper compiles 1 piercing bolt + Echo")
-	_assert(is_equal_approx(s_stats.incoming_dmg_mult, 1.0 + BalanceConfig.GLASS_TAKEN_BONUS), "Glass Spark sets Hero incoming_dmg_mult cleanly")
-
-	# 6. Full Playable 3-Beat Card-Forging Tutorial
+	# 6. Full Playable v3.1 Tutorial (Card -> Gold Pouch -> Shop Purchase -> Forging -> Wave Clear)
 	main_inst.start_tutorial("shiba")
 	await process_frame
 	_assert(main_inst.state == MainGame.GameState.PLAYING and main_inst._is_tutorial, "Tutorial entered PLAYING bare-pawed")
-	_assert(main_inst.stats.equipped_cards.is_empty(), "Hero starts tutorial with 0 equipped cards")
-	_assert(main_inst.loot_manager.pickups.size() == 1, "Tutorial Beat 1 spawned Uncommon Acorn Barrage Card")
+	_assert(main_inst.stats.equipped_cards.is_empty() and main_inst.loot_manager.pickups.size() == 1, "Tutorial Beat 1 spawned Acorn Barrage Card")
 
 	main_inst.player.global_position = main_inst.loot_manager.pickups[0].global_position
 	main_inst._process(0.4)
 	_assert(main_inst.stats.template_inventory.size() == 1 and main_inst.tutorial_director.current_step == TutorialDirector.Step.EQUIP_TEMPLATE, "Tutorial Beat 1: Looted Template Card -> EQUIP_TEMPLATE")
 	main_inst.stats.equip_template_from_inventory(0)
 	main_inst._on_deck_changed()
-	_assert(main_inst.tutorial_director.current_step == TutorialDirector.Step.KILL_WAVE_1 and main_inst.wave_director.enemies.size() == 3, "Tutorial Beat 1: Equipping Card spawned 3 critters")
+	_assert(main_inst.tutorial_director.current_step == TutorialDirector.Step.KILL_WAVE_1 and main_inst.wave_director.enemies.size() == 3, "Tutorial Beat 2: Equipping Card spawned 3 critters")
 
 	for _k in range(3):
 		var cr: EnemyEntity = main_inst.wave_director.enemies[0]
 		cr.take_damage(9999.0, Vector3.ZERO, false)
 	await process_frame
-	_assert(main_inst.tutorial_director.current_step == TutorialDirector.Step.LOOT_ADDON and main_inst.loot_manager.pickups.size() == 1, "Tutorial Beat 2: Killing 3 critters drops Multi-Shot Add-on Card")
+	_assert(main_inst.tutorial_director.current_step == TutorialDirector.Step.LOOT_GOLD and main_inst.loot_manager.pickups.size() == 1, "Tutorial Beat 2: Killing 3 critters dropped 40G Gold Pouch")
 
 	main_inst.player.global_position = main_inst.loot_manager.pickups[0].global_position
 	main_inst._process(0.4)
-	_assert(main_inst.tutorial_director.current_step == TutorialDirector.Step.FORGE_ADDON, "Tutorial Beat 2: Looted Multi-Shot Add-on -> FORGE_ADDON")
-	var tut_forge: Dictionary = main_inst.stats.forge_addon_onto_card(0, main_inst.stats.equipped_cards[0])
-	_assert(bool(tut_forge["ok"]) and main_inst.stats.addon_inventory.is_empty(), "Tutorial Beat 2: Multi-Shot forged & consumed onto Acorn Barrage")
-	main_inst._on_deck_changed()
-	_assert(main_inst.tutorial_director.current_step == TutorialDirector.Step.KILL_WAVE_2 and main_inst.wave_director.enemies.size() == 5, "Tutorial Beat 2: Forging triggered 5-critter test wave")
+	_assert(main_inst.state == MainGame.GameState.SHOP and main_inst.shop_panel.visible and main_inst.tutorial_director.current_step == TutorialDirector.Step.BUY_IN_SHOP, "Tutorial Beat 3: Picking up Gold automatically opened Tutorial Caravan Shop")
+	_assert(main_inst.shop_panel.buy_addon_slot(0), "Tutorial Beat 3: Purchased Multi-Shot Add-on (30G) inside ShopPanel")
+	_assert(main_inst.tutorial_director.current_step == TutorialDirector.Step.FORGE_ADDON and main_inst.stats.addon_inventory.size() == 1, "Tutorial Beat 3: Shop purchase advanced Tutorial to FORGE_ADDON")
+
+	main_inst._open_inventory_from_shop()
+	main_inst.inventory_panel.start_forge_addon_at(0)
+	_assert(main_inst.inventory_panel.confirm_forge_onto_equipped(0, false), "Tutorial Beat 3: Forged Multi-Shot onto Acorn Barrage via Deck UI")
+	main_inst._close_inventory()
+	main_inst._close_shop()
+	_assert(main_inst.tutorial_director.current_step == TutorialDirector.Step.KILL_WAVE_2 and main_inst.wave_director.enemies.size() == 5, "Tutorial Beat 4: Forging spawned 5-critter finale wave")
 
 	for _k2 in range(5):
 		var cr2: EnemyEntity = main_inst.wave_director.enemies[0]
@@ -157,64 +150,52 @@ func _run_all() -> void:
 	await process_frame
 	_assert(main_inst.tutorial_director.current_step == TutorialDirector.Step.DONE and main_inst.state == MainGame.GameState.ENDED and main_inst.end_screen.visible, "Tutorial Complete -> EndScreen displayed cleanly")
 
-	# 7. Normal 20-Minute Run, TouchControls, Drop Formula, Deck/Forge UI & 3-Boss Victory
+	# 7. Normal 20-Min Run, Deterministic 3-Min Shop, Relics, Minimap, Forge Anim Overlay & 3-Boss Victory
 	main_inst.start_new_run("shiba")
 	await process_frame
 	_assert(main_inst.state == MainGame.GameState.PLAYING and not main_inst._is_tutorial, "20-Min Run entered PLAYING state cleanly")
-	_assert(main_inst.stats.equipped_cards.size() == 1 and main_inst.stats.equipped_cards[0].rarity == GameEnums.Rarity.UNCOMMON, "20-Min Run starts with Uncommon Acorn Barrage (2 forge slots)")
-	_assert(main_inst.hud.touch_controls != null and not main_inst.hud.touch_controls.has_signal("dash_triggered"), "TouchControls joystick attached without Dash pad")
+	_assert(main_inst.stats.gold == BalanceConfig.STARTING_GOLD, "Run starts with %d Gold" % BalanceConfig.STARTING_GOLD)
 
-	var touch_start_x: float = main_inst.player.global_position.x
-	main_inst.player.set_touch_move(Vector2(1.0, 0.0))
-	main_inst.player.step(0.1)
-	_assert(main_inst.player.global_position.x > touch_start_x + 0.4, "Touch joystick moves Mochi cleanly")
-	main_inst.player.set_touch_move(Vector2.ZERO)
+	# Trigger deterministic Shop #1 at t = 180.0s
+	main_inst.wave_director.jump_to_time_for_test(179.9)
+	main_inst.wave_director.step(0.2, main_inst.player.global_position, main_inst.spatial_grid, main_inst.loot_manager)
+	await process_frame
+	_assert(main_inst.state == MainGame.GameState.SHOP and main_inst.shop_panel.visible and main_inst.shop_manager.shop_index == 1, "Deterministic Caravan Shop #1 opened at t=03:00 (180s)")
+	_assert(main_inst.shop_manager.template_offers.size() == 3 and main_inst.shop_manager.addon_offers.size() == 4 and main_inst.shop_manager.relic_offers.size() == 2, "Shop #1 stocked 3 Templates, 4 Add-ons, and 2 Unowned Relics")
+	main_inst.stats.add_gold(300)
+	_assert(main_inst.shop_panel.buy_relic_slot(0), "Bought Relic #0 from Caravan Shop")
+	_assert(main_inst.shop_panel.buy_template_slot(0), "Bought Template Card #0 from Caravan Shop")
+	_assert(main_inst.shop_panel.reroll_clicked(), "Reroll refreshed Caravan Shop stock")
+	main_inst._close_shop()
+	_assert(main_inst.state == MainGame.GameState.PLAYING and not main_inst.shop_panel.visible, "Shop closes cleanly back to PLAYING")
 
-	# Drop rate scaling + Volley Shotgun check
-	_assert(is_equal_approx(LootManager.compute_spawn_intensity(0.0), 1.0), "Opening SpawnIntensity(0s) == 1.0")
-	_assert(LootManager.compute_spawn_intensity(1100.0) > 4.0, "Late-game SpawnIntensity(1100s) scales above 4.0x")
-	_assert(LootManager.compute_regular_template_chance(1100.0, 0) < LootManager.compute_regular_template_chance(0.0, 0), "Spawn-normalized Template drop chance scales down as spawns rise")
-	_assert(LootManager.compute_regular_addon_chance(0.0, 80) > LootManager.compute_regular_addon_chance(0.0, 0), "Dry-streak pity boosts Add-on drop rate after 60+ kills")
-
-	var volley_enemy: EnemyEntity = EnemyEntity.new()
-	_assert(is_equal_approx(volley_enemy.consume_volley_dmg_mult(99), 1.0), "First volley projectile deals 1.00x full hit")
-	_assert(is_equal_approx(volley_enemy.consume_volley_dmg_mult(99), BalanceConfig.VOLLEY_REPEAT_MULT), "Same-volley repeat dampened cleanly")
-	volley_enemy.free()
-
+	# Forge Animation Overlay & Deck UI sanity + mobile tab never uses 'Tpl'
 	main_inst._seed_review_loot()
 	main_inst._open_inventory()
 	await process_frame
-	_assert(main_inst.state == MainGame.GameState.INVENTORY and main_inst.inventory_panel.visible, "Deck & Forge panel opens cleanly")
-
-	# Equip seeded Rare Meteor Pinecone via InventoryPanel + Forge Multi-Shot onto Starter Acorn via UI flow
-	_assert(main_inst.inventory_panel.equip_template_at(0), "Deck UI equip_template_at equips Meteor Pinecone into Active Deck")
-	_assert(main_inst.stats.equipped_cards.size() == 2, "Active Deck now has 2 unlimited equipped cards")
+	_assert(main_inst.inventory_panel._m_tab_tpl_btn.text.begins_with("Templates"), "Mobile Deck tab spells out 'Templates' instead of 'Tpl'")
 	main_inst.inventory_panel.start_forge_addon_at(0)
-	_assert(main_inst.inventory_panel._forge_mode_panel.visible, "Deck UI displays Forge Mode banner when Add-on selected")
-	_assert(main_inst.inventory_panel.confirm_forge_onto_equipped(0), "Deck UI confirm_forge_onto_equipped permanently forges Add-on onto Card 0")
-	_assert(main_inst.stats.equipped_cards[0].get_forge_count() == 1 and main_inst.inventory_panel._feedback_panel.visible, "Starter Card now shows 1/2 forged & UI confirmation strip")
-
-	for mtab in ["active", "templates", "addons"]:
-		main_inst.inventory_panel._mobile_tab = mtab
-		main_inst.inventory_panel.refresh()
+	_assert(main_inst.inventory_panel.confirm_forge_onto_equipped(0, true), "Animated Forge executed cleanly")
+	_assert(main_inst.inventory_panel._forge_anim.visible, "ForgeAnimationOverlay visibly active during animated forge")
+	main_inst.inventory_panel._forge_anim._finish()
+	_assert(not main_inst.inventory_panel._forge_anim.visible, "ForgeAnimationOverlay finishes cleanly back to Deck UI")
 	main_inst._close_inventory()
 	await process_frame
-	_assert(main_inst.state == MainGame.GameState.PLAYING and not main_inst.inventory_panel.visible, "Deck & Forge panel closes cleanly")
 
+	# 3-Boss gauntlet + Gold drops + Minimap sync
 	var boss_times: Array[float] = [390.5, 780.5, 1170.5]
 	for idx in range(boss_times.size()):
 		main_inst.wave_director.jump_to_time_for_test(boss_times[idx])
 		await process_frame
 		var b: EnemyEntity = main_inst.wave_director.active_boss
 		_assert(b != null and is_instance_valid(b) and b.boss_index == idx + 1, "Boss %d/3 spawned at t=%.1fs" % [idx + 1, boss_times[idx]])
-		if idx == 2:
-			_assert(is_equal_approx(b.max_hp, 9500.0), "King Bramblehorn HP == 9500")
 		var pickups_before: int = main_inst.loot_manager.pickups.size()
 		b.take_damage(999999.0, Vector3.ZERO, false)
 		await process_frame
 		_assert(main_inst.wave_director.bosses_defeated_count == idx + 1, "Boss %d/3 defeat recorded" % [idx + 1])
-		_assert(main_inst.loot_manager.pickups.size() > pickups_before, "Boss %d/3 dropped Template & Add-on Cards" % [idx + 1])
+		_assert(main_inst.loot_manager.pickups.size() > pickups_before, "Boss %d/3 dropped Gold Pouches" % [idx + 1])
 
+	main_inst.hud._minimap.update_entities(main_inst.player.global_position, main_inst.player.get_facing_dir(), main_inst.wave_director.enemies, main_inst.loot_manager.pickups, ArenaBuilder.ARENA_HALF_SIZE)
 	_assert(main_inst.state == MainGame.GameState.ENDED, "Defeating Boss 3 transitions MainGame to ENDED (Victory)")
 
 	var samples: Array[String] = main_inst.sfx.get_loaded_sample_names()

@@ -7,11 +7,16 @@ var action_row: HBoxContainer = null
 func setup_card(card: CardInstance, opts: Dictionary = {}) -> void:
 	card_ref = card
 	var deck_cd_mult: float = float(opts.get("deck_cd_mult", 1.0))
+	var relic_cd_mult: float = float(opts.get("relic_cd_mult", 1.0))
+	var crit_chance: float = float(opts.get("crit_chance", BalanceConfig.BASE_CRIT_CHANCE))
+	var crit_mult: float = float(opts.get("crit_mult", BalanceConfig.BASE_CRIT_MULT))
+	var bonus_forges: int = int(opts.get("bonus_forges", 0))
 	var is_selected: bool = bool(opts.get("selected", false))
 	var forge_target_mode: bool = bool(opts.get("forge_target_mode", false))
 	var can_forge_here: bool = bool(opts.get("can_forge_here", false))
 	var forge_reason: String = String(opts.get("forge_reason", ""))
 	var compact_mobile: bool = bool(opts.get("compact_mobile", false))
+	var shop_sold: bool = bool(opts.get("sold", false))
 
 	var rar_col: Color = GameEnums.rarity_color(card.rarity)
 	var border_col: Color = rar_col
@@ -66,9 +71,10 @@ func setup_card(card: CardInstance, opts: Dictionary = {}) -> void:
 	top_bar.add_child(rar_lbl)
 
 	if card.is_template():
-		top_bar.add_child(UiHelper.make_forge_pips_row(card.get_forge_count(), card.get_max_forges(), rar_col, 10))
+		var max_f: int = card.get_max_forges(bonus_forges)
+		top_bar.add_child(UiHelper.make_forge_pips_row(card.get_forge_count(), max_f, rar_col, 10))
 		var cnt_lbl: Label = Label.new()
-		cnt_lbl.text = "%d/%d" % [card.get_forge_count(), card.get_max_forges()]
+		cnt_lbl.text = "%d/%d" % [card.get_forge_count(), max_f]
 		cnt_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		cnt_lbl.add_theme_font_override("font", UiHelper.get_bold_font())
 		cnt_lbl.add_theme_font_size_override("font_size", 11)
@@ -100,7 +106,7 @@ func setup_card(card: CardInstance, opts: Dictionary = {}) -> void:
 
 	# 4. Compiled Stats or Compatibility Badge Strip
 	if card.is_template():
-		var cfg: Dictionary = HeroStats.compile_card_config(card, deck_cd_mult)
+		var cfg: Dictionary = HeroStats.compile_card_config(card, deck_cd_mult, crit_chance, crit_mult, relic_cd_mult)
 		var dmg_val: int = int(round(float(cfg["damage"])))
 		var cd_val: float = float(cfg["cooldown"])
 		var proj_cnt: int = int(cfg["projectiles"])
@@ -119,7 +125,7 @@ func setup_card(card: CardInstance, opts: Dictionary = {}) -> void:
 		var compat_txt: String = "Applies to: %s" % CardDatabase.get_compatibility_text(card.card_id)
 		compat_row.add_child(UiHelper.make_badge_pill(compat_txt, UiHelper.BG_WELL, UiHelper.CTA_SAPPHIRE_RIM.darkened(0.25), Color(0.76, 0.92, 1.0), 11))
 
-	# 5. Recessed Description Box (+ Forged Add-on Chips)
+	# 5. Recessed Description Box (+ Full Self-Explaining Forged Add-on Effects)
 	var desc_well: PanelContainer = PanelContainer.new()
 	desc_well.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	desc_well.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -139,22 +145,49 @@ func setup_card(card: CardInstance, opts: Dictionary = {}) -> void:
 	desc_lbl.add_theme_color_override("font_color", UiHelper.TEXT_CREAM)
 	desc_v.add_child(desc_lbl)
 
+	var tip_lines: PackedStringArray = [card.get_display_title(), card.get_desc()]
+
 	if card.is_template():
 		var forged: Array[Dictionary] = card.get_forged_summary_counts()
+		var max_f_slot: int = card.get_max_forges(bonus_forges)
 		if not forged.is_empty():
-			var flow: HFlowContainer = HFlowContainer.new()
-			flow.add_theme_constant_override("h_separation", 4)
-			flow.add_theme_constant_override("v_separation", 3)
-			flow.mouse_filter = Control.MOUSE_FILTER_IGNORE
-			desc_v.add_child(flow)
+			var hdr_f: Label = Label.new()
+			hdr_f.text = "Forged Effects (%d/%d):" % [card.get_forge_count(), max_f_slot]
+			hdr_f.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			hdr_f.add_theme_font_override("font", UiHelper.get_bold_font())
+			hdr_f.add_theme_font_size_override("font_size", 11)
+			hdr_f.add_theme_color_override("font_color", Color(1.0, 0.88, 0.45))
+			desc_v.add_child(hdr_f)
+
 			for f_entry in forged:
 				var f_cnt: int = int(f_entry["count"])
 				var f_col: Color = GameEnums.rarity_color(int(f_entry["rarity"]))
-				var f_txt: String = "+ %s%s" % [String(f_entry["name"]), (" x%d" % f_cnt) if f_cnt > 1 else ""]
-				flow.add_child(UiHelper.make_badge_pill(f_txt, f_col.darkened(0.70), f_col, f_col.lightened(0.40), 10))
+				var f_name: String = "%s%s" % [String(f_entry["name"]), (" x%d" % f_cnt) if f_cnt > 1 else ""]
+				var f_desc: String = String(f_entry.get("desc", ""))
+
+				var f_box: VBoxContainer = VBoxContainer.new()
+				f_box.add_theme_constant_override("separation", 2)
+				f_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+				desc_v.add_child(f_box)
+
+				var f_chip_row: HBoxContainer = HBoxContainer.new()
+				f_chip_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+				f_box.add_child(f_chip_row)
+				f_chip_row.add_child(UiHelper.make_badge_pill("+ " + f_name, f_col.darkened(0.72), f_col, f_col.lightened(0.42), 10))
+
+				if not f_desc.is_empty():
+					var f_desc_lbl: Label = Label.new()
+					f_desc_lbl.text = f_desc
+					f_desc_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+					f_desc_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+					f_desc_lbl.add_theme_font_size_override("font_size", 11)
+					f_desc_lbl.add_theme_color_override("font_color", Color(0.94, 0.90, 0.80))
+					f_box.add_child(f_desc_lbl)
+
+				tip_lines.append("+ %s: %s" % [f_name, f_desc])
 		else:
 			var empty_f: Label = Label.new()
-			empty_f.text = "No Add-ons forged (%d slots open)" % card.get_max_forges()
+			empty_f.text = "No Add-ons forged (%d slots open)" % max_f_slot
 			empty_f.mouse_filter = Control.MOUSE_FILTER_IGNORE
 			empty_f.add_theme_font_size_override("font_size", 11)
 			empty_f.add_theme_color_override("font_color", Color(0.68, 0.62, 0.54))
@@ -177,8 +210,12 @@ func setup_card(card: CardInstance, opts: Dictionary = {}) -> void:
 		cons_lbl.add_theme_color_override("font_color", Color(0.96, 0.78, 0.42))
 		desc_v.add_child(cons_lbl)
 
-	# 6. Action Button Container (populated by InventoryPanel)
+	# 6. Action Button Container (populated by InventoryPanel or ShopPanel)
 	action_row = HBoxContainer.new()
 	action_row.add_theme_constant_override("separation", 6)
 	action_row.mouse_filter = Control.MOUSE_FILTER_PASS
 	root_v.add_child(action_row)
+
+	tooltip_text = "\n".join(tip_lines)
+	if shop_sold:
+		modulate = Color(0.55, 0.52, 0.48, 0.72)

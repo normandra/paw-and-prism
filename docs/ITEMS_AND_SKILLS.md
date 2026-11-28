@@ -1,44 +1,43 @@
-# Paw & Prism `v3.0` — Cards & Forging Catalog
+# Paw & Prism `v3.1` — Cards, Relics & Shop Catalog
 
-> **Single-Hero Card-Forging Core (`v3.0`)** — All values below reflect `scripts/data/hero_database.gd`, `scripts/data/card_database.gd`, `scripts/data/balance_config.gd`, `scripts/data/enemy_database.gd`, and automated verification in `tests/balance_audit.gd`.  
+> **Card-Forging, Relics & Caravan Shop Core (`v3.1`)** — All values below reflect `scripts/data/hero_database.gd`, `scripts/data/card_database.gd`, `scripts/data/relic_database.gd`, `scripts/data/balance_config.gd`, `scripts/data/enemy_database.gd`, and automated verification in `tests/balance_audit.gd`.  
 > **Living GDD:** [GAME_DESIGN_DOCUMENT.md](https://github.com/normandra/paw-and-prism/blob/main/docs/GAME_DESIGN_DOCUMENT.md) · **Play Live:** https://normandra.github.io/paw-and-prism/
 
 ---
 
 ## 1. Playable Hero (`HeroDatabase`)
 
-Paw & Prism `v3.0` streamlines gameplay around one focused mascot hero with fixed baseline survivability and movement speed:
+Paw & Prism `v3.1` focuses on **Mochi the Shiba** inside a compact `56×56m` Brotato-style arena (`ARENA_HALF_SIZE = 28.0`) with a live HUD Minimap:
 
-| Hero | Title | HP | Speed | Regen | Crit | Hit i-Frames | Starter Card |
+| Hero | Title | HP | Speed | Regen | Crit | Hit i-Frames | Starter Kit |
 |---|---|---|---|---|---|---|---|
-| **Mochi the Shiba** (`shiba`) | Acorn Forgemaster | `110` | `6.7` | `0.25 HP/s` | `8.0%` (`165%`, `E[crit] = 1.052`) | `0.30s` | **Acorn Barrage** (`Uncommon`, `0/2` Forges) |
+| **Mochi the Shiba** (`shiba`) | Acorn Forgemaster | `110` | `6.7` | `0.25 HP/s` | `8.0%` (`165%`, `E[crit] = 1.052`) | `0.30s` | **Acorn Barrage** (`Uncommon`, `0/2` Forges) + `20 Gold` |
 
 ---
 
-## 2. Core Card & Forging Rules
+## 2. Deterministic Caravan Shops, Gold & Card Forging Rules
 
-1. **Cards Only:** Items, gear slots, gems, and socket linking are replaced by a unified Slay-the-Spire-inspired Card system (`CardWidget`).
-2. **Unlimited Active Deck + Focus Scaling (`BalanceConfig.compute_deck_cd_mult`):** You can equip as many **Template Cards** as you want, with active cooldowns scaled by deck size so **~3 well-forged cards** are the strategic endgame sweet spot:
+1. **Deterministic 3-Minute Caravan Shops:** Instead of random world card drops, enemies and chests drop **Gold**. Every `3:00` (`03:00`, `06:00`, `09:00`, `12:00`, `15:00`, `18:00`), all loose Gold vacuums to Mochi and a Caravan Shop opens with:
+   - **3 Template Cards** (`45G` Common / `65G` Uncommon / `90G` Rare / `125G` Legendary)
+   - **4 Add-on Cards** (`35G` Common / `50G` Uncommon / `70G` Rare / `100G` Legendary)
+   - **2 Unowned Relics** (`65G–110G`) + **Reroll** (`20G + 10G` per reroll in that Shop)
+2. **Gold Drop Values (`balance_config.gd`, `loot_manager.gd`):**
+   - Regular Critters: `56%` chance for `2G` (`+1G` chance from `10:00` onward)
+   - Elites: `22G` Pouch + `16 HP` heal
+   - Bosses: `65G` (`3` Gold Pouches) + `40 HP` heal
+   - Periodic Gold Chests (`95s`): `28G` + `20 HP` heal
+3. **Unlimited Active Deck + Focus Scaling (`BalanceConfig.compute_deck_cd_mult`):** Equip freely; active cooldowns scale smoothly with deck size:
 
-| Equipped Template Cards | Cooldown Multiplier | Effective Cast Rate | Strategic Feel |
+| Equipped Template Cards | Cooldown Multiplier | Effective Cast Rate | Role |
 |---|---|---|---|
-| `1 Card` | `1.00×` | `100%` | Hyper-focused single card |
-| `2 Cards` | `1.12×` | `89%` | Clean early/mid duo |
-| `3 Cards` *(Sweet Spot)* | `1.25×` | `80%` | Ideal 20-min forged trio |
+| `1 Card` | `1.00×` | `100%` | Hyper-focused single ability |
+| `2 Cards` | `1.12×` | `89%` | Early/mid duo |
+| `3 Cards` | `1.25×` | `80%` | Balanced trio |
 | `4 Cards` | `1.60×` | `63%` | Light spread tax |
 | `5 Cards` | `1.95×` | `51%` | Noticeable dilution |
-| `6 Cards` | `2.30×` | `43%` | Heavy deck bloat (`3 Forged + 3 Raw` deals less DPS than `3 Forged`) |
+| `6 Cards` | `2.30×` | `43%` | Heavy spread tax |
 
-3. **Rarity Forge Limits (`GameEnums.rarity_forge_limit`):** Higher-rarity Template Cards hold more permanent Add-on Forges:
-
-| Template Rarity | Forge Capacity | Drop Tendency Across 20-Min Run |
-|---|---|---|
-| **Common** | `1` Forge | Common early (`50%` at `00:00` -> `14%` at `20:00`) |
-| **Uncommon** | `2` Forges | Steady mid-run backbone (`36%` -> `34%`); Starter Acorn Barrage starts Uncommon (`0/2`) |
-| **Rare** | `3` Forges | Mid/late upgrade & Chest drops (`12%` -> `36%`) |
-| **Legendary** | `4` Forges | Guaranteed on Boss kills + rare late-wave drops (`2%` -> `16%`) |
-
-4. **Permanent Consumption & Stacking:** Forging an **Add-on Card** permanently bakes its effect onto the chosen Template Card and **consumes** that Add-on Card. Duplicate Add-ons **can stack** on the same Template Card cleanly (with diminishing/multiplicative balance rules).
+4. **Rarity Forge Limits (`GameEnums.rarity_forge_limit`):** **Common `1` / Uncommon `2` / Rare `3` / Legendary `4`** Forges (`+1` with **Masterwork Anvil** Relic). Forging an **Add-on Card** consumes it, triggers an anvil fusion animation, and displays both its name and full description directly on the forged Template Card.
 
 ---
 
@@ -106,7 +105,26 @@ Audited at **T0 Baseline** (Common, `0` forges, `1` equipped card, `E[crit] = 1.
 
 ---
 
-## 5. Automated Balance Benchmarks (`tests/balance_audit.gd`)
+## 5. Slay-the-Spire Relics (`relic_database.gd`, 12 Passive Artifacts)
+
+| ID | Relic | Rarity | Price | Effect |
+|---|---|---|---:|---|
+| `relic_magnet_clover` | **Clover Magnet** | `Common` | `65G` | `2.4×` Gold magnet radius & `+15%` Gold earned |
+| `relic_golden_acorn` | **Golden Acorn** | `Uncommon` | `70G` | `+30%` Gold earned from all sources |
+| `relic_feather_boots` | **Swiftwind Feather** | `Uncommon` | `70G` | `+12%` Move Speed & `+50%` Gold magnet radius |
+| `relic_merchant_bell` | **Merchant's Bell** | `Uncommon` | `75G` | `20%` discount on all Shop purchases & Rerolls |
+| `relic_honey_jar` | **Endless Honey Jar** | `Uncommon` | `75G` | `+25 Max HP` & heal `25 HP` on every Shop entry |
+| `relic_spiked_collar` | **Bramble Collar** | `Uncommon` | `75G` | `+30 Max HP` & `+0.25s` post-hit invulnerability |
+| `relic_lucky_dice` | **Prism Dice** | `Rare` | `80G` | `+10%` Crit Chance & `+25%` Crit Damage |
+| `relic_ember_lantern` | **Ember Lantern** | `Rare` | `85G` | `+40%` Burn DPS & `+1.5s` Burn duration |
+| `relic_frost_compass` | **Glacier Compass** | `Rare` | `85G` | Chilled enemies take `+18%` damage from all hits |
+| `relic_hourglass` | **Meadow Hourglass** | `Rare` | `90G` | `-15%` cooldown on all equipped Template Cards |
+| `relic_forge_hammer` | **Masterwork Anvil** | `Legendary` | `95G` | `+1` maximum Forge Slot on all current and future Template Cards |
+| `relic_mirror_shard` | **Prism Mirror** | `Legendary` | `110G` | Every 5th Template Card trigger fires a bonus Echo cast |
+
+---
+
+## 6. Automated Balance Benchmarks (`tests/balance_audit.gd`)
 
 Verified directly from `godot --headless --path . --script res://tests/balance_audit.gd`:
 

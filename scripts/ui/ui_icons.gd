@@ -196,7 +196,67 @@ static func get_ui_icon(icon_name: String) -> Texture2D:
 			inner = """<path d="M12,16 L36,16 L33,39 L15,39 Z" fill="#8c3b3b" stroke="#2b1212" stroke-width="2"/><path d="M10,16 L38,16 M20,11 L28,11" stroke="#ffd2b0" stroke-width="3" stroke-linecap="round"/>"""
 		"star_upgrade":
 			inner = """<polygon points="24,5 29,17 42,18 32,27 35,40 24,33 13,40 16,27 6,18 19,17" fill="#ffd64f" stroke="#7a510c" stroke-width="2" stroke-linejoin="round"/>"""
+		"gold_coin":
+			inner = """<circle cx="24" cy="24" r="18" fill="#ffb82e" stroke="#6b4008" stroke-width="2.5"/><circle cx="24" cy="24" r="13" fill="#ffe066" stroke="#b87814" stroke-width="1.5"/><polygon points="24,14 27,21 34,24 27,27 24,34 21,27 14,24 21,21" fill="#fff7bf"/>"""
+		"shop_stall":
+			inner = """<path d="M8,18 L12,10 L36,10 L40,18 Z" fill="#e8584a" stroke="#421814" stroke-width="2"/><rect x="10" y="18" width="28" height="20" rx="2" fill="#d99f5e" stroke="#422610" stroke-width="2"/><rect x="17" y="23" width="14" height="10" rx="2" fill="#4a311e"/><circle cx="24" cy="28" r="3" fill="#ffe066"/>"""
 		_:
 			inner = """<circle cx="24" cy="24" r="14" fill="#ffd56b" stroke="#594015" stroke-width="2"/>"""
 	var svg: String = """<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 48 48">%s</svg>""" % inner
 	return _from_svg(key, svg, 1.5)
+
+static func get_relic_art(relic_id: String) -> Texture2D:
+	var key: String = "relic_" + relic_id
+	if _cache.has(key):
+		return _cache[key]
+
+	var bg_top: String = "#3a2c1c"
+	var bg_bot: String = "#1c150e"
+	var inner: String = ""
+
+	match relic_id:
+		"relic_golden_acorn":
+			bg_top = "#4f3a14"; bg_bot = "#241908"
+			inner = """<ellipse cx="40" cy="36" rx="14" ry="16" fill="#ffd23f" stroke="#5c3808" stroke-width="2.5"/><path d="M23,23 Q40,8 57,23 L53,30 Q40,21 27,30 Z" fill="#8f531d" stroke="#361c06" stroke-width="2.2"/><circle cx="34" cy="35" r="3.5" fill="#fff8bd"/>"""
+		"relic_merchant_bell":
+			bg_top = "#4a2a16"; bg_bot = "#241309"
+			inner = """<path d="M25,40 Q27,16 40,14 Q53,16 55,40 Z" fill="#ffbe3b" stroke="#4a280a" stroke-width="2.5"/><ellipse cx="40" cy="41" rx="18" ry="4" fill="#ffe175" stroke="#4a280a" stroke-width="2"/><circle cx="40" cy="46" r="4" fill="#ff9438"/>"""
+		"relic_lucky_dice":
+			bg_top = "#321c4a"; bg_bot = "#180d24"
+			inner = """<rect x="21" y="13" width="38" height="34" rx="6" fill="#9a5cff" stroke="#e9d9ff" stroke-width="2.4"/><circle cx="31" cy="23" r="3.5" fill="#fff7b8"/><circle cx="49" cy="23" r="3.5" fill="#fff7b8"/><circle cx="40" cy="30" r="3.5" fill="#fff7b8"/><circle cx="31" cy="37" r="3.5" fill="#fff7b8"/><circle cx="49" cy="37" r="3.5" fill="#fff7b8"/>"""
+		"relic_forge_hammer":
+			bg_top = "#4d2312"; bg_bot = "#240f07"
+			inner = """<rect x="21" y="11" width="38" height="16" rx="3" fill="#b8c4d9" stroke="#232833" stroke-width="2.4"/><rect x="36" y="27" width="8" height="23" rx="2" fill="#8c5424" stroke="#2e1808" stroke-width="2"/><polygon points="62,15 65,21 71,22 66,26 67,32 62,29 57,32 58,26 53,22 59,21" fill="#ffd957"/>"""
+		"relic_hourglass":
+			bg_top = "#163847"; bg_bot = "#0c1c24"
+			inner = """<rect x="24" y="9" width="32" height="5" rx="2" fill="#d9a145"/><rect x="24" y="46" width="32" height="5" rx="2" fill="#d9a145"/><polygon points="27,14 53,14 42,30 53,46 27,46 38,30" fill="#6ae0ff" fill-opacity="0.72" stroke="#d9f9ff" stroke-width="2.2"/><polygon points="33,44 47,44 40,35" fill="#ffe169"/>"""
+		"relic_honey_jar":
+			bg_top = "#4a3212"; bg_bot = "#241807"
+			inner = """<ellipse cx="40" cy="34" rx="17" ry="16" fill="#ffae2b" stroke="#5e3208" stroke-width="2.5"/><rect x="29" y="13" width="22" height="8" rx="3" fill="#ffe38c" stroke="#5e3208" stroke-width="2"/><path d="M28,26 Q40,32 52,26" fill="none" stroke="#fff3a8" stroke-width="3"/>"""
+		"relic_feather_boots":
+			bg_top = "#183e32"; bg_bot = "#0d211b"
+			inner = """<path d="M21,44 Q33,21 60,12 Q53,34 33,45 Z" fill="#70f5b5" stroke="#184a36" stroke-width="2.2"/><line x1="20" y1="46" x2="55" y2="16" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round"/>"""
+		"relic_mirror_shard":
+			bg_top = "#1f2a52"; bg_bot = "#10162b"
+			inner = """<polygon points="40,7 60,26 49,51 24,44 21,21" fill="#8cb8ff" stroke="#ffffff" stroke-width="2.5"/><line x1="28" y1="22" x2="49" y2="41" stroke="#eef7ff" stroke-width="3" stroke-linecap="round"/><circle cx="51" cy="20" r="4" fill="#ffe678"/>"""
+		"relic_spiked_collar":
+			bg_top = "#4a1b24"; bg_bot = "#240c11"
+			inner = """<ellipse cx="40" cy="34" rx="19" ry="12" fill="none" stroke="#ff5e78" stroke-width="6"/><polygon points="22,26 15,17 26,20" fill="#ffd257"/><polygon points="40,18 40,7 45,18" fill="#ffd257"/><polygon points="58,26 65,17 54,20" fill="#ffd257"/>"""
+		"relic_magnet_clover":
+			bg_top = "#193e22"; bg_bot = "#0c2112"
+			inner = """<circle cx="33" cy="25" r="9" fill="#5ee86e" stroke="#18471f" stroke-width="2"/><circle cx="47" cy="25" r="9" fill="#5ee86e" stroke="#18471f" stroke-width="2"/><circle cx="40" cy="36" r="9" fill="#46cc56" stroke="#18471f" stroke-width="2"/><path d="M40,42 L40,53" stroke="#75f584" stroke-width="4" stroke-linecap="round"/>"""
+		"relic_ember_lantern":
+			bg_top = "#4d2010"; bg_bot = "#240e06"
+			inner = """<rect x="27" y="14" width="26" height="32" rx="5" fill="#ff7324" fill-opacity="0.85" stroke="#ffd257" stroke-width="2.5"/><circle cx="40" cy="30" r="7" fill="#fff29e"/><line x1="34" y1="9" x2="46" y2="9" stroke="#ffd257" stroke-width="3"/>"""
+		"relic_frost_compass":
+			bg_top = "#14354f"; bg_bot = "#0a1a29"
+			inner = """<circle cx="40" cy="30" r="19" fill="#1e4b6e" stroke="#92f0ff" stroke-width="2.8"/><polygon points="40,12 45,30 40,28 35,30" fill="#ffffff"/><polygon points="40,48 45,30 40,32 35,30" fill="#5ec7ff"/>"""
+		_:
+			inner = """<circle cx="40" cy="30" r="16" fill="#ffd56b"/>"""
+
+	var svg: String = """<svg xmlns="http://www.w3.org/2000/svg" width="80" height="60" viewBox="0 0 80 60">
+	<defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1"><stop offset="0%%" stop-color="%s"/><stop offset="100%%" stop-color="%s"/></linearGradient></defs>
+	<rect x="0" y="0" width="80" height="60" rx="6" fill="url(#g)"/>
+	%s
+	</svg>""" % [bg_top, bg_bot, inner]
+	return _from_svg(key, svg, 2.0)

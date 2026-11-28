@@ -5,9 +5,11 @@ signal boss_spawned(boss: EnemyEntity)
 signal boss_defeated(boss_index: int, boss_name: String)
 signal wave_banner(title: String, color: Color)
 signal all_bosses_cleared()
+signal shop_triggered(shop_index: int)
 
 const RUN_DURATION: float = 1200.0 # 20 minutes
 const BOSS_TIMES: Array[float] = [390.0, 780.0, 1170.0] # 06:30, 13:00, 19:30
+const SHOP_TIMES: Array[float] = [180.0, 360.0, 540.0, 720.0, 900.0, 1080.0] # Every 3 minutes
 
 var world_root: Node3D = null
 var enemies: Array[EnemyEntity] = []
@@ -21,6 +23,7 @@ var _elite_timer: float = 65.0
 var _chest_timer: float = 55.0
 var _surge_index: int = 0
 var _boss_spawned_flags: Array[bool] = [false, false, false]
+var _shop_triggered_flags: Array[bool] = [false, false, false, false, false, false]
 var _surge_times: Array[float] = [240.0, 570.0, 930.0, 1080.0]
 
 var _on_enemy_died_cb: Callable
@@ -48,6 +51,7 @@ func reset() -> void:
 	_chest_timer = 55.0
 	_surge_index = 0
 	_boss_spawned_flags = [false, false, false]
+	_shop_triggered_flags = [false, false, false, false, false, false]
 
 func jump_to_time_for_test(seconds: float) -> void:
 	elapsed_time = seconds
@@ -55,6 +59,18 @@ func jump_to_time_for_test(seconds: float) -> void:
 		if elapsed_time >= BOSS_TIMES[i] and not _boss_spawned_flags[i]:
 			_boss_spawned_flags[i] = true
 			_spawn_boss(i + 1, Vector3(0.0, 0.0, 0.0))
+	for j in range(SHOP_TIMES.size()):
+		if elapsed_time >= SHOP_TIMES[j]:
+			_shop_triggered_flags[j] = true
+
+func get_next_shop_countdown() -> String:
+	for i in range(SHOP_TIMES.size()):
+		if not _shop_triggered_flags[i]:
+			var rem: float = maxf(0.0, SHOP_TIMES[i] - elapsed_time)
+			var m: int = int(rem) / 60
+			var s: int = int(rem) % 60
+			return "Shop %d in %02d:%02d" % [i + 1, m, s]
+	return "All 6 Shops Visited"
 
 func get_next_boss_countdown() -> String:
 	for i in range(BOSS_TIMES.size()):
@@ -78,6 +94,12 @@ func step(delta: float, player_pos: Vector3, grid: SpatialGrid, loot_mgr: LootMa
 		if not _boss_spawned_flags[i] and elapsed_time >= BOSS_TIMES[i]:
 			_boss_spawned_flags[i] = true
 			_spawn_boss(i + 1, player_pos)
+
+	# Deterministic Caravan Shops every 3 minutes
+	for s_idx in range(SHOP_TIMES.size()):
+		if not _shop_triggered_flags[s_idx] and elapsed_time >= SHOP_TIMES[s_idx]:
+			_shop_triggered_flags[s_idx] = true
+			shop_triggered.emit(s_idx + 1)
 
 	var is_web: bool = OS.has_feature("web")
 	var max_act_cap: int = int(float(prof["max_active"]) * 0.72) if is_web else int(prof["max_active"])
@@ -116,20 +138,20 @@ func step(delta: float, player_pos: Vector3, grid: SpatialGrid, loot_mgr: LootMa
 		_spawn_enemy(eid, player_pos, float(prof["hp_scale"]), float(prof["dmg_scale"]), true, Vector3.INF, spd_scale)
 		wave_banner.emit("Elite Critter Spotted!", Color(0.86, 0.50, 1.0))
 
-	# Periodic Acorn Chest
+	# Periodic Gold Chest
 	_chest_timer -= delta
 	if _chest_timer <= 0.0:
 		_chest_timer = 95.0
 		var ang: float = randf() * TAU
-		var dist: float = randf_range(16.0, 26.0)
-		var b: float = ArenaBuilder.ARENA_HALF_SIZE - 6.0
+		var dist: float = randf_range(10.0, 18.0)
+		var b: float = ArenaBuilder.ARENA_HALF_SIZE - 4.0
 		var cpos: Vector3 = Vector3(
 			clampf(player_pos.x + cos(ang) * dist, -b, b),
 			0.0,
 			clampf(player_pos.z + sin(ang) * dist, -b, b)
 		)
 		loot_mgr.spawn_treasure_chest(cpos)
-		wave_banner.emit("Acorn Loot Chest Spawned!", Color(1.0, 0.88, 0.30))
+		wave_banner.emit("Gold Loot Chest Spawned!", Color(1.0, 0.88, 0.30))
 
 	# Step all active enemies & rebuild SpatialGrid
 	step_enemies_only(delta, player_pos, grid)
@@ -163,14 +185,26 @@ func _spawn_enemy(enemy_id: String, player_pos: Vector3, hp_scale: float, dmg_sc
 	if exact_pos != Vector3.INF:
 		e.position = exact_pos
 	else:
-		var ang: float = randf() * TAU
-		var dist: float = randf_range(21.0, 27.5)
-		var bound: float = ArenaBuilder.ARENA_HALF_SIZE - 2.0
-		e.position = Vector3(
-			clampf(player_pos.x + cos(ang) * dist, -bound, bound),
-			0.0,
-			clampf(player_pos.z + sin(ang) * dist, -bound, bound)
-		)
+		var bound: float = ArenaBuilder.ARENA_HALF_SIZE - 1.8
+		var chosen: Vector3 = Vector3.ZERO
+		var found: bool = false
+		for _attempt in range(8):
+			var ang: float = randf() * TAU
+			var dist: float = randf_range(13.0, 20.0)
+			var cand: Vector3 = Vector3(
+				clampf(player_pos.x + cos(ang) * dist, -bound, bound),
+				0.0,
+				clampf(player_pos.z + sin(ang) * dist, -bound, bound)
+			)
+			if cand.distance_to(player_pos) >= 9.5:
+				chosen = cand
+				found = true
+				break
+		if not found:
+			var opp_x: float = (-bound + 3.0) if player_pos.x >= 0.0 else (bound - 3.0)
+			var opp_z: float = (-bound + 3.0) if player_pos.z >= 0.0 else (bound - 3.0)
+			chosen = Vector3(opp_x + randf_range(-3.0, 3.0), 0.0, opp_z + randf_range(-3.0, 3.0))
+		e.position = chosen
 
 	e.died.connect(_handle_enemy_died)
 	if _on_enemy_proj_cb.is_valid():

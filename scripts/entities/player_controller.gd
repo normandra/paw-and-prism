@@ -180,6 +180,9 @@ func _animate_chibi(delta: float, moving_now: bool) -> void:
 	else:
 		_rig.visible = true
 
+func get_facing_dir() -> Vector3:
+	return _facing_dir
+
 func heal(amount: float) -> void:
 	if is_dead or stats == null or amount <= 0.0:
 		return
@@ -193,7 +196,7 @@ func take_damage(raw_dmg: float, bypass_invuln: bool = false) -> float:
 
 	var final_dmg: float = maxf(1.0, raw_dmg * stats.incoming_dmg_mult)
 
-	_invuln_timer = BalanceConfig.HIT_INVULN_SEC
+	_invuln_timer = BalanceConfig.HIT_INVULN_SEC + stats.extra_invuln_sec
 	current_hp -= final_dmg
 
 	if stats.has_thorns_burst and _thorns_cd <= 0.0:

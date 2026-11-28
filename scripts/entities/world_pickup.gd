@@ -2,21 +2,36 @@ class_name WorldPickup
 extends Node3D
 
 enum Kind {
+	GOLD_COIN,
 	TEMPLATE_CARD,
 	ADDON_CARD,
 	CHEST,
 }
 
-var kind: int = Kind.TEMPLATE_CARD
+var kind: int = Kind.GOLD_COIN
 var card_data: CardInstance = null
+var gold_amount: int = 0
 
 var _spin_pivot: Node3D = null
 var _vel_y: float = 5.5
 var _vel_xz: Vector3 = Vector3.ZERO
 var _age: float = 0.0
 
+func setup_gold(p_pos: Vector3, amount: int) -> void:
+	kind = Kind.GOLD_COIN
+	gold_amount = maxi(1, amount)
+	card_data = null
+	position = p_pos
+	if gold_amount >= 10:
+		_attach_visual("gold_pouch", Color(1.0, 0.86, 0.24), GameEnums.Rarity.RARE)
+		_launch_pop(3.4)
+	else:
+		_attach_visual("gold_coin", Color(1.0, 0.84, 0.22), GameEnums.Rarity.COMMON)
+		_launch_pop(2.8)
+
 func setup_card(p_pos: Vector3, card: CardInstance) -> void:
 	card_data = card
+	gold_amount = 0
 	position = p_pos
 	if card.is_template():
 		kind = Kind.TEMPLATE_CARD
@@ -28,6 +43,8 @@ func setup_card(p_pos: Vector3, card: CardInstance) -> void:
 
 func setup_chest(p_pos: Vector3) -> void:
 	kind = Kind.CHEST
+	gold_amount = BalanceConfig.GOLD_VALUE_CHEST
+	card_data = null
 	position = p_pos
 	_attach_visual("chest", Color(1.0, 0.85, 0.25), GameEnums.Rarity.RARE)
 	_vel_y = 0.0
@@ -40,28 +57,32 @@ func _attach_visual(vkind: String, col: Color, rarity: int) -> void:
 
 func _launch_pop(strength: float) -> void:
 	var ang: float = randf() * TAU
-	_vel_xz = Vector3(cos(ang), 0.0, sin(ang)) * randf_range(1.1, strength)
-	_vel_y = randf_range(4.2, 6.0)
+	_vel_xz = Vector3(cos(ang), 0.0, sin(ang)) * randf_range(0.9, strength)
+	_vel_y = randf_range(4.0, 5.8)
 
 func get_label_text() -> String:
+	if kind == Kind.GOLD_COIN:
+		return "%dG" % gold_amount if gold_amount >= 10 else ""
 	if card_data != null:
 		if kind == Kind.TEMPLATE_CARD:
 			return "[%s Card] %s" % [GameEnums.rarity_label(card_data.rarity), card_data.get_card_name()]
 		return "[Add-on] %s" % card_data.get_card_name()
 	if kind == Kind.CHEST:
-		return "Acorn Chest"
+		return "Gold Chest"
 	return ""
 
 func get_label_color() -> Color:
+	if kind == Kind.GOLD_COIN or kind == Kind.CHEST:
+		return Color(1.0, 0.90, 0.35)
 	if card_data != null:
 		return GameEnums.rarity_color(card_data.rarity)
 	return Color(1.0, 0.90, 0.35)
 
-func step(delta: float, player_pos: Vector3) -> bool:
+func step(delta: float, player_pos: Vector3, magnet_mult: float = 1.0) -> bool:
 	_age += delta
 	if _spin_pivot != null:
-		_spin_pivot.rotation.y += delta * 2.5
-		_spin_pivot.position.y = sin(_age * 3.5) * 0.09
+		_spin_pivot.rotation.y += delta * (3.2 if kind == Kind.GOLD_COIN else 2.5)
+		_spin_pivot.position.y = sin(_age * 3.8) * 0.08
 
 	if global_position.y > 0.0 or _vel_y > 0.0:
 		global_position.x += _vel_xz.x * delta
@@ -76,8 +97,22 @@ func step(delta: float, player_pos: Vector3) -> bool:
 	var dx: float = player_pos.x - global_position.x
 	var dz: float = player_pos.z - global_position.z
 	var dist_sq: float = dx * dx + dz * dz
-	var touch_r: float = 2.6 if kind != Kind.CHEST else 2.8
-	if dist_sq <= touch_r * touch_r and _age > 0.28:
+
+	# Smooth magnet pull for Gold coins
+	if kind == Kind.GOLD_COIN and _age > 0.22:
+		var mag_r: float = BalanceConfig.GOLD_MAGNET_BASE * magnet_mult
+		if dist_sq <= mag_r * mag_r and dist_sq > 0.0001:
+			var d: float = sqrt(dist_sq)
+			var pull_spd: float = 13.5 + (mag_r - d) * 2.8
+			var step_dist: float = minf(d, pull_spd * delta)
+			global_position.x += (dx / d) * step_dist
+			global_position.z += (dz / d) * step_dist
+			dx = player_pos.x - global_position.x
+			dz = player_pos.z - global_position.z
+			dist_sq = dx * dx + dz * dz
+
+	var touch_r: float = 1.65 if kind == Kind.GOLD_COIN else (2.6 if kind != Kind.CHEST else 2.8)
+	if dist_sq <= touch_r * touch_r and _age > 0.24:
 		return true
 
 	return false

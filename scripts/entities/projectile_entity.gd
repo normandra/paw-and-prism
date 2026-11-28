@@ -26,6 +26,8 @@ var crit_chance: float = 8.0
 var crit_mult: float = 165.0
 var is_fire: bool = false
 var burn_mult: float = 1.0
+var burn_dur_bonus: float = 0.0
+var chilled_vuln_mult: float = 1.0
 var is_cold: bool = false
 var leech_pct: float = 0.0
 var cast_uid: int = 0
@@ -50,7 +52,9 @@ func setup_player_proj(p_pos: Vector3, p_dir: Vector3, cfg: Dictionary, style: S
 	crit_chance = float(cfg.get("crit_chance", 8.0))
 	crit_mult = float(cfg.get("crit_mult", 165.0))
 	is_fire = bool(cfg.get("ignite", false))
-	burn_mult = float(cfg.get("burn_mult", 1.0))
+	burn_mult = float(cfg.get("burn_mult", 1.0)) * float(cfg.get("burn_dps_mult", 1.0))
+	burn_dur_bonus = float(cfg.get("burn_dur_bonus", 0.0))
+	chilled_vuln_mult = float(cfg.get("chilled_vuln_mult", 1.0))
 	is_cold = bool(cfg.get("chill", false))
 	leech_pct = float(cfg.get("leech_pct", 0.0))
 	cast_uid = int(cfg.get("cast_uid", 0))
@@ -195,10 +199,11 @@ func step(delta: float, grid: SpatialGrid, player_pos: Vector3) -> bool:
 
 		var is_crit: bool = randf() * 100.0 < crit_chance
 		var volley_mult: float = e.consume_volley_dmg_mult(cast_uid) if e.has_method("consume_volley_dmg_mult") else 1.0
-		var dmg: float = damage * volley_mult * (crit_mult * 0.01 if is_crit else 1.0)
+		var chill_bonus: float = chilled_vuln_mult if float(e.get("_chill_timer")) > 0.0 else 1.0
+		var dmg: float = damage * volley_mult * chill_bonus * (crit_mult * 0.01 if is_crit else 1.0)
 
 		if is_fire and e.has_method("apply_burn"):
-			e.apply_burn(dmg * BalanceConfig.BURN_DPS_RATIO * burn_mult, BalanceConfig.BURN_DURATION)
+			e.apply_burn(dmg * BalanceConfig.BURN_DPS_RATIO * burn_mult, BalanceConfig.BURN_DURATION + burn_dur_bonus)
 		if is_cold and e.has_method("apply_chill"):
 			e.apply_chill(BalanceConfig.CHILL_DURATION)
 		e.take_damage(dmg, direction * 3.0)
