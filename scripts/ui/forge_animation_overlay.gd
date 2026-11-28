@@ -17,6 +17,7 @@ func _init() -> void:
 	name = "ForgeAnimationOverlay"
 	process_mode = Control.PROCESS_MODE_ALWAYS
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	clip_contents = true
 	mouse_filter = Control.MOUSE_FILTER_STOP
 	visible = false
 
@@ -46,20 +47,24 @@ func play_forge(
 	add_child(bg)
 
 	# Banner at top
+	var vp0: Vector2 = _safe_vp()
 	_banner_lbl = Label.new()
 	_banner_lbl.text = "FORGING %s..." % (consumed_addon.get_card_name().to_upper() if consumed_addon != null else "CARD")
 	_banner_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_banner_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_banner_lbl.set_anchors_and_offsets_preset(Control.PRESET_TOP_WIDE)
-	_banner_lbl.offset_top = 42
-	_banner_lbl.offset_bottom = 86
+	_banner_lbl.offset_left = 12
+	_banner_lbl.offset_right = -12
+	_banner_lbl.offset_top = 14 if vp0.y < 540.0 else 32
+	_banner_lbl.offset_bottom = 66 if vp0.y < 540.0 else 86
 	_banner_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	UiHelper.apply_display_font(_banner_lbl, 30, Color(1.0, 0.90, 0.42), 4)
+	UiHelper.apply_display_font(_banner_lbl, 18 if vp0.x < 520.0 else 28, Color(1.0, 0.90, 0.42), 4)
 	add_child(_banner_lbl)
 
 	# Template Card Widget (center)
 	_tpl_holder = Control.new()
-	_tpl_holder.custom_minimum_size = Vector2(276, 330)
-	_tpl_holder.pivot_offset = Vector2(138, 165)
+	_tpl_holder.size = Vector2(276, 330)
+	_tpl_holder.pivot_offset = Vector2.ZERO
 	_tpl_holder.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(_tpl_holder)
 
@@ -75,8 +80,8 @@ func play_forge(
 
 	# Consumed Add-on Card Widget (starts left, arcs into center & vanishes on impact)
 	_addon_holder = Control.new()
-	_addon_holder.custom_minimum_size = Vector2(230, 260)
-	_addon_holder.pivot_offset = Vector2(115, 130)
+	_addon_holder.size = Vector2(230, 260)
+	_addon_holder.pivot_offset = Vector2.ZERO
 	_addon_holder.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(_addon_holder)
 
@@ -150,34 +155,54 @@ func _process(delta: float) -> void:
 	if _elapsed >= _duration:
 		_finish()
 
+func _safe_vp() -> Vector2:
+	if size.x > 10.0 and size.y > 10.0:
+		return size
+	var r: Vector2 = get_viewport_rect().size
+	if r.x > 10.0 and r.y > 10.0:
+		return r
+	return Vector2(1280.0, 720.0)
+
 func _update_layout(t_sec: float) -> void:
-	var vp: Vector2 = size if size.x > 10.0 else Vector2(1280.0, 720.0)
-	var center: Vector2 = vp * 0.5 + Vector2(0.0, 18.0)
+	var vp: Vector2 = _safe_vp()
+	var center: Vector2 = vp * 0.5 + Vector2(0.0, 12.0)
+	var base_scale: float = clampf(minf((vp.x - 36.0) / 304.0, (vp.y - 140.0) / 360.0), 0.42, 1.0)
+
+	if _banner_lbl != null:
+		_banner_lbl.add_theme_font_size_override("font_size", 18 if vp.x < 520.0 else 28)
 
 	if _tpl_holder != null:
-		var base_pos: Vector2 = center - Vector2(138.0, 165.0)
-		var scl: float = 1.0
+		var punch: float = 1.0
+		var dx: float = 0.0
 		if t_sec < _impact_time:
 			var p: float = clampf(t_sec / _impact_time, 0.0, 1.0)
-			base_pos.x += lerpf(90.0, 0.0, p)
-			scl = 0.94 + p * 0.04
+			dx = lerpf(minf(80.0, vp.x * 0.12), 0.0, p)
+			punch = 0.94 + p * 0.04
 		else:
 			var post: float = clampf((t_sec - _impact_time) / 0.35, 0.0, 1.0)
-			scl = 1.0 + sin(post * PI) * 0.16
-		_tpl_holder.position = base_pos
+			punch = 1.0 + sin(post * PI) * 0.12
+		var scl: float = base_scale * punch
+		var tw: float = 276.0 * scl
+		var th: float = 330.0 * scl
+		var tx: float = clampf(center.x - tw * 0.5 + dx, 8.0, maxf(8.0, vp.x - tw - 8.0))
+		var ty: float = clampf(center.y - th * 0.5, 56.0, maxf(56.0, vp.y - th - 48.0))
+		_tpl_holder.position = Vector2(tx, ty)
 		_tpl_holder.scale = Vector2(scl, scl)
 
 	if _addon_holder != null:
 		if t_sec < _impact_time:
 			var p2: float = clampf(t_sec / _impact_time, 0.0, 1.0)
 			var ease_in: float = p2 * p2
-			var start_p: Vector2 = center + Vector2(-minf(340.0, vp.x * 0.28) - 115.0, -130.0)
-			var end_p: Vector2 = center - Vector2(115.0, 130.0)
-			var arc_y: float = -sin(p2 * PI) * 65.0
-			_addon_holder.position = start_p.lerp(end_p, ease_in) + Vector2(0.0, arc_y)
-			var s_a: float = lerpf(1.0, 0.35, ease_in)
+			var s_a: float = base_scale * lerpf(0.92, 0.35, ease_in)
+			var aw_start: float = 230.0 * base_scale * 0.92
+			var start_x: float = maxf(8.0, center.x - minf(260.0, vp.x * 0.32) - aw_start * 0.5)
+			var end_x: float = center.x - (230.0 * s_a) * 0.5
+			var ah: float = 260.0 * s_a
+			var cur_x: float = clampf(lerpf(start_x, end_x, ease_in), 8.0, maxf(8.0, vp.x - 230.0 * s_a - 8.0))
+			var arc_y: float = -sin(p2 * PI) * minf(55.0, vp.y * 0.10)
+			var cur_y: float = clampf(center.y - ah * 0.5 + arc_y, 56.0, maxf(56.0, vp.y - ah - 48.0))
+			_addon_holder.position = Vector2(cur_x, cur_y)
 			_addon_holder.scale = Vector2(s_a, s_a)
-			_addon_holder.rotation = lerpf(-0.12, 0.18, ease_in)
 			_addon_holder.modulate.a = 1.0 - maxf(0.0, (p2 - 0.75) * 3.5)
 		else:
 			_addon_holder.visible = false
@@ -187,19 +212,20 @@ func _update_layout(t_sec: float) -> void:
 		_anvil_badge.position = a_pos
 		if t_sec < _impact_time:
 			var p3: float = clampf(t_sec / _impact_time, 0.0, 1.0)
-			var s_anv: float = 0.85 + p3 * 0.40
+			var s_anv: float = base_scale * (0.85 + p3 * 0.35)
 			_anvil_badge.scale = Vector2(s_anv, s_anv)
 			_anvil_badge.modulate.a = 0.92
 		else:
 			var fade_p: float = clampf((t_sec - _impact_time) / 0.30, 0.0, 1.0)
-			_anvil_badge.scale = Vector2(1.4 - fade_p * 0.4, 1.4 - fade_p * 0.4)
+			var s_f: float = base_scale * (1.3 - fade_p * 0.35)
+			_anvil_badge.scale = Vector2(s_f, s_f)
 			_anvil_badge.modulate.a = 1.0 - fade_p
 			if fade_p >= 1.0:
 				_anvil_badge.visible = false
 
 func _spawn_sparks() -> void:
-	var vp: Vector2 = size if size.x > 10.0 else Vector2(1280.0, 720.0)
-	var center: Vector2 = vp * 0.5 + Vector2(0.0, 18.0)
+	var vp: Vector2 = _safe_vp()
+	var center: Vector2 = vp * 0.5 + Vector2(0.0, 12.0)
 	var cols: Array[Color] = [
 		Color(1.0, 0.92, 0.42),
 		Color(1.0, 0.68, 0.24),
@@ -221,8 +247,8 @@ func _spawn_sparks() -> void:
 func _draw() -> void:
 	if not visible:
 		return
-	var vp: Vector2 = size if size.x > 10.0 else Vector2(1280.0, 720.0)
-	var center: Vector2 = vp * 0.5 + Vector2(0.0, 18.0)
+	var vp: Vector2 = _safe_vp()
+	var center: Vector2 = vp * 0.5 + Vector2(0.0, 12.0)
 
 	# Shockwave rings after impact
 	if _impact_fired:

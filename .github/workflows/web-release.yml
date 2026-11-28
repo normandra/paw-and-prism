@@ -69,6 +69,7 @@ jobs:
           godot --headless --path . --import
           godot --headless --path . --script res://tests/verify_game.gd
           godot --headless --path . --script res://tests/balance_audit.gd
+          godot --headless --path . --script res://tests/ui_layout_audit.gd
 
       - name: Export Web build using stripped template & measure sizes
         run: |

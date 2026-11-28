@@ -51,9 +51,11 @@ flowchart LR
 | `M` | Toggle procedural audio mute | Reflected in HUD `[M]` button |
 | `F3` / (`F7`,`F8`,`F9` with `?review=1`) | FPS counter & review helpers | `F7`: open Caravan Shop · `F8`: +Gold, Relics & Cards · `F9`: Victory screen |
 
-### Technical Notes (WebGL & Stripped WASM Compatibility)
+### Technical Notes (WebGL, Stripped WASM & Responsive UI Architecture)
 - `build/web_custom.py` compiles the Web WASM runtime with `deprecated = "no"` and `target=template_release`.
 - All procedural images (`arena_builder.gd`, `ui_icons.gd`) strictly use `Image.create_empty(...)` — **never** `Image.create(...)`.
+- All modal overlays (`ShopPanel`, `InventoryPanel`, `EndScreen`) extend `ResponsiveModal` (`scripts/ui/responsive_modal.gd`), enforcing viewport-clamped sizing, header wrapping, adaptive grid columns, and vertical scrolling with zero horizontal overflow.
+- `UiLayoutGuard` (`scripts/ui/ui_layout_guard.gd`) and `tests/ui_layout_audit.gd` run in GitHub Actions to verify every screen and HUD state across 6 logical viewports (`360×640`, `465×828`, `465×1007`, `656×875`, `1075×496`, `1280×720`) with zero clipping or sibling overlap.
 
 ---
 

@@ -186,6 +186,8 @@ func _ready() -> void:
 	_enter_title_state()
 
 func _update_responsive_scale() -> void:
+	if get_viewport() != get_tree().root:
+		return
 	var win_sz: Vector2i = DisplayServer.window_get_size()
 	if win_sz.x <= 10 or win_sz.y <= 10:
 		return
@@ -476,6 +478,19 @@ func _open_shop_ui(shop_idx: int, is_tutorial_shop: bool) -> void:
 	var tut_hint: String = "Tutorial: Buy Multi-Shot Add-on (30G), then tap [Deck & Forge] or [Continue]!" if is_tutorial_shop else ""
 	shop_panel.open_shop(shop_manager, stats, wave_director.elapsed_time, heal_amt, tut_hint)
 	sfx.play("loot_rare")
+	_audit_modal_if_review(shop_panel, "ShopPanel")
+
+func _audit_modal_if_review(ctrl: Control, label: String) -> void:
+	if not _review_mode or ctrl == null or get_viewport() == null:
+		return
+	call_deferred("_deferred_audit", ctrl, label)
+
+func _deferred_audit(ctrl: Control, label: String) -> void:
+	if ctrl == null or not is_instance_valid(ctrl) or not ctrl.visible or get_viewport() == null:
+		return
+	var errs: Array[String] = UiLayoutGuard.audit_screen(ctrl, get_viewport().get_visible_rect(), label)
+	for msg in errs:
+		push_warning(msg)
 
 func _close_shop() -> void:
 	if state != GameState.SHOP:
@@ -512,6 +527,7 @@ func _open_inventory() -> void:
 	hud.mark_loot_read()
 	inventory_panel.open_panel(stats, false)
 	sfx.play("ui_click")
+	_audit_modal_if_review(inventory_panel, "InventoryPanel")
 
 func _open_inventory_from_shop() -> void:
 	if state != GameState.SHOP:
@@ -522,6 +538,7 @@ func _open_inventory_from_shop() -> void:
 	hud.mark_loot_read()
 	inventory_panel.open_panel(stats, true)
 	sfx.play("ui_click")
+	_audit_modal_if_review(inventory_panel, "InventoryPanel")
 
 func _close_inventory() -> void:
 	if state != GameState.INVENTORY:
@@ -544,6 +561,7 @@ func _toggle_pause() -> void:
 		get_tree().paused = true
 		end_screen.show_pause(stats, wave_director)
 		sfx.play("ui_click")
+		_audit_modal_if_review(end_screen, "EndScreen Pause")
 	elif state == GameState.PAUSED:
 		_resume_from_pause()
 
@@ -673,6 +691,7 @@ func _on_tutorial_completed() -> void:
 	get_tree().paused = true
 	sfx.play("victory_fanfare")
 	end_screen.show_tutorial_complete(stats, wave_director)
+	_audit_modal_if_review(end_screen, "EndScreen Tutorial")
 
 func _on_player_died() -> void:
 	if state == GameState.ENDED:
@@ -682,6 +701,7 @@ func _on_player_died() -> void:
 	get_tree().paused = true
 	sfx.play("boss_horn")
 	end_screen.show_end(false, stats, wave_director)
+	_audit_modal_if_review(end_screen, "EndScreen Defeat")
 
 func _on_victory() -> void:
 	if state == GameState.ENDED:
@@ -691,3 +711,4 @@ func _on_victory() -> void:
 	get_tree().paused = true
 	sfx.play("victory_fanfare")
 	end_screen.show_end(true, stats, wave_director)
+	_audit_modal_if_review(end_screen, "EndScreen Victory")

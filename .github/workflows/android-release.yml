@@ -100,6 +100,7 @@ jobs:
         run: |
           godot --headless --path . --import
           godot --headless --path . --script res://tests/verify_game.gd
+          godot --headless --path . --script res://tests/ui_layout_audit.gd
 
       - name: Export Signed Release Android APK
         run: |

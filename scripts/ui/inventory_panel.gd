@@ -1,5 +1,5 @@
 class_name InventoryPanel
-extends Control
+extends ResponsiveModal
 
 signal closed()
 signal deck_changed()
@@ -7,8 +7,10 @@ signal sfx_requested(sfx_name: String)
 
 var _stats: HeroStats = null
 
-var _frame: PanelContainer = null
+var _hdr_row1: HBoxContainer = null
 var _title_lbl: Label = null
+var _focus_wide_slot: Control = null
+var _focus_mobile_slot: Control = null
 var _focus_pill_lbl: Label = null
 var _focus_pill: PanelContainer = null
 var _close_btn: Button = null
@@ -49,17 +51,18 @@ var _active_right_tab: String = "templates" # templates | addons
 var _forging_addon_idx: int = -1
 var _tutorial_hint: String = ""
 
-func _ready() -> void:
-	process_mode = Node.PROCESS_MODE_ALWAYS
-	theme = UiHelper.create_game_theme()
-	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	visible = false
-	_build_shell()
-	_clamp_frame_size()
-
-func _notification(what: int) -> void:
-	if what == NOTIFICATION_RESIZED:
-		_clamp_frame_size()
+func _init() -> void:
+	name = "InventoryPanel"
+	max_modal_size = Vector2(1220.0, 690.0)
+	compact_breakpoint = 900.0
+	fill_height_when_compact = true
+	compact_margin = 8
+	wide_margin = 18
+	modal_bg_color = UiHelper.BG_WOOD_DEEP
+	modal_border_color = UiHelper.BORDER_GOLD
+	modal_radius = 16
+	modal_border_w = 3
+	modal_pad = 12
 
 func set_tutorial_hint(hint: String) -> void:
 	_tutorial_hint = hint
@@ -74,39 +77,44 @@ func set_tutorial_hint(hint: String) -> void:
 		_mobile_tab = "addons"
 
 func _clamp_frame_size() -> void:
-	if _frame == null:
-		return
-	var vp: Vector2 = get_viewport_rect().size
-	if vp.x <= 10.0 or vp.y <= 10.0:
-		vp = Vector2(1280.0, 720.0)
-	_is_mobile_layout = vp.x < 900.0
-	if _is_mobile_layout:
-		_frame.custom_minimum_size = Vector2(vp.x - 16.0, vp.y - 24.0)
-		if _mobile_tabs_row != null:
-			_mobile_tabs_row.visible = true
-		if _title_lbl != null:
-			_title_lbl.text = "CARD DECK"
-		if _close_btn != null:
+	_sync_modal_bounds()
+
+func _on_responsive_layout(vp: Vector2, is_compact: bool) -> void:
+	_is_mobile_layout = is_compact
+	var is_narrow: bool = vp.x < 760.0
+	var is_tiny: bool = vp.x < 430.0
+
+	if _focus_pill != null and _focus_wide_slot != null and _focus_mobile_slot != null:
+		var want_parent: Control = _focus_mobile_slot if is_narrow else _focus_wide_slot
+		if _focus_pill.get_parent() != want_parent:
+			_focus_pill.reparent(want_parent)
+		_focus_mobile_slot.visible = is_narrow
+		_focus_wide_slot.visible = not is_narrow
+		_focus_pill.size_flags_horizontal = Control.SIZE_EXPAND_FILL if is_narrow else Control.SIZE_SHRINK_CENTER
+
+	if _mobile_tabs_row != null:
+		_mobile_tabs_row.visible = _is_mobile_layout
+	if _title_lbl != null:
+		_title_lbl.text = "CARD DECK" if _is_mobile_layout else "CARD DECK & FORGE"
+		_title_lbl.add_theme_font_size_override("font_size", 17 if is_tiny else (19 if _is_mobile_layout else 22))
+	if _close_btn != null:
+		if _is_mobile_layout:
 			_close_btn.text = "Back to Shop" if _back_to_shop_mode else "Resume"
-			_close_btn.custom_minimum_size = Vector2(124 if _back_to_shop_mode else 106, 42)
-		var grid_cols: int = 1 if vp.x < 430.0 else 2
-		if _active_grid != null:
-			_active_grid.columns = grid_cols
-		if _collection_grid != null:
-			_collection_grid.columns = grid_cols
-	else:
-		_frame.custom_minimum_size = Vector2(minf(vp.x - 40.0, 1240.0), minf(vp.y - 36.0, 690.0))
-		if _mobile_tabs_row != null:
-			_mobile_tabs_row.visible = false
-		if _title_lbl != null:
-			_title_lbl.text = "CARD DECK & FORGE"
-		if _close_btn != null:
+			_close_btn.custom_minimum_size = Vector2(106 if _back_to_shop_mode else 92, 38)
+		else:
 			_close_btn.text = "Back to Shop [Esc]" if _back_to_shop_mode else "Resume [Tab / Esc]"
 			_close_btn.custom_minimum_size = Vector2(175, 42)
-		if _active_grid != null:
-			_active_grid.columns = 2
-		if _collection_grid != null:
-			_collection_grid.columns = 2
+		_close_btn.add_theme_font_size_override("font_size", 13 if is_tiny else 15)
+
+	var grid_cols: int = 1 if vp.x < 620.0 else 2
+	if _active_grid != null:
+		_active_grid.columns = grid_cols
+	if _collection_grid != null:
+		_collection_grid.columns = grid_cols
+
+	for mb in [_m_tab_active_btn, _m_tab_tpl_btn, _m_tab_add_btn]:
+		if mb != null:
+			mb.add_theme_font_size_override("font_size", 12 if is_tiny else 13)
 
 	if visible and _stats != null:
 		_apply_column_visibility()
@@ -128,43 +136,34 @@ func _apply_column_visibility() -> void:
 		if _right_tab_row != null:
 			_right_tab_row.visible = true
 
-func _build_shell() -> void:
-	var dim: ColorRect = ColorRect.new()
-	dim.color = Color(0.03, 0.02, 0.02, 0.80)
-	dim.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	add_child(dim)
-
-	var center: CenterContainer = CenterContainer.new()
-	center.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	add_child(center)
-
-	_frame = PanelContainer.new()
-	_frame.add_theme_stylebox_override("panel", UiHelper.make_panel_box(UiHelper.BG_WOOD_DEEP, UiHelper.BORDER_GOLD, 16, 3, 12))
-	center.add_child(_frame)
-
-	var root_v: VBoxContainer = VBoxContainer.new()
+func _build_modal_content(root_v: VBoxContainer) -> void:
 	root_v.add_theme_constant_override("separation", 8)
-	_frame.add_child(root_v)
 
-	# Header Row
-	var hdr: HBoxContainer = HBoxContainer.new()
-	hdr.add_theme_constant_override("separation", 10)
-	root_v.add_child(hdr)
+	# Header Row 1
+	_hdr_row1 = HBoxContainer.new()
+	_hdr_row1.add_theme_constant_override("separation", 8)
+	root_v.add_child(_hdr_row1)
 
-	hdr.add_child(UiHelper.make_icon_rect(UiIcons.get_ui_icon("deck_cards"), 30))
+	_hdr_row1.add_child(UiHelper.make_icon_rect(UiIcons.get_ui_icon("deck_cards"), 26))
 
 	_title_lbl = Label.new()
 	_title_lbl.text = "CARD DECK & FORGE"
 	UiHelper.apply_display_font(_title_lbl, 22, UiHelper.BORDER_GOLD, 3)
 	_title_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_title_lbl.clip_text = true
-	hdr.add_child(_title_lbl)
+	_hdr_row1.add_child(_title_lbl)
+
+	_focus_wide_slot = HBoxContainer.new()
+	_focus_wide_slot.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_hdr_row1.add_child(_focus_wide_slot)
 
 	_focus_pill = PanelContainer.new()
 	_focus_pill.add_theme_stylebox_override("panel", UiHelper.make_panel_box(UiHelper.BG_WELL, UiHelper.BORDER_BRASS, 8, 1, 6, false))
-	hdr.add_child(_focus_pill)
+	_focus_wide_slot.add_child(_focus_pill)
 	_focus_pill_lbl = Label.new()
 	_focus_pill_lbl.text = "Active: 1 Card · 100% Cast Rate"
+	_focus_pill_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_focus_pill_lbl.clip_text = true
 	_focus_pill_lbl.add_theme_font_override("font", UiHelper.get_bold_font())
 	_focus_pill_lbl.add_theme_font_size_override("font_size", 12)
 	_focus_pill_lbl.add_theme_color_override("font_color", Color(0.64, 0.96, 0.72))
@@ -173,11 +172,18 @@ func _build_shell() -> void:
 	_close_btn = Button.new()
 	_close_btn.text = "Resume [Tab / Esc]"
 	_close_btn.custom_minimum_size = Vector2(175, 42)
+	_close_btn.clip_text = true
 	_close_btn.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 	UiHelper.style_button(_close_btn, UiHelper.CTA_EMERALD, UiHelper.CTA_EMERALD_RIM, 10)
 	_close_btn.add_theme_font_size_override("font_size", 15)
 	_close_btn.pressed.connect(func() -> void: close_panel())
-	hdr.add_child(_close_btn)
+	_hdr_row1.add_child(_close_btn)
+
+	# Mobile Header Row 2 (Focus Rate Pill)
+	_focus_mobile_slot = HBoxContainer.new()
+	_focus_mobile_slot.visible = false
+	_focus_mobile_slot.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	root_v.add_child(_focus_mobile_slot)
 
 	# Tutorial Hint Banner
 	_tut_banner_panel = PanelContainer.new()
@@ -192,7 +198,7 @@ func _build_shell() -> void:
 	_tut_banner_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_tut_banner_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_tut_banner_lbl.add_theme_font_override("font", UiHelper.get_bold_font())
-	_tut_banner_lbl.add_theme_font_size_override("font_size", 14)
+	_tut_banner_lbl.add_theme_font_size_override("font_size", 13)
 	_tut_banner_lbl.add_theme_color_override("font_color", Color(1.0, 0.92, 0.45))
 	tb_h.add_child(_tut_banner_lbl)
 
@@ -203,6 +209,7 @@ func _build_shell() -> void:
 	root_v.add_child(_feedback_panel)
 	_feedback_lbl = Label.new()
 	_feedback_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_feedback_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_feedback_lbl.add_theme_font_override("font", UiHelper.get_bold_font())
 	_feedback_lbl.add_theme_font_size_override("font_size", 13)
 	_feedback_lbl.add_theme_color_override("font_color", Color(0.68, 1.0, 0.78))
@@ -216,18 +223,19 @@ func _build_shell() -> void:
 	var fm_h: HBoxContainer = HBoxContainer.new()
 	fm_h.add_theme_constant_override("separation", 8)
 	_forge_mode_panel.add_child(fm_h)
-	_forge_mode_icon = UiHelper.make_icon_rect(UiIcons.get_ui_icon("anvil_forge"), 28)
+	_forge_mode_icon = UiHelper.make_icon_rect(UiIcons.get_ui_icon("anvil_forge"), 24)
 	fm_h.add_child(_forge_mode_icon)
 	_forge_mode_lbl = Label.new()
 	_forge_mode_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_forge_mode_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_forge_mode_lbl.add_theme_font_override("font", UiHelper.get_bold_font())
-	_forge_mode_lbl.add_theme_font_size_override("font_size", 13)
+	_forge_mode_lbl.add_theme_font_size_override("font_size", 12)
 	_forge_mode_lbl.add_theme_color_override("font_color", Color(1.0, 0.92, 0.50))
 	fm_h.add_child(_forge_mode_lbl)
 	_forge_cancel_btn = Button.new()
 	_forge_cancel_btn.text = "Cancel"
-	_forge_cancel_btn.custom_minimum_size = Vector2(90, 34)
+	_forge_cancel_btn.custom_minimum_size = Vector2(78, 34)
+	_forge_cancel_btn.clip_text = true
 	_forge_cancel_btn.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 	UiHelper.style_button(_forge_cancel_btn, UiHelper.CTA_RUBY, UiHelper.CTA_RUBY_RIM, 8, 4)
 	_forge_cancel_btn.pressed.connect(func() -> void: cancel_forge())
@@ -259,6 +267,7 @@ func _build_shell() -> void:
 	# Desktop 2-Pane Split (Left: Active Deck | Right: Templates & Add-ons)
 	_cols = BoxContainer.new()
 	_cols.vertical = false
+	_cols.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_cols.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	_cols.add_theme_constant_override("separation", 12)
 	root_v.add_child(_cols)
@@ -271,15 +280,19 @@ func _build_shell() -> void:
 	_cols.add_child(_left_box)
 
 	var left_v: VBoxContainer = VBoxContainer.new()
+	left_v.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	left_v.add_theme_constant_override("separation", 8)
 	_left_box.add_child(left_v)
 
 	_active_hdr_lbl = Label.new()
-	_active_hdr_lbl.text = "ACTIVE DECK (Unlimited Slots)"
-	UiHelper.apply_display_font(_active_hdr_lbl, 16, UiHelper.BORDER_GOLD, 2)
+	_active_hdr_lbl.text = "ACTIVE DECK (Any Limit)"
+	_active_hdr_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_active_hdr_lbl.clip_text = true
+	UiHelper.apply_display_font(_active_hdr_lbl, 15, UiHelper.BORDER_GOLD, 2)
 	left_v.add_child(_active_hdr_lbl)
 
 	var active_scroll: TouchScrollContainer = TouchScrollContainer.new()
+	active_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	active_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	left_v.add_child(active_scroll)
 
@@ -298,6 +311,7 @@ func _build_shell() -> void:
 	_cols.add_child(_right_box)
 
 	var right_v: VBoxContainer = VBoxContainer.new()
+	right_v.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	right_v.add_theme_constant_override("separation", 8)
 	_right_box.add_child(right_v)
 
@@ -305,11 +319,11 @@ func _build_shell() -> void:
 	_right_tab_row.add_theme_constant_override("separation", 6)
 	right_v.add_child(_right_tab_row)
 
-	_tab_tpl_btn = _make_tab_button("Template Cards", false, func() -> void:
+	_tab_tpl_btn = _make_tab_button("Templates", false, func() -> void:
 		_active_right_tab = "templates"
 		refresh()
 	)
-	_tab_add_btn = _make_tab_button("Add-on Cards", false, func() -> void:
+	_tab_add_btn = _make_tab_button("Add-ons", false, func() -> void:
 		_active_right_tab = "addons"
 		refresh()
 	)
@@ -317,6 +331,7 @@ func _build_shell() -> void:
 	_right_tab_row.add_child(_tab_add_btn)
 
 	var col_scroll: TouchScrollContainer = TouchScrollContainer.new()
+	col_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	col_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	right_v.add_child(col_scroll)
 
@@ -330,14 +345,14 @@ func _build_shell() -> void:
 	# Owned Relics Ribbon at bottom of Deck frame
 	_relics_bar = PanelContainer.new()
 	_relics_bar.visible = false
-	_relics_bar.add_theme_stylebox_override("panel", UiHelper.make_panel_box(Color(0.12, 0.10, 0.18, 0.94), Color(0.68, 0.50, 0.92), 10, 1, 7, false))
+	_relics_bar.add_theme_stylebox_override("panel", UiHelper.make_panel_box(Color(0.12, 0.10, 0.18, 0.94), Color(0.68, 0.50, 0.92), 10, 1, 6, false))
 	root_v.add_child(_relics_bar)
 	_relics_flow = HFlowContainer.new()
 	_relics_flow.add_theme_constant_override("h_separation", 6)
 	_relics_flow.add_theme_constant_override("v_separation", 4)
 	_relics_bar.add_child(_relics_flow)
 
-	# Juicy Forge Animation Overlay (topmost inside InventoryPanel)
+	# Juicy Forge Animation Overlay (topmost fullscreen child of InventoryPanel)
 	_forge_anim = ForgeAnimationOverlay.new()
 	add_child(_forge_anim)
 
@@ -345,7 +360,8 @@ func _make_tab_button(label_txt: String, is_mobile_bar: bool, on_press: Callable
 	var btn: Button = Button.new()
 	btn.text = label_txt
 	btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	btn.custom_minimum_size = Vector2(0, 42 if is_mobile_bar else 36)
+	btn.custom_minimum_size = Vector2(0, 38 if is_mobile_bar else 36)
+	btn.clip_text = true
 	btn.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
 	btn.add_theme_font_size_override("font_size", 13 if is_mobile_bar else 14)
 	btn.pressed.connect(on_press)
@@ -378,7 +394,7 @@ func open_panel(stats: HeroStats, back_to_shop: bool = false) -> void:
 	if not _tutorial_hint.is_empty():
 		set_tutorial_hint(_tutorial_hint)
 	visible = true
-	_clamp_frame_size()
+	_sync_modal_bounds()
 	refresh()
 
 func close_panel() -> void:
@@ -468,7 +484,7 @@ func confirm_forge_onto_inventory_template(inv_idx: int, animate: bool = true) -
 	return confirm_forge_onto_card(_stats.template_inventory[inv_idx], animate)
 
 func refresh() -> void:
-	if _stats == null:
+	if _stats == null or _active_grid == null:
 		return
 	if _forging_addon_idx >= _stats.addon_inventory.size():
 		_forging_addon_idx = -1
@@ -485,17 +501,21 @@ func _refresh_relics_bar() -> void:
 	if _relics_bar == null or _relics_flow == null or _stats == null:
 		return
 	for c in _relics_flow.get_children():
+		_relics_flow.remove_child(c)
 		c.queue_free()
-	if _stats.owned_relics.is_empty():
+	var vp: Vector2 = get_safe_viewport_size()
+	# Keep bottom bar omitted if vertical space on short mobile landscape is tight (Relics remain in Shop/Pause/HUD)
+	if _stats.owned_relics.is_empty() or vp.y < 520.0:
 		_relics_bar.visible = false
 		return
 	_relics_bar.visible = true
 	var hdr: Label = Label.new()
 	hdr.text = "Relics:"
 	hdr.add_theme_font_override("font", UiHelper.get_bold_font())
-	hdr.add_theme_font_size_override("font_size", 12)
+	hdr.add_theme_font_size_override("font_size", 11)
 	hdr.add_theme_color_override("font_color", Color(0.92, 0.80, 1.0))
 	_relics_flow.add_child(hdr)
+	var is_compact_chip: bool = vp.x < 500.0
 	for rid in _stats.owned_relics:
 		var rdef: Dictionary = RelicDatabase.get_def(rid)
 		var rar_c: Color = GameEnums.rarity_color(int(rdef.get("rarity", GameEnums.Rarity.UNCOMMON)))
@@ -503,17 +523,17 @@ func _refresh_relics_bar() -> void:
 		chip.tooltip_text = "%s: %s" % [String(rdef.get("name", rid)), String(rdef.get("desc", ""))]
 		chip.add_theme_stylebox_override("panel", UiHelper.make_panel_box(rar_c.darkened(0.75), rar_c, 8, 1, 4, false))
 		var ch_h: HBoxContainer = HBoxContainer.new()
-		ch_h.add_theme_constant_override("separation", 5)
+		ch_h.add_theme_constant_override("separation", 4)
 		chip.add_child(ch_h)
 		var ic: TextureRect = TextureRect.new()
 		ic.texture = UiIcons.get_relic_art(rid)
-		ic.custom_minimum_size = Vector2(22, 16)
+		ic.custom_minimum_size = Vector2(20, 15)
 		ic.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 		ic.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 		ch_h.add_child(ic)
 		var lbl: Label = Label.new()
-		lbl.text = "%s (%s)" % [String(rdef.get("name", rid)), String(rdef.get("tag", ""))]
-		lbl.add_theme_font_size_override("font_size", 11)
+		lbl.text = String(rdef.get("name", rid)) if is_compact_chip else "%s (%s)" % [String(rdef.get("name", rid)), String(rdef.get("tag", ""))]
+		lbl.add_theme_font_size_override("font_size", 10 if is_compact_chip else 11)
 		lbl.add_theme_color_override("font_color", rar_c.lightened(0.40))
 		ch_h.add_child(lbl)
 		_relics_flow.add_child(chip)
@@ -526,7 +546,7 @@ func _refresh_focus_header() -> void:
 	_focus_pill_lbl.text = "Active: %d Card%s · %d%% Rate (%s)" % [n, "" if n == 1 else "s", rate_pct, tag]
 	var col: Color = Color(0.64, 0.96, 0.72) if n <= 3 else Color(1.0, 0.78, 0.36)
 	_focus_pill_lbl.add_theme_color_override("font_color", col)
-	_active_hdr_lbl.text = "ACTIVE DECK (%d Equipped · Any Limit)" % n
+	_active_hdr_lbl.text = "ACTIVE DECK (%d Equipped)" % n
 
 func _refresh_forge_banner() -> void:
 	if _forging_addon_idx >= 0 and _forging_addon_idx < _stats.addon_inventory.size():
@@ -562,11 +582,14 @@ func _refresh_tab_buttons() -> void:
 
 func _rebuild_active_grid() -> void:
 	for ch in _active_grid.get_children():
+		_active_grid.remove_child(ch)
 		ch.queue_free()
 
 	if _stats.equipped_cards.is_empty():
 		var empty_lbl: Label = Label.new()
 		empty_lbl.text = "No active cards equipped.\nEquip a Template Card to start casting!"
+		empty_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		empty_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		empty_lbl.add_theme_font_size_override("font_size", 14)
 		empty_lbl.add_theme_color_override("font_color", UiHelper.TEXT_PARCHMENT)
 		_active_grid.add_child(empty_lbl)
@@ -604,12 +627,14 @@ func _rebuild_active_grid() -> void:
 
 func _rebuild_collection_grid() -> void:
 	for ch in _collection_grid.get_children():
+		_collection_grid.remove_child(ch)
 		ch.queue_free()
 
 	if _active_right_tab == "templates":
 		if _stats.template_inventory.is_empty():
 			var e_tpl: Label = Label.new()
 			e_tpl.text = "No spare Template Cards in collection.\nBuy Template Cards at Caravan Shops every 3 minutes!"
+			e_tpl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 			e_tpl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 			e_tpl.add_theme_font_size_override("font_size", 14)
 			e_tpl.add_theme_color_override("font_color", UiHelper.TEXT_PARCHMENT)
@@ -653,6 +678,7 @@ func _rebuild_collection_grid() -> void:
 		if _stats.addon_inventory.is_empty():
 			var e_add: Label = Label.new()
 			e_add.text = "No Add-on Cards in pouch.\nVisit Caravan Shops every 3 minutes for Add-ons & Relics!"
+			e_add.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 			e_add.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 			e_add.add_theme_font_size_override("font_size", 14)
 			e_add.add_theme_color_override("font_color", UiHelper.TEXT_PARCHMENT)
@@ -690,7 +716,8 @@ func _rebuild_collection_grid() -> void:
 func _make_card_btn(txt: String, bg: Color, border: Color, on_tap: Callable, narrow: bool = false) -> Button:
 	var btn: Button = Button.new()
 	btn.text = txt
-	btn.custom_minimum_size = Vector2(62 if narrow else 0, 38)
+	btn.custom_minimum_size = Vector2(58 if narrow else 0, 38)
+	btn.clip_text = true
 	if not narrow:
 		btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	btn.mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND

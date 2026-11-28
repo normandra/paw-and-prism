@@ -33,12 +33,14 @@ A **Vampire Survivors + Brotato Arena + Slay-the-Spire Card-Forging & Relic Shop
 
 Requires **Godot 4.7.2** (`GL Compatibility`, export templates installed for `4.7.2.stable`).
 
-- **Run headless verification & balance audit suites:**
+- **Run headless verification, balance audit & multi-viewport UI layout suites:**
   ```bash
   godot --headless --path . --import
   godot --headless --path . --script res://tests/verify_game.gd
   godot --headless --path . --script res://tests/balance_audit.gd
+  godot --headless --path . --script res://tests/ui_layout_audit.gd
   ```
+- **Responsive Modal & UI Overflow Guard (`responsive_modal.gd`, `ui_layout_guard.gd`):** All fullscreen panels extend `ResponsiveModal` to stay viewport-clamped and mobile-reflowed down to `360px` width; `tests/ui_layout_audit.gd` gates Web/Android CI across 6 portrait, tablet, landscape, and desktop viewport sizes.
 - **Export Web & Desktop (macOS, Windows, Linux):**
   ```bash
   ./scripts/build_all.sh

@@ -64,6 +64,7 @@ func setup_card(card: CardInstance, opts: Dictionary = {}) -> void:
 	var rar_lbl: Label = Label.new()
 	rar_lbl.text = GameEnums.rarity_label(card.rarity)
 	rar_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	rar_lbl.clip_text = true
 	rar_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	rar_lbl.add_theme_font_override("font", UiHelper.get_bold_font())
 	rar_lbl.add_theme_font_size_override("font_size", 11)
@@ -72,7 +73,7 @@ func setup_card(card: CardInstance, opts: Dictionary = {}) -> void:
 
 	if card.is_template():
 		var max_f: int = card.get_max_forges(bonus_forges)
-		top_bar.add_child(UiHelper.make_forge_pips_row(card.get_forge_count(), max_f, rar_col, 10))
+		top_bar.add_child(UiHelper.make_forge_pips_row(card.get_forge_count(), max_f, rar_col, 8 if compact_mobile else 10))
 		var cnt_lbl: Label = Label.new()
 		cnt_lbl.text = "%d/%d" % [card.get_forge_count(), max_f]
 		cnt_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -85,6 +86,7 @@ func setup_card(card: CardInstance, opts: Dictionary = {}) -> void:
 	var title_lbl: Label = Label.new()
 	title_lbl.text = card.get_display_title()
 	title_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	title_lbl.clip_text = true
 	title_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	UiHelper.apply_display_font(title_lbl, 15 if compact_mobile else 16, rar_col.lightened(0.28), 2)
@@ -104,7 +106,7 @@ func setup_card(card: CardInstance, opts: Dictionary = {}) -> void:
 	art_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	art_frame.add_child(art_rect)
 
-	# 4. Compiled Stats or Compatibility Badge Strip
+	# 4. Compiled Stats or Compatibility Badge Strip (wraps safely on narrow cards)
 	if card.is_template():
 		var cfg: Dictionary = HeroStats.compile_card_config(card, deck_cd_mult, crit_chance, crit_mult, relic_cd_mult)
 		var dmg_val: int = int(round(float(cfg["damage"])))
@@ -113,32 +115,47 @@ func setup_card(card: CardInstance, opts: Dictionary = {}) -> void:
 		var stat_str: String = "%d DMG%s · %.2fs CD" % [dmg_val, (" x%d" % proj_cnt) if proj_cnt > 1 else "", cd_val]
 		var stat_row: HBoxContainer = HBoxContainer.new()
 		stat_row.alignment = BoxContainer.ALIGNMENT_CENTER
+		stat_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		stat_row.add_theme_constant_override("separation", 6)
 		stat_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		root_v.add_child(stat_row)
-		stat_row.add_child(UiHelper.make_badge_pill(stat_str, UiHelper.BG_WELL, border_col.darkened(0.2), Color(1.0, 0.94, 0.72), 11))
+		var stat_pill: PanelContainer = UiHelper.make_badge_pill(stat_str, UiHelper.BG_WELL, border_col.darkened(0.2), Color(1.0, 0.94, 0.72), 11)
+		stat_row.add_child(stat_pill)
 	else:
-		var compat_row: HBoxContainer = HBoxContainer.new()
-		compat_row.alignment = BoxContainer.ALIGNMENT_CENTER
-		compat_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		root_v.add_child(compat_row)
-		var compat_txt: String = "Applies to: %s" % CardDatabase.get_compatibility_text(card.card_id)
-		compat_row.add_child(UiHelper.make_badge_pill(compat_txt, UiHelper.BG_WELL, UiHelper.CTA_SAPPHIRE_RIM.darkened(0.25), Color(0.76, 0.92, 1.0), 11))
+		var compat_pill: PanelContainer = PanelContainer.new()
+		var c_sb: StyleBoxFlat = UiHelper.make_panel_box(UiHelper.BG_WELL, UiHelper.CTA_SAPPHIRE_RIM.darkened(0.25), 7, 1, 4, false)
+		compat_pill.add_theme_stylebox_override("panel", c_sb)
+		compat_pill.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		compat_pill.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		var compat_lbl: Label = Label.new()
+		compat_lbl.text = "Applies to: %s" % CardDatabase.get_compatibility_text(card.card_id)
+		compat_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		compat_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		compat_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		compat_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		compat_lbl.add_theme_font_override("font", UiHelper.get_bold_font())
+		compat_lbl.add_theme_font_size_override("font_size", 11)
+		compat_lbl.add_theme_color_override("font_color", Color(0.76, 0.92, 1.0))
+		compat_pill.add_child(compat_lbl)
+		root_v.add_child(compat_pill)
 
 	# 5. Recessed Description Box (+ Full Self-Explaining Forged Add-on Effects)
 	var desc_well: PanelContainer = PanelContainer.new()
 	desc_well.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	desc_well.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	desc_well.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	desc_well.add_theme_stylebox_override("panel", UiHelper.make_panel_box(Color(0.08, 0.06, 0.06, 0.92), UiHelper.BORDER_SUBTLE, 8, 1, 7, false))
 	root_v.add_child(desc_well)
 
 	var desc_v: VBoxContainer = VBoxContainer.new()
+	desc_v.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	desc_v.add_theme_constant_override("separation", 4)
 	desc_v.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	desc_well.add_child(desc_v)
 
 	var desc_lbl: Label = Label.new()
 	desc_lbl.text = card.get_desc()
+	desc_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	desc_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	desc_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	desc_lbl.add_theme_font_size_override("font_size", 12)
@@ -153,6 +170,8 @@ func setup_card(card: CardInstance, opts: Dictionary = {}) -> void:
 		if not forged.is_empty():
 			var hdr_f: Label = Label.new()
 			hdr_f.text = "Forged Effects (%d/%d):" % [card.get_forge_count(), max_f_slot]
+			hdr_f.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			hdr_f.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 			hdr_f.mouse_filter = Control.MOUSE_FILTER_IGNORE
 			hdr_f.add_theme_font_override("font", UiHelper.get_bold_font())
 			hdr_f.add_theme_font_size_override("font_size", 11)
@@ -166,11 +185,13 @@ func setup_card(card: CardInstance, opts: Dictionary = {}) -> void:
 				var f_desc: String = String(f_entry.get("desc", ""))
 
 				var f_box: VBoxContainer = VBoxContainer.new()
+				f_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 				f_box.add_theme_constant_override("separation", 2)
 				f_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
 				desc_v.add_child(f_box)
 
 				var f_chip_row: HBoxContainer = HBoxContainer.new()
+				f_chip_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 				f_chip_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 				f_box.add_child(f_chip_row)
 				f_chip_row.add_child(UiHelper.make_badge_pill("+ " + f_name, f_col.darkened(0.72), f_col, f_col.lightened(0.42), 10))
@@ -178,6 +199,7 @@ func setup_card(card: CardInstance, opts: Dictionary = {}) -> void:
 				if not f_desc.is_empty():
 					var f_desc_lbl: Label = Label.new()
 					f_desc_lbl.text = f_desc
+					f_desc_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 					f_desc_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 					f_desc_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
 					f_desc_lbl.add_theme_font_size_override("font_size", 11)
@@ -188,6 +210,8 @@ func setup_card(card: CardInstance, opts: Dictionary = {}) -> void:
 		else:
 			var empty_f: Label = Label.new()
 			empty_f.text = "No Add-ons forged (%d slots open)" % max_f_slot
+			empty_f.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			empty_f.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 			empty_f.mouse_filter = Control.MOUSE_FILTER_IGNORE
 			empty_f.add_theme_font_size_override("font_size", 11)
 			empty_f.add_theme_color_override("font_color", Color(0.68, 0.62, 0.54))
@@ -196,6 +220,8 @@ func setup_card(card: CardInstance, opts: Dictionary = {}) -> void:
 		if forge_target_mode and not can_forge_here and not forge_reason.is_empty():
 			var why_lbl: Label = Label.new()
 			why_lbl.text = forge_reason
+			why_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			why_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 			why_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
 			why_lbl.add_theme_font_override("font", UiHelper.get_bold_font())
 			why_lbl.add_theme_font_size_override("font_size", 11)
@@ -204,6 +230,7 @@ func setup_card(card: CardInstance, opts: Dictionary = {}) -> void:
 	else:
 		var cons_lbl: Label = Label.new()
 		cons_lbl.text = "Consumed permanently when forged into a Template Card."
+		cons_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		cons_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		cons_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		cons_lbl.add_theme_font_size_override("font_size", 11)
